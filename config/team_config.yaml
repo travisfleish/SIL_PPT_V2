@@ -1,0 +1,51 @@
+# config/team_config.yaml
+
+# Global view patterns - these are consistent across all teams
+view_patterns:
+  community_all_time: "{prefix}_COMMUNITY_INDEXING_ALL_TIME"
+  community_snapshot: "{prefix}_COMMUNITY_INDEXING_SNAPSHOT"
+  community_yoy: "{prefix}_COMMUNITY_INDEXING_YOY"
+
+  category_all_time: "{prefix}_CATEGORY_INDEXING_ALL_TIME"
+  category_snapshot: "{prefix}_CATEGORY_INDEXING_SNAPSHOT"
+  category_yoy: "{prefix}_CATEGORY_INDEXING_YOY"
+
+  subcategory_all_time: "{prefix}_SUBCATEGORY_INDEXING_ALL_TIME"
+  subcategory_snapshot: "{prefix}_SUBCATEGORY_INDEXING_SNAPSHOT"
+  subcategory_yoy: "{prefix}_SUBCATEGORY_INDEXING_YOY"
+
+  merchant_all_time: "{prefix}_MERCHANT_INDEXING_ALL_TIME"
+  merchant_snapshot: "{prefix}_MERCHANT_INDEXING_SNAPSHOT"
+  merchant_yoy: "{prefix}_MERCHANT_INDEXING_YOY"
+
+  community_merchant_all_time: "{prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
+  community_merchant_snapshot: "{prefix}_COMMUNITY_MERCHANT_INDEXING_SNAPSHOT"
+  community_merchant_yoy: "{prefix}_COMMUNITY_MERCHANT_INDEXING_YOY"
+
+  demographics: "{prefix}_DEMOGRAPHICS_DIST"
+
+# Team-specific configurations
+teams:
+  utah_jazz:
+    team_name: "Utah Jazz"
+    team_name_short: "Jazz"
+    league: "NBA"
+    view_prefix: "V_UTAH_JAZZ_SIL"  # Has SIL in the prefix
+    colors:
+      primary: "#1D428A"
+      secondary: "#FFD700"
+      accent: "#00275D"
+    audience_name: "Utah Jazz Fans"
+    comparison_population: "Local Gen Pop (Excl. Jazz)"
+
+  dallas_cowboys:
+    team_name: "Dallas Cowboys"
+    team_name_short: "Cowboys"
+    league: "NFL"
+    view_prefix: "V_DALLAS_COWBOYS"  # No SIL in the prefix
+    colors:
+      primary: "#002244"
+      secondary: "#869397"
+      accent: "#FFFFFF"
+    audience_name: "Dallas Cowboys Fans"
+    comparison_population: "Local Gen Pop (Excl. Dallas Cowboys Fans)"
