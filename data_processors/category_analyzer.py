@@ -257,27 +257,40 @@ class CategoryAnalyzer:
         if team_data.empty:
             return pd.DataFrame()
 
-        # Apply subcategory filters from config
-        subcats = category_config.get('subcategories', {})
+        # Check if this is a custom category
+        is_custom = category_config.get('is_custom', False)
 
-        if 'include' in subcats and isinstance(subcats['include'], list):
-            # Get the keys to include
-            include_keys = []
-            for sc in subcats['include']:
-                key = sc['key_in_data']
-                if isinstance(key, list):
-                    include_keys.extend(key)
-                else:
-                    include_keys.append(key)
+        if is_custom:
+            # For custom categories, include ALL subcategories from the data
+            # Don't apply any include/exclude filters
+            logger.info(
+                f"Processing custom category {category_config.get('display_name')} - using all subcategories from data")
 
-            team_data = team_data[team_data['SUBCATEGORY'].isin(include_keys)]
+            # Remove any rows with empty/null subcategories
+            team_data = team_data[team_data['SUBCATEGORY'].notna() & (team_data['SUBCATEGORY'] != '')]
 
-        if 'exclude' in subcats:
-            team_data = team_data[~team_data['SUBCATEGORY'].isin(subcats['exclude'])]
+        else:
+            # For fixed categories, apply the YAML configuration filters
+            subcats = category_config.get('subcategories', {})
+
+            if 'include' in subcats and isinstance(subcats['include'], list):
+                # Get the keys to include
+                include_keys = []
+                for sc in subcats['include']:
+                    key = sc['key_in_data']
+                    if isinstance(key, list):
+                        include_keys.extend(key)
+                    else:
+                        include_keys.append(key)
+
+                team_data = team_data[team_data['SUBCATEGORY'].isin(include_keys)]
+
+            if 'exclude' in subcats:
+                team_data = team_data[~team_data['SUBCATEGORY'].isin(subcats['exclude'])]
 
         # Get top 5 by audience percentage - ensure no duplicates
         top_5 = (team_data
-                 .drop_duplicates('SUBCATEGORY')  # FIX: Remove duplicates before processing
+                 .drop_duplicates('SUBCATEGORY')
                  .sort_values('PERC_AUDIENCE', ascending=False)
                  .head(5))
 
@@ -390,7 +403,7 @@ class CategoryAnalyzer:
                 f"{category_config['display_name']} than the {self.comparison_pop}"
             )
 
-        # 3. Top subcategory highlight
+        # 3. Top subcategory highlight (only if we have subcategory data)
         if not subcategory_stats.empty:
             top_sub = subcategory_stats.iloc[0]
             self._add_subcategory_insight(insights, top_sub)
@@ -637,8 +650,16 @@ class CategoryAnalyzer:
 
     def _format_subcategory_name(self, subcategory: str, category_config: Dict[str, Any]) -> str:
         """Format subcategory name for display"""
-        # Remove category prefix if present
-        for cat_name in category_config['category_names_in_data']:
+        # For custom categories, just clean up the name
+        if category_config.get('is_custom', False):
+            # Remove category prefix if it exists
+            category_name = category_config.get('display_name', '')
+            if subcategory.startswith(f"{category_name} - "):
+                return subcategory.replace(f"{category_name} - ", "")
+            return subcategory
+
+        # For fixed categories, use the existing logic
+        for cat_name in category_config.get('category_names_in_data', []):
             if subcategory.startswith(f"{cat_name} - "):
                 return subcategory.replace(f"{cat_name} - ", "")
         return subcategory
@@ -665,66 +686,118 @@ class CategoryAnalyzer:
 
         return None
 
-    def get_custom_categories(self, df: pd.DataFrame, is_womens_team: bool,
-                              existing_categories: List[str]) -> List[Dict[str, Any]]:
+    def get_custom_categories(self,
+                              category_df: pd.DataFrame,
+                              is_womens_team: bool = False,
+                              existing_categories: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
         Get custom categories based on composite index
 
         Args:
-            df: Full dataframe
+            category_df: DataFrame from CATEGORY_INDEXING_ALL_TIME view
             is_womens_team: Whether this is a women's team
-            existing_categories: Categories already included (fixed)
+            existing_categories: List of category keys already included (fixed categories)
 
         Returns:
-            List of category configs for custom categories
+            List of category configurations for custom categories
         """
         # Get config
-        custom_config = self.config['custom_category_config']
-        n_categories = (custom_config['womens_teams']['count'] if is_womens_team
-                        else custom_config['mens_teams']['count'])
-        min_audience = custom_config['min_audience_pct']
+        custom_config = self.config.get('custom_category_config', {})
+        n_categories = (custom_config.get('womens_teams', {}).get('count', 2) if is_womens_team
+                        else custom_config.get('mens_teams', {}).get('count', 4))
+        min_audience = custom_config.get('min_audience_pct', 0.20)
 
-        # Get all categories not in fixed or excluded
-        all_categories = df['CATEGORY'].unique()
+        # Default existing categories if not provided
+        if existing_categories is None:
+            existing_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+            if is_womens_team:
+                existing_categories.extend(['beauty', 'health'])
 
-        # Filter out existing, excluded, and women's only (if men's team)
-        available = []
-        for cat in all_categories:
-            if cat in existing_categories:
-                continue
-            if cat in self.excluded_custom:
-                continue
-            if not is_womens_team:
-                # Check if it's women's only
-                for key, config in self.categories.items():
-                    if cat in config.get('category_names_in_data', []):
-                        if config.get('womens_only', False):
-                            continue
-            available.append(cat)
+        # Get the actual category names from config for existing categories
+        existing_category_names = set()
+        for cat_key in existing_categories:
+            if cat_key in self.categories:
+                cat_names = self.categories[cat_key].get('category_names_in_data', [])
+                existing_category_names.update(cat_names)
 
-        # Calculate category-level metrics
-        category_scores = []
-        for cat in available:
-            cat_df = df[df['CATEGORY'] == cat]
-            if cat_df['PERC_AUDIENCE'].max() < min_audience:
-                continue
+        # Filter to only team fans vs local gen pop with sufficient audience
+        team_data = category_df[
+            (category_df['AUDIENCE'] == self.audience_name) &
+            (category_df['COMPARISON_POPULATION'] == self.comparison_pop) &
+            (category_df['PERC_AUDIENCE'] >= min_audience)
+            ].copy()
 
-            # Calculate aggregate composite index
-            composite = self._weighted_average(cat_df, 'COMPOSITE_INDEX', 'AUDIENCE_COUNT')
+        if team_data.empty:
+            logger.warning("No category data found for custom category selection")
+            return []
 
-            category_scores.append({
-                'category': cat,
-                'composite_index': composite,
-                'audience_pct': cat_df['PERC_AUDIENCE'].max()
-            })
+        # Remove duplicates (keep highest composite index per category)
+        team_data = team_data.sort_values('COMPOSITE_INDEX', ascending=False).drop_duplicates('CATEGORY')
+
+        # Filter out existing categories and excluded categories
+        available_data = team_data[
+            ~team_data['CATEGORY'].isin(existing_category_names) &
+            ~team_data['CATEGORY'].isin(self.excluded_custom)
+            ]
+
+        # Also filter out any women's only categories if this is a men's team
+        if not is_womens_team:
+            # Remove Beauty and Health categories
+            available_data = available_data[
+                ~available_data['CATEGORY'].isin(['Beauty', 'Health'])
+            ]
 
         # Sort by composite index and take top N
-        category_scores.sort(key=lambda x: x['composite_index'], reverse=True)
+        top_categories = available_data.nlargest(n_categories, 'COMPOSITE_INDEX')
 
-        return category_scores[:n_categories]
+        # Convert to list of category info
+        custom_categories = []
+        for _, row in top_categories.iterrows():
+            category_name = row['CATEGORY']
 
-    def _weighted_average(self, df: pd.DataFrame, column: str, weight_column: str) -> float:
-        """Calculate weighted average"""
-        if df[weight_column].sum() == 0:
-            return 0
-        return (df[column] * df[weight_column]).sum() / df[weight_column].sum()
+            # Create a dynamic category config
+            category_info = {
+                'category_key': category_name.lower().replace(' ', '_').replace('-', '_'),
+                'display_name': category_name,
+                'category_names_in_data': [category_name],
+                'composite_index': float(row['COMPOSITE_INDEX']),
+                'audience_pct': float(row['PERC_AUDIENCE']),
+                'perc_index': float(row['PERC_INDEX']),
+                'is_custom': True
+            }
+
+            custom_categories.append(category_info)
+
+        logger.info(f"Selected {len(custom_categories)} custom categories")
+        for cat in custom_categories:
+            logger.info(f"  - {cat['display_name']} (composite index: {cat['composite_index']:.1f})")
+
+        return custom_categories
+
+    def create_custom_category_config(self, category_name: str) -> Dict[str, Any]:
+        """
+        Create a category configuration for a custom category
+
+        Args:
+            category_name: Name of the category from the data
+
+        Returns:
+            Category configuration similar to what's in categories.yaml
+        """
+        # Generate a reasonable slide title
+        slide_title = f"{category_name} Sponsor Analysis"
+
+        # Create the config
+        config = {
+            'display_name': category_name,
+            'slide_title': slide_title,
+            'category_names_in_data': [category_name],
+            'subcategories': {
+                # Empty for custom categories - we'll use all subcategories from data
+                'include': [],
+                'exclude': []
+            },
+            'is_custom': True  # This flag is crucial!
+        }
+
+        return config

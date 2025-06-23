@@ -23,16 +23,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_category_analysis(analyzer, category_key: str, view_prefix: str) -> dict:
+def run_category_analysis(analyzer, category_key: str, view_prefix: str, is_custom: bool = False) -> dict:
     """Run full analysis for a single category"""
 
     print(f"\n{'=' * 70}")
-    print(f"ANALYZING: {category_key.upper()}")
+    print(f"ANALYZING: {category_key.upper()} {'[CUSTOM]' if is_custom else '[FIXED]'}")
     print(f"{'=' * 70}")
 
     # Get category configuration
-    cat_config = analyzer.categories.get(category_key, {})
-    cat_names = cat_config.get('category_names_in_data', [])
+    if is_custom:
+        # For custom categories, we need to create a temporary config
+        # The category_key for custom categories is the actual category name
+        cat_config = analyzer.create_custom_category_config(category_key)
+        cat_names = [category_key]
+    else:
+        cat_config = analyzer.categories.get(category_key, {})
+        cat_names = cat_config.get('category_names_in_data', [])
 
     if not cat_names:
         print(f"⚠️  No category names configured for {category_key}")
@@ -82,7 +88,7 @@ def run_category_analysis(analyzer, category_key: str, view_prefix: str) -> dict
     yoy_merchant_query = f"""
     SELECT * FROM {view_prefix}_MERCHANT_INDEXING_YOY 
     WHERE ({category_where})
-    AND AUDIENCE = 'Utah Jazz Fans'
+    AND AUDIENCE = '{analyzer.audience_name}'
     AND TRANSACTION_YEAR IN ('2023-01-01', '2024-01-01')
     LIMIT 1000
     """
@@ -92,6 +98,10 @@ def run_category_analysis(analyzer, category_key: str, view_prefix: str) -> dict
     # Run analysis
     print(f"\n5. Running {category_key} analysis...")
     try:
+        # For custom categories, temporarily add the config
+        if is_custom:
+            analyzer.categories[category_key] = cat_config
+
         results = analyzer.analyze_category(
             category_key=category_key,
             category_df=category_df,
@@ -100,6 +110,14 @@ def run_category_analysis(analyzer, category_key: str, view_prefix: str) -> dict
             yoy_category_df=yoy_category_df,
             yoy_merchant_df=yoy_merchant_df
         )
+
+        # Mark as custom category
+        results['is_custom'] = is_custom
+
+        # Clean up temporary config
+        if is_custom:
+            del analyzer.categories[category_key]
+
         print("✅ Analysis completed successfully")
         return results
     except Exception as e:
@@ -114,7 +132,8 @@ def display_results(results: dict):
     if not results:
         return
 
-    print(f"\n📊 Category: {results['display_name']}")
+    category_type = "[CUSTOM]" if results.get('is_custom', False) else "[FIXED]"
+    print(f"\n📊 Category: {results['display_name']} {category_type}")
     print(f"   Slide Title: {results['slide_title']}")
 
     metrics = results['category_metrics']
@@ -171,6 +190,7 @@ def create_category_dataframes(results: dict) -> dict:
         'Metric': [
             'Display Name',
             'Slide Title',
+            'Category Type',
             'Percent of Fans Who Spend',
             'Likelihood vs Gen Pop',
             'Purchases vs Gen Pop',
@@ -182,6 +202,7 @@ def create_category_dataframes(results: dict) -> dict:
         'Value': [
             results['display_name'],
             results['slide_title'],
+            'CUSTOM' if results.get('is_custom', False) else 'FIXED',
             metrics.format_percent_fans(),
             metrics.format_likelihood(),
             metrics.format_purchases(),
@@ -231,10 +252,10 @@ def create_category_dataframes(results: dict) -> dict:
 
 
 def test_all_categories():
-    """Test CategoryAnalyzer with all categories"""
+    """Test CategoryAnalyzer with all categories including custom ones"""
 
     print("\n" + "=" * 80)
-    print("CATEGORY ANALYZER TEST - ALL CATEGORIES")
+    print("CATEGORY ANALYZER TEST - FIXED + CUSTOM CATEGORIES")
     print("=" * 80)
 
     # 1. Test Snowflake connection
@@ -260,8 +281,27 @@ def test_all_categories():
     view_prefix = team_config['view_prefix']
     print(f"✅ View prefix: {view_prefix}")
 
-    # 4. Define categories to test
-    categories_to_test = [
+    # 4. Get custom categories first
+    print("\n4. Selecting custom categories...")
+
+    # Load all category data for custom selection
+    category_query = f"""
+    SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME
+    """
+    all_category_df = query_to_dataframe(category_query)
+
+    # Get custom categories
+    custom_categories = analyzer.get_custom_categories(
+        category_df=all_category_df,
+        is_womens_team=False
+    )
+
+    print(f"✅ Selected {len(custom_categories)} custom categories:")
+    for cat in custom_categories:
+        print(f"   - {cat['display_name']} (composite index: {cat['composite_index']:.1f})")
+
+    # 5. Define all categories to test
+    fixed_categories = [
         'restaurants',
         'athleisure',
         'finance',
@@ -270,19 +310,33 @@ def test_all_categories():
         'auto'
     ]
 
-    # Add women's categories if testing women's team
-    # categories_to_test.extend(['beauty', 'health'])
-
     all_results = {}
 
-    # 5. Run analysis for each category
-    for category_key in categories_to_test:
-        results = run_category_analysis(analyzer, category_key, view_prefix)
+    # 6. Run analysis for fixed categories
+    print("\n5. Analyzing FIXED categories...")
+    for category_key in fixed_categories:
+        results = run_category_analysis(analyzer, category_key, view_prefix, is_custom=False)
         if results:
             all_results[category_key] = results
             display_results(results)
 
-    # 6. Save all results to Excel file with multiple sheets
+    # 7. Run analysis for custom categories
+    print("\n6. Analyzing CUSTOM categories...")
+    for custom_cat in custom_categories:
+        # For custom categories, use the display name as the key
+        category_key = custom_cat['display_name']
+        results = run_category_analysis(analyzer, category_key, view_prefix, is_custom=True)
+        if results:
+            # Add custom category metadata
+            results['custom_metadata'] = {
+                'composite_index': custom_cat['composite_index'],
+                'audience_pct': custom_cat['audience_pct'],
+                'selection_rank': custom_categories.index(custom_cat) + 1
+            }
+            all_results[custom_cat['category_key']] = results
+            display_results(results)
+
+    # 8. Save all results to Excel file with multiple sheets
     print("\n\n" + "=" * 60)
     print("SAVING ALL RESULTS TO EXCEL")
     print("=" * 60)
@@ -291,7 +345,7 @@ def test_all_categories():
     output_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_file = output_dir / f'category_analysis_results_{timestamp}.xlsx'
+    output_file = output_dir / f'category_analysis_results_with_custom_{timestamp}.xlsx'
 
     # Create Excel writer
     with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
@@ -300,8 +354,11 @@ def test_all_categories():
         overview_data = []
         for cat_key, results in all_results.items():
             metrics = results['category_metrics']
-            overview_data.append({
+            is_custom = results.get('is_custom', False)
+
+            row_data = {
                 'Category': results['display_name'],
+                'Type': 'CUSTOM' if is_custom else 'FIXED',
                 'Percent Fans Spend': metrics.format_percent_fans(),
                 'Likelihood vs Gen Pop': metrics.format_likelihood(),
                 'Purchases vs Gen Pop': metrics.format_purchases(),
@@ -311,18 +368,68 @@ def test_all_categories():
                 'Top Subcategories': len(results['subcategory_stats']),
                 'Top Merchants': len(results['merchant_stats'][0]) if results['merchant_stats'][0] is not None else 0,
                 'Has Recommendation': 'Yes' if results['recommendation'] else 'No'
-            })
+            }
+
+            # Add custom category metadata if available
+            if is_custom and 'custom_metadata' in results:
+                row_data['Selection Rank'] = results['custom_metadata']['selection_rank']
+            else:
+                row_data['Selection Rank'] = '-'
+
+            overview_data.append(row_data)
 
         overview_df = pd.DataFrame(overview_data)
+
+        # Sort by Type (FIXED first) then by composite index
+        overview_df['Sort_Type'] = overview_df['Type'].map({'FIXED': 0, 'CUSTOM': 1})
+        overview_df['Sort_Index'] = overview_df['Composite Index'].str.replace('$', '').str.replace(',', '').astype(
+            float)
+        overview_df = overview_df.sort_values(['Sort_Type', 'Sort_Index'], ascending=[True, False])
+        overview_df = overview_df.drop(['Sort_Type', 'Sort_Index'], axis=1)
+
         overview_df.to_excel(writer, sheet_name='Overview', index=False)
+
+        # Create custom categories summary sheet
+        custom_summary_data = []
+        for cat_key, results in all_results.items():
+            if results.get('is_custom', False):
+                metrics = results['category_metrics']
+                custom_summary_data.append({
+                    'Rank': results['custom_metadata']['selection_rank'],
+                    'Category': results['display_name'],
+                    'Composite Index': metrics.composite_index,
+                    'Audience %': f"{results['custom_metadata']['audience_pct'] * 100:.1f}%",
+                    'Total Spend': f"${metrics.total_spend:,.0f}",
+                    'SPC': f"${metrics.spc:.2f}",
+                    'Top Merchant': results['recommendation']['merchant'] if results['recommendation'] else 'N/A'
+                })
+
+        if custom_summary_data:
+            custom_summary_df = pd.DataFrame(custom_summary_data)
+            custom_summary_df = custom_summary_df.sort_values('Rank')
+            custom_summary_df.to_excel(writer, sheet_name='Custom Categories', index=False)
 
         # Create sheet for each category
         for cat_key, results in all_results.items():
             # Create dataframes for this category
             cat_dataframes = create_category_dataframes(results)
 
-            # Create a combined sheet for this category
-            sheet_name = cat_key.replace('_', ' ').title()[:31]  # Excel sheet name limit
+            # Create a safe sheet name (no special characters, limited length)
+            base_name = results['display_name']
+            # Remove any characters that Excel doesn't like
+            safe_name = base_name.replace('[', '').replace(']', '').replace(':', '').replace('*', '').replace('?',
+                                                                                                              '').replace(
+                '/', '').replace('\\', '')
+
+            # Limit to 28 characters to leave room for suffix
+            if len(safe_name) > 28:
+                safe_name = safe_name[:28]
+
+            # Add suffix to indicate Fixed or Custom
+            if results.get('is_custom', False):
+                sheet_name = f"{safe_name} - C"
+            else:
+                sheet_name = f"{safe_name} - F"
 
             # Write each dataframe to the same sheet with spacing
             current_row = 0
@@ -356,23 +463,39 @@ def test_all_categories():
         # Apply formatting to Overview sheet
         worksheet = writer.sheets['Overview']
         worksheet.set_column('A:A', 20)  # Category column
-        worksheet.set_column('B:I', 18)  # Other columns
+        worksheet.set_column('B:L', 18)  # Other columns
 
     print(f"✅ Results saved to: {output_file}")
 
     # Also save a simplified CSV for the overview
-    csv_file = output_dir / f'category_overview_{timestamp}.csv'
+    csv_file = output_dir / f'category_overview_with_custom_{timestamp}.csv'
     overview_df.to_csv(csv_file, index=False)
     print(f"✅ Overview CSV saved to: {csv_file}")
 
-    # 7. Summary
+    # 9. Summary
     print("\n" + "=" * 60)
     print("TEST SUMMARY")
     print("=" * 60)
+
+    fixed_count = sum(1 for r in all_results.values() if not r.get('is_custom', False))
+    custom_count = sum(1 for r in all_results.values() if r.get('is_custom', False))
+
     print(f"✅ Successfully tested {len(all_results)} categories:")
+    print(f"   - Fixed categories: {fixed_count}")
+    print(f"   - Custom categories: {custom_count}")
+
+    print("\nFixed Categories:")
     for cat, result in all_results.items():
-        metrics = result['category_metrics']
-        print(f"   - {result['display_name']}: {metrics.format_percent_fans()} of fans spend")
+        if not result.get('is_custom', False):
+            metrics = result['category_metrics']
+            print(f"   - {result['display_name']}: {metrics.format_percent_fans()} of fans spend")
+
+    print("\nCustom Categories:")
+    for cat, result in all_results.items():
+        if result.get('is_custom', False):
+            metrics = result['category_metrics']
+            print(
+                f"   - {result['display_name']}: {metrics.format_percent_fans()} of fans spend (Rank #{result['custom_metadata']['selection_rank']})")
 
     print("\n✅ All tests completed successfully!")
     return all_results
@@ -437,7 +560,7 @@ if __name__ == "__main__":
     validate_data_structure()
 
     # Then run main test for all categories
-    print("\n\nStep 2: Running CategoryAnalyzer tests for all categories...")
+    print("\n\nStep 2: Running CategoryAnalyzer tests for all categories (fixed + custom)...")
     user_input = input("\nContinue with full test for all categories? (y/n): ")
 
     if user_input.lower() == 'y':
