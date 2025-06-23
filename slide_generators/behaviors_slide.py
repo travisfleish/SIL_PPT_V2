@@ -169,14 +169,8 @@ class BehaviorsSlide(BaseSlide):
 
     def _add_title(self, slide, title: str):
         """Add main slide title"""
-        title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(0.6),
-            Inches(9), Inches(0.5)
-        )
-        title_box.text_frame.text = title
-        title_box.text_frame.paragraphs[0].font.size = Pt(24)
-        title_box.text_frame.paragraphs[0].font.bold = True
-        title_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+        # Don't add title here since it's already in the header
+        pass
 
     def _add_fan_wheel(self, slide, image_path: Path):
         """Add fan wheel image to slide"""
@@ -214,42 +208,43 @@ class BehaviorsSlide(BaseSlide):
     def _generate_insight_text(self, merchant_ranker: MerchantRanker,
                                team_short: str) -> str:
         """Generate insight text based on top communities"""
-        # Get top 3 communities
+        # Get top communities
         communities_df = merchant_ranker.get_top_communities(
-            min_audience_pct=0.20, top_n=3
+            min_audience_pct=0.20, top_n=5
         )
 
         if not communities_df.empty:
             top_communities = communities_df['COMMUNITY'].tolist()
 
-            # Create readable list
-            if len(top_communities) >= 3:
-                insight_parts = []
+            # Create more natural phrases based on communities
+            insights = []
 
-                # Map communities to descriptive phrases
-                community_phrases = {
-                    'Live Entertainment Seekers': 'values-driven live entertainment seekers',
-                    'Cost Conscious': 'cost-conscious shoppers',
-                    'Travelers': 'frequent travelers',
-                    'Movie Buffs': 'movie enthusiasts',
-                    'Gamers': 'gaming enthusiasts',
-                    'Beauty Enthusiasts': 'beauty-conscious consumers'
-                }
+            # Check for specific communities and build phrase
+            if 'Live Entertainment Seekers' in top_communities[:3]:
+                insights.append('values-driven live entertainment seekers')
 
-                for community in top_communities[:3]:
-                    phrase = community_phrases.get(community, community.lower())
-                    insight_parts.append(phrase)
+            if 'Sports Merchandise Shopper' in top_communities[:3]:
+                insights.append('sports merchandise shopper')
 
-                # Construct sentence
-                if len(insight_parts) == 3:
-                    insight = f"{team_short} fans are {insight_parts[0]} who are {insight_parts[1]} and {insight_parts[2]}!"
-                else:
-                    insight = f"{team_short} fans are {' and '.join(insight_parts)}!"
+            if 'Youth Sports' in top_communities[:3]:
+                insights.append('youth sports')
 
-                return insight
+            if 'Cost Conscious' in top_communities[:5]:
+                insights.append('on the lookout for a deal')
+
+            if 'Movie Buffs' in top_communities[:5]:
+                insights.append('a good movie')
+
+            # Build the sentence
+            if len(insights) >= 3:
+                return f"{team_short} fans are {insights[0]} who are {insights[1]} and {insights[2]}!"
+            elif len(insights) == 2:
+                return f"{team_short} fans are {insights[0]} and {insights[1]}!"
+            elif insights:
+                return f"{team_short} fans are {insights[0]}!"
 
         # Fallback
-        return f"{team_short} fans have unique behaviors and preferences compared to the general population!"
+        return f"{team_short} fans have unique behaviors that set them apart from the general population!"
 
     def _add_team_logo(self, slide, team_config: Dict[str, Any]):
         """Add small team logo in corner"""

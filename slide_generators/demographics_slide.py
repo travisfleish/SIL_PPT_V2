@@ -1,314 +1,321 @@
 # slide_generators/demographics_slide.py
 """
 Generate complete demographics slide for PowerPoint presentations
-Includes all elements: charts, text, images, and formatting
+Includes all charts arranged according to the reference layout
 """
 
 from pathlib import Path
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.patches import Circle, FancyBboxPatch
-from PIL import Image
-import numpy as np
 from typing import Dict, Optional, Any
-from .base_slide import BaseSlide
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.shapes import MSO_SHAPE
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-class DemographicsSlide(BaseSlide):
-    """Generate the complete demographics slide with all elements"""
+class DemographicsSlide:
+    """Generate the complete demographics slide with all charts"""
 
-    def __init__(self,
-                 demographic_data: Dict[str, Any],
-                 chart_dir: Path,
-                 team_config: Dict[str, Any],
-                 team_logo_path: Optional[Path] = None):
+    def __init__(self, presentation: Presentation = None):
         """
         Initialize demographics slide generator
 
         Args:
-            demographic_data: Processed demographic data from DemographicsProcessor
-            chart_dir: Directory containing individual chart images
-            team_config: Team configuration including colors and names
-            team_logo_path: Optional path to team logo/photo
+            presentation: Existing presentation to add slide to
         """
-        super().__init__()
-        self.demographic_data = demographic_data
-        self.chart_dir = Path(chart_dir)
-        self.team_config = team_config
-        self.team_logo_path = team_logo_path
+        if presentation is None:
+            self.presentation = Presentation()
+        else:
+            self.presentation = presentation
 
-        # Extract team info
-        self.team_name = team_config.get('team_name', 'Team')
-        self.team_short = team_config.get('team_name_short', self.team_name.split()[-1])
-        self.colors = team_config.get('colors', {
-            'primary': '#002244',
-            'secondary': '#FFB612',
-            'accent': '#8B8B8B'
-        })
+        # Get blank slide layout
+        self.blank_layout = self.presentation.slide_layouts[5]
 
-    def generate(self, output_path: Optional[Path] = None) -> Path:
+    def generate(self,
+                 demographic_data: Dict[str, Any],
+                 chart_dir: Path,
+                 team_config: Dict[str, Any],
+                 slide_index: Optional[int] = None) -> Presentation:
         """
         Generate the complete demographics slide
 
         Args:
-            output_path: Where to save the slide image
+            demographic_data: Processed demographic data
+            chart_dir: Directory containing chart images
+            team_config: Team configuration
+            slide_index: Where to insert slide (None = append)
 
         Returns:
-            Path to the generated slide image
+            Updated presentation object
         """
-        if output_path is None:
-            output_path = self.chart_dir / f'{self.team_name.lower().replace(" ", "_")}_demographics_slide.png'
+        # Extract team info
+        team_name = team_config.get('team_name', 'Team')
+        team_short = team_config.get('team_name_short', team_name.split()[-1])
+        colors = team_config.get('colors', {})
 
-        # Create figure with PowerPoint slide dimensions
-        fig = plt.figure(figsize=(13.33, 7.5), dpi=300)
-        fig.patch.set_facecolor('white')
-
-        # Create main layout grid
-        gs = fig.add_gridspec(10, 12, left=0.02, right=0.98, top=0.94, bottom=0.02,
-                              wspace=0.02, hspace=0.02)
-
-        # 1. Add team logo/photo (left side)
-        self._add_team_logo(fig, gs[1:5, 0:3])
-
-        # 2. Add insight text below logo
-        self._add_insight_text(fig, gs[5:9, 0:3])
-
-        # 3. Add title
-        self._add_title(fig)
-
-        # 4. Add demographic charts
-        self._add_charts(fig, gs)
-
-        # 5. Add KEY/legend box
-        self._add_legend_box(fig, gs[8:10, 3:8])
-
-        # 6. Add Ethnicity section
-        self._add_ethnicity_section(fig, gs[8:10, 8:12])
-
-        # Save the slide
-        plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
-        plt.close(fig)
-
-        # Also save high-res version
-        hires_path = output_path.with_name(output_path.stem + '_hires.png')
-        fig = self._regenerate_figure()  # Regenerate for high-res
-        plt.savefig(hires_path, dpi=600, bbox_inches='tight', facecolor='white')
-        plt.close(fig)
-
-        print(f"Generated demographics slide: {output_path}")
-        return output_path
-
-    def _add_team_logo(self, fig, gridspec):
-        """Add team logo or photo in circular frame"""
-        ax = fig.add_subplot(gridspec)
-        ax.axis('off')
-
-        if self.team_logo_path and self.team_logo_path.exists():
-            # Load and display team image
-            img = Image.open(self.team_logo_path)
-
-            # Create circular mask
-            height, width = img.size
-            lum_img = Image.new('L', (width, height), 0)
-            draw = ImageDraw.Draw(lum_img)
-            draw.pieslice([(0, 0), (width, height)], 0, 360, fill=255)
-
-            # Apply mask
-            img_array = np.array(img)
-            mask = np.array(lum_img)
-
-            ax.imshow(img_array)
-
-            # Add circular border
-            circle = Circle((0.5, 0.5), 0.48, transform=ax.transAxes,
-                            fill=False, edgecolor=self.colors['secondary'],
-                            linewidth=5)
-            ax.add_patch(circle)
+        # Add slide
+        if slide_index is not None:
+            slide = self.presentation.slides.add_slide(slide_index, self.blank_layout)
         else:
-            # Placeholder circle if no logo
-            circle = Circle((0.5, 0.5), 0.4, transform=ax.transAxes,
-                            facecolor=self.colors['primary'],
-                            edgecolor=self.colors['secondary'], linewidth=5)
-            ax.add_patch(circle)
-            ax.text(0.5, 0.5, self.team_short, transform=ax.transAxes,
-                    ha='center', va='center', fontsize=24, color='white',
-                    fontweight='bold')
+            slide = self.presentation.slides.add_slide(self.blank_layout)
 
-    def _add_insight_text(self, fig, gridspec):
-        """Add the key insight text"""
-        ax = fig.add_subplot(gridspec)
-        ax.axis('off')
+        # Add header
+        self._add_header(slide, team_name)
 
-        # Get insight from demographic data or use default
-        insight = self.demographic_data.get('key_insights',
-                                            f"{self.team_short} fans are younger, and more likely to be parents "
-                                            f"who are working professionals versus the {self.team_short} gen pop.")
+        # Add team logo/circle
+        self._add_team_logo(slide, team_short, colors)
 
-        # Add text with proper formatting
-        ax.text(0.05, 0.5, insight, transform=ax.transAxes,
-                ha='left', va='center', fontsize=14,
-                fontweight='bold', wrap=True,
-                color=self.colors['primary'])
+        # Add insight text
+        self._add_insight_text(slide, demographic_data.get('key_insights', ''))
 
-    def _add_title(self, fig):
-        """Add slide title"""
-        title = f"Fan Demographics: How Are {self.team_name} Fans Unique"
-        fig.text(0.5, 0.97, title, ha='center', va='top',
-                 fontsize=20, fontweight='bold')
+        # Add demographic charts
+        self._add_charts(slide, chart_dir)
 
-    def _add_charts(self, fig, gs):
-        """Add all demographic charts"""
-        # Chart positions in the grid
-        chart_positions = {
-            'generation': gs[1:5, 3:6],  # Top left
-            'income': gs[1:5, 6:10],  # Top middle
-            'gender': gs[1:5, 10:12],  # Top right
-            'occupation': gs[5:8, 3:8],  # Bottom left
-            'children': gs[5:8, 8:11]  # Bottom right
-        }
+        # Add KEY/legend box
+        self._add_legend_box(slide, team_name, team_short, team_config.get('league', 'League'))
 
-        for chart_type, gridspec in chart_positions.items():
-            ax = fig.add_subplot(gridspec)
-            ax.axis('off')
+        # Add Ethnicity placeholder
+        self._add_ethnicity_section(slide)
 
-            # Try to load hires version first
-            chart_path = self.chart_dir / f'{chart_type}_chart_hires.png'
-            if not chart_path.exists():
-                chart_path = self.chart_dir / f'{chart_type}_chart.png'
+        logger.info(f"Generated demographics slide for {team_name}")
+        return self.presentation
 
-            if chart_path.exists():
-                img = Image.open(chart_path)
-                ax.imshow(img)
+    def _add_header(self, slide, team_name: str):
+        """Add header with title"""
+        # Header background
+        header_rect = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            Inches(10), Inches(0.5)
+        )
+        header_rect.fill.solid()
+        header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)
+        header_rect.line.color.rgb = RGBColor(200, 200, 200)
+        header_rect.line.width = Pt(0.5)
 
-    def _add_legend_box(self, fig, gridspec):
-        """Add the KEY legend box"""
-        ax = fig.add_subplot(gridspec)
-        ax.axis('off')
+        # Team name (left)
+        team_text = slide.shapes.add_textbox(
+            Inches(0.2), Inches(0.1),
+            Inches(3), Inches(0.3)
+        )
+        team_text.text_frame.text = team_name
+        team_text.text_frame.paragraphs[0].font.size = Pt(14)
+        team_text.text_frame.paragraphs[0].font.bold = True
 
-        # Create box
-        box = FancyBboxPatch((0.05, 0.1), 0.9, 0.8,
-                             boxstyle="round,pad=0.05",
-                             facecolor='white',
-                             edgecolor='black',
-                             linewidth=2,
-                             transform=ax.transAxes)
-        ax.add_patch(box)
+        # Slide title (right)
+        title_text = slide.shapes.add_textbox(
+            Inches(4), Inches(0.1),
+            Inches(5.8), Inches(0.3)
+        )
+        title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
+        title_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
+        title_text.text_frame.paragraphs[0].font.size = Pt(14)
 
-        # Add KEY text
-        ax.text(0.1, 0.7, "KEY", transform=ax.transAxes,
-                fontweight='bold', fontsize=12)
+    def _add_team_logo(self, slide, team_short: str, colors: Dict[str, str]):
+        """Add team logo circle"""
+        # Create circle shape
+        left = Inches(0.5)
+        top = Inches(1.5)
+        size = Inches(1.8)
 
-        # Add legend items
-        legend_items = [
-            (f"-{self.team_name} Fans", self.colors['primary']),
-            (f"- {self.team_short} Gen Pop (state level, excluding {self.team_short} Fans)",
-             self.colors['secondary']),
-            (f"- {self.team_config['league']} Fans Total (excluding {self.team_short} fans)",
-             self.colors['accent'])
-        ]
+        # Outer circle (orange/secondary color)
+        outer_circle = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            left - Inches(0.05), top - Inches(0.05),
+            size + Inches(0.1), size + Inches(0.1)
+        )
+        outer_circle.fill.solid()
+        outer_circle.fill.fore_color.rgb = self._hex_to_rgb(colors.get('secondary', '#FFB612'))
+        outer_circle.line.fill.background()
 
-        y_pos = 0.5
-        for text, color in legend_items:
-            ax.text(0.1, y_pos, text, transform=ax.transAxes,
-                    fontsize=10, color=color)
-            y_pos -= 0.15
+        # Inner circle (blue/primary color)
+        inner_circle = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            left, top,
+            size, size
+        )
+        inner_circle.fill.solid()
+        inner_circle.fill.fore_color.rgb = self._hex_to_rgb(colors.get('primary', '#002244'))
+        inner_circle.line.fill.background()
 
-    def _add_ethnicity_section(self, fig, gridspec):
-        """Add ethnicity section (placeholder for now)"""
-        ax = fig.add_subplot(gridspec)
-        ax.axis('off')
+        # Team name text
+        text_box = slide.shapes.add_textbox(
+            left, top + Inches(0.6),
+            size, Inches(0.6)
+        )
+        text_box.text_frame.text = team_short
+        p = text_box.text_frame.paragraphs[0]
+        p.font.size = Pt(36)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(255, 255, 255)
+        p.alignment = PP_ALIGN.CENTER
 
-        # Create box
-        box = FancyBboxPatch((0.05, 0.1), 0.9, 0.8,
-                             boxstyle="round,pad=0.05",
-                             facecolor='#f0f0f0',
-                             edgecolor='black',
-                             linewidth=2,
-                             transform=ax.transAxes)
-        ax.add_patch(box)
-
-        # Add title
-        ax.text(0.5, 0.5, "Ethnicity", transform=ax.transAxes,
-                ha='center', va='center', fontsize=16)
-
-    def _regenerate_figure(self):
-        """Regenerate the figure for high-res saving"""
-        # This is a simplified version - in practice, you'd refactor
-        # the generation code to be reusable
-        return self.generate(output_path=None)
-
-
-def create_demographics_slide(demographic_data: Dict[str, Any],
-                              chart_dir: Path,
-                              team_key: str = 'utah_jazz',
-                              output_dir: Optional[Path] = None) -> Path:
-    """
-    Convenience function to create a demographics slide
-
-    Args:
-        demographic_data: Output from DemographicsProcessor
-        chart_dir: Directory containing individual chart images
-        team_key: Team identifier for configuration
-        output_dir: Optional output directory
-
-    Returns:
-        Path to generated slide
-    """
-    from utils.team_config_manager import TeamConfigManager
-
-    # Get team configuration
-    config_manager = TeamConfigManager()
-    team_config = config_manager.get_team_config(team_key)
-
-    # Create slide generator
-    slide = DemographicsSlide(
-        demographic_data=demographic_data,
-        chart_dir=chart_dir,
-        team_config=team_config
-    )
-
-    # Generate slide
-    if output_dir:
-        output_path = output_dir / f'{team_key}_demographics_slide.png'
-    else:
-        output_path = None
-
-    return slide.generate(output_path)
-
-
-if __name__ == "__main__":
-    # Test with mock data
-    from pathlib import Path
-
-    mock_data = {
-        'team_name': 'Utah Jazz',
-        'key_insights': 'Jazz fans are younger, and more likely to be parents who are working professionals versus the Utah gen pop.'
-    }
-
-    chart_dir = Path('mock_demographic_charts')
-
-    if chart_dir.exists():
-        print("Creating complete demographics slide...")
-
-        # Need to import or mock team config
-        team_config = {
-            'team_name': 'Utah Jazz',
-            'team_name_short': 'Jazz',
-            'league': 'NBA',
-            'colors': {
-                'primary': '#002B5C',
-                'secondary': '#F9A01B',
-                'accent': '#00471B'
-            }
-        }
-
-        slide = DemographicsSlide(
-            demographic_data=mock_data,
-            chart_dir=chart_dir,
-            team_config=team_config
+    def _add_insight_text(self, slide, insight: str):
+        """Add insight text below logo"""
+        text_box = slide.shapes.add_textbox(
+            Inches(0.3), Inches(3.8),
+            Inches(2.2), Inches(2.0)
         )
 
-        output_path = slide.generate()
-        print(f"Slide saved to: {output_path}")
-    else:
-        print("Chart directory not found. Run test_demographic_charts.py first.")
+        # Default insight if none provided
+        if not insight:
+            insight = "Jazz fans are younger, and more likely to be parents who are working professionals versus the Utah gen pop."
+
+        text_box.text_frame.text = insight
+        text_box.text_frame.word_wrap = True
+
+        p = text_box.text_frame.paragraphs[0]
+        p.font.size = Pt(14)
+        p.font.bold = True
+        p.alignment = PP_ALIGN.LEFT
+
+    def _add_charts(self, slide, chart_dir: Path):
+        """Add all demographic charts in the correct positions"""
+        chart_dir = Path(chart_dir)
+
+        # Chart positions: (chart_name, left, top, width, height)
+        chart_positions = [
+            # Top row
+            ('generation_chart', 2.8, 0.8, 2.3, 1.8),
+            ('income_chart', 5.2, 0.8, 2.3, 1.8),
+            ('gender_chart', 7.6, 0.8, 2.0, 1.8),
+
+            # Bottom row
+            ('occupation_chart', 2.8, 2.8, 3.5, 1.8),
+            ('children_chart', 6.4, 2.8, 2.5, 1.8)
+        ]
+
+        for chart_name, left, top, width, height in chart_positions:
+            # Try both regular and hires versions
+            chart_path = chart_dir / f'{chart_name}_hires.png'
+            if not chart_path.exists():
+                chart_path = chart_dir / f'{chart_name}.png'
+
+            if chart_path.exists():
+                try:
+                    slide.shapes.add_picture(
+                        str(chart_path),
+                        Inches(left), Inches(top),
+                        width=Inches(width), height=Inches(height)
+                    )
+                    logger.info(f"Added {chart_name} to slide")
+                except Exception as e:
+                    logger.warning(f"Could not add {chart_name}: {e}")
+            else:
+                logger.warning(f"Chart not found: {chart_path}")
+                # Add placeholder
+                placeholder = slide.shapes.add_shape(
+                    MSO_SHAPE.RECTANGLE,
+                    Inches(left), Inches(top),
+                    Inches(width), Inches(height)
+                )
+                placeholder.fill.solid()
+                placeholder.fill.fore_color.rgb = RGBColor(245, 245, 245)
+
+    def _add_legend_box(self, slide, team_name: str, team_short: str, league: str):
+        """Add KEY legend box"""
+        # Box position
+        left = Inches(0.3)
+        top = Inches(5.0)
+        width = Inches(4.0)
+        height = Inches(1.2)
+
+        # Create box
+        box = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            left, top, width, height
+        )
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        box.line.color.rgb = RGBColor(0, 0, 0)
+        box.line.width = Pt(1)
+
+        # Add KEY text
+        text_frame = box.text_frame
+        text_frame.clear()
+        text_frame.margin_left = Inches(0.1)
+        text_frame.margin_top = Inches(0.1)
+
+        # KEY title
+        p = text_frame.add_paragraph()
+        p.text = "KEY"
+        p.font.size = Pt(12)
+        p.font.bold = True
+
+        # Legend items
+        items = [
+            f"-{team_name} Fans",
+            f"- {team_short} Gen Pop (state level, excluding {team_short} Fans)",
+            f"- {league} Fans Total (excluding {team_short} fans)"
+        ]
+
+        for item in items:
+            p = text_frame.add_paragraph()
+            p.text = item
+            p.font.size = Pt(10)
+            p.level = 0
+
+    def _add_ethnicity_section(self, slide):
+        """Add ethnicity placeholder"""
+        # Box position
+        left = Inches(6.5)
+        top = Inches(5.0)
+        width = Inches(3.0)
+        height = Inches(1.2)
+
+        # Create box
+        box = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            left, top, width, height
+        )
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor(240, 240, 240)
+        box.line.color.rgb = RGBColor(0, 0, 0)
+        box.line.width = Pt(1)
+
+        # Add text
+        text_frame = box.text_frame
+        text_frame.clear()
+        p = text_frame.add_paragraph()
+        p.text = "Ethnicity"
+        p.font.size = Pt(16)
+        p.alignment = PP_ALIGN.CENTER
+        text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    def _hex_to_rgb(self, hex_color: str) -> RGBColor:
+        """Convert hex color to RGBColor"""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return RGBColor(r, g, b)
+
+    def save(self, output_path: Path) -> Path:
+        """Save presentation"""
+        output_path = Path(output_path)
+        self.presentation.save(str(output_path))
+        return output_path
+
+
+# Convenience function
+def create_demographics_slide(demographic_data: Dict[str, Any],
+                              chart_dir: Path,
+                              team_config: Dict[str, Any],
+                              presentation: Optional[Presentation] = None) -> Presentation:
+    """
+    Create a demographics slide
+
+    Args:
+        demographic_data: Processed demographic data
+        chart_dir: Directory with chart images
+        team_config: Team configuration
+        presentation: Existing presentation (creates new if None)
+
+    Returns:
+        Presentation with demographics slide
+    """
+    generator = DemographicsSlide(presentation)
+    return generator.generate(demographic_data, chart_dir, team_config)
