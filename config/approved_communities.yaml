@@ -1,0 +1,296 @@
+# config/approved_communities.yaml
+# Approved communities for Sports Innovation Lab reports
+# Each community has a name, action verb, and category for organization
+
+approved_communities:
+  # Sports & Fitness Communities
+  - name: "Adult Recreational Sports"
+    action: "Plays"
+    category: "sports_fitness"
+
+  - name: "Big Sporting Events"
+    action: "Attends"
+    category: "sports_fitness"
+
+  - name: "Boutique Fitness Enthusiasts"
+    action: "Member of"
+    category: "sports_fitness"
+
+  - name: "College Sports"
+    action: "Fan of"
+    category: "sports_fitness"
+
+  - name: "Emerging Sports Fan"
+    action: "Fan of"
+    category: "sports_fitness"
+
+  - name: "Endurance Athletes"
+    action: "Joins"
+    category: "sports_fitness"
+
+  - name: "Fans of Womens Sports (FOWS)"
+    action: "Fan of"
+    category: "sports_fitness"
+
+  - name: "Fishing Fanatics"
+    action: "Spends on"
+    category: "sports_fitness"
+
+  - name: "Fitness Enthusiasts"
+    action: "Joins"
+    category: "sports_fitness"
+
+  - name: "Golfers"
+    action: "Shops"
+    category: "sports_fitness"
+
+  - name: "Luxury Fitness Clubs"
+    action: "Joins"
+    category: "sports_fitness"
+
+  - name: "Olympics Fans"
+    action: "Fan of"
+    category: "sports_fitness"
+
+  - name: "Pickleball"
+    action: "Plays"
+    category: "sports_fitness"
+
+  - name: "Runners"
+    action: "Runs with"
+    category: "sports_fitness"
+
+  - name: "Skate"
+    action: "Skates with"
+    category: "sports_fitness"
+
+  - name: "Skiers"
+    action: "Skies with"
+    category: "sports_fitness"
+
+  - name: "Sports Bettor"
+    action: "Bets with"
+    category: "sports_fitness"
+
+  - name: "Sports Merchandise Shopper"
+    action: "Shops"
+    category: "sports_fitness"
+
+  - name: "Sports Streamer"
+    action: "Streams"
+    category: "sports_fitness"
+
+  - name: "Sportstainment"
+    action: "Plays at"
+    category: "sports_fitness"
+
+  - name: "Surf"
+    action: "Surfs"
+    category: "sports_fitness"
+
+  - name: "Traditional Gyms"
+    action: "Joins"
+    category: "sports_fitness"
+
+  - name: "Youth Sports"
+    action: "Plays"
+    category: "sports_fitness"
+
+  # Outdoor & Adventure Communities
+  - name: "Casual Outdoor Enthusiasts"
+    action: "Shops"
+    category: "outdoor_adventure"
+
+  - name: "Hardcore Outdoor Enthusiasts"
+    action: "Buys"
+    category: "outdoor_adventure"
+
+  - name: "Motorcycle Enthusiasts"
+    action: "Rides with"
+    category: "outdoor_adventure"
+
+  - name: "Outdoor Enthusiasts"
+    action: "Buys"
+    category: "outdoor_adventure"
+
+  # Health & Wellness Communities
+  - name: "Alternative Wellness"
+    action: "Shops"
+    category: "health_wellness"
+
+  - name: "Healthy Eaters"
+    action: "Eats"
+    category: "health_wellness"
+
+  - name: "Health Nut"
+    action: "Shops"
+    category: "health_wellness"
+
+  - name: "Mindful"
+    action: "Focuses with"
+    category: "health_wellness"
+
+  - name: "Sober Curious"
+    action: "Drinks"
+    category: "health_wellness"
+
+  - name: "Wellness Warriors"
+    action: "Buys"
+    category: "health_wellness"
+
+  - name: "Yogis"
+    action: "Stretches with"
+    category: "health_wellness"
+
+  # Entertainment Communities
+  - name: "Concerts and Festivals"
+    action: "Attends"
+    category: "entertainment"
+
+  - name: "Cultural Arts"
+    action: "Enjoys"
+    category: "entertainment"
+
+  - name: "Gamers"
+    action: "Games on"
+    category: "entertainment"
+
+  - name: "Live Entertainment Seekers"
+    action: "Attends"
+    category: "entertainment"
+
+  - name: "Movie Buffs"
+    action: "Buys"
+    category: "entertainment"
+
+  - name: "Theme Parkers"
+    action: "Visits"
+    category: "entertainment"
+
+  # Shopping & Commerce Communities
+  - name: "Beauty Enthusiasts"
+    action: "Buys"
+    category: "shopping_commerce"
+
+  - name: "Dollar Store Shoppers"
+    action: "Saves with"
+    category: "shopping_commerce"
+
+  - name: "Luxury Brand Shoppers"
+    action: "Splurges on"
+    category: "shopping_commerce"
+
+  - name: "Sneakerheads"
+    action: "Buys"
+    category: "shopping_commerce"
+
+  - name: "Tech Savvy"
+    action: "Buys"
+    category: "shopping_commerce"
+
+  - name: "Trend Setters"
+    action: "Buys"
+    category: "shopping_commerce"
+
+  # Lifestyle Communities
+  - name: "Bookworms"
+    action: "Reads"
+    category: "lifestyle"
+
+  - name: "Charitable Givers"
+    action: "Donates"
+    category: "lifestyle"
+
+  - name: "Collectors"
+    action: "Collects"
+    category: "lifestyle"
+
+  - name: "Daters"
+    action: "Dates on"
+    category: "lifestyle"
+
+  - name: "DIY Arts & Crafts"
+    action: "Creates"
+    category: "lifestyle"
+
+  - name: "Domestic Decorators"
+    action: "Decorates with"
+    category: "lifestyle"
+
+  - name: "Drinkers"
+    action: "Drinks"
+    category: "lifestyle"
+
+  - name: "Eco Conscious"
+    action: "Shops"
+    category: "lifestyle"
+
+  - name: "Pet Owners"
+    action: "Buys"
+    category: "lifestyle"
+
+  - name: "Values Driven"
+    action: "Shops"
+    category: "lifestyle"
+
+  # Travel Communities
+  - name: "Budget Travelers"
+    action: "Travels"
+    category: "travel"
+
+  - name: "Travelers"
+    action: "Travels with"
+    category: "travel"
+
+  # Gaming & Gambling Communities
+  - name: "Gambler"
+    action: "Bets on"
+    category: "gaming_gambling"
+
+# Category definitions with display properties
+categories:
+  sports_fitness:
+    display_name: "Sports & Fitness"
+    color: "#FF6B6B"
+    icon: "sports"
+
+  outdoor_adventure:
+    display_name: "Outdoor & Adventure"
+    color: "#4ECDC4"
+    icon: "outdoor"
+
+  health_wellness:
+    display_name: "Health & Wellness"
+    color: "#95E1D3"
+    icon: "wellness"
+
+  entertainment:
+    display_name: "Entertainment"
+    color: "#45B7D1"
+    icon: "entertainment"
+
+  shopping_commerce:
+    display_name: "Shopping & Commerce"
+    color: "#FECA57"
+    icon: "shopping"
+
+  lifestyle:
+    display_name: "Lifestyle"
+    color: "#96CEB4"
+    icon: "lifestyle"
+
+  travel:
+    display_name: "Travel"
+    color: "#DDA0DD"
+    icon: "travel"
+
+  gaming_gambling:
+    display_name: "Gaming & Gambling"
+    color: "#FD79A8"
+    icon: "gaming"
+
+# Configuration settings
+settings:
+  case_sensitive: false  # Whether community name matching should be case sensitive
+  allow_partial_match: false  # Whether to allow partial string matching
+  log_excluded: true  # Whether to log communities that are filtered out
