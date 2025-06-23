@@ -1,0 +1,226 @@
+# config/category_config.yaml
+# Configuration for category slides in PowerPoint generation
+
+# Fixed categories that appear for all teams
+fixed_categories:
+  mens_teams:
+    - restaurants
+    - athleisure
+    - finance
+    - gambling
+    - travel
+    - auto
+
+  womens_teams:
+    - restaurants
+    - athleisure
+    - finance
+    - gambling
+    - travel
+    - auto
+    - beauty
+    - health
+
+# Detailed category definitions
+categories:
+  restaurants:
+    display_name: "Restaurants"
+    slide_title: "Restaurant Sponsor Analysis"
+    category_names_in_data:  # How it appears in the Snowflake data
+      - "Restaurants"
+    subcategories:
+      include:
+        - name: "Restaurants - Casual"
+          display_name: "Casual"
+          key_in_data: "Restaurants - Casual"
+        - name: "Restaurants - Fine Dining"
+          display_name: "Fine Dining"
+          key_in_data: "Restaurants - Fine Dining"
+        - name: "Restaurants - QSR & Fast Casual"
+          display_name: "QSR & Fast Casual"
+          key_in_data: "Restaurants - QSR & Fast Casual"
+        - name: "Restaurants - Online Delivery"
+          display_name: "Online Delivery"
+          key_in_data: "Restaurants - Online Delivery"
+      exclude:
+        - "Restaurants - Hospitality"  # Explicitly exclude as per instructions
+
+  athleisure:
+    display_name: "Athleisure"
+    slide_title: "Athleisure Sponsor Analysis"
+    category_names_in_data:
+      - "Athleisure"
+    subcategories:
+      include:
+        - name: "Athleisure - Sneakers Plus"
+          display_name: "Sneakers Plus"
+          key_in_data: "Athleisure - Sneakers Plus"
+        - name: "Athleisure - Activewear"
+          display_name: "Activewear"
+          key_in_data: "Athleisure - Activewear"
+      # Note: NO Athletic Apparel as per instructions
+
+  finance:
+    display_name: "Finance"
+    slide_title: "Finance Sponsor Analysis"
+    category_names_in_data:
+      - "Finance"
+    subcategories:
+      include:  # Keep all 4 subcategories
+        - name: "Finance - Banks"
+          display_name: "Banks"
+          key_in_data: "Finance - Banks"
+        - name: "Finance - Buy Now Pay Later (BNPL)"
+          display_name: "Buy Now Pay Later (BNPL)"
+          key_in_data: "Finance - Buy Now Pay Later (BNPL)"
+        - name: "Finance - Investments"
+          display_name: "Investments"
+          key_in_data: "Finance - Investments"
+        - name: "Finance - Payment Wallets & Money Transfers"
+          display_name: "Payment Wallets & Money Transfers"
+          key_in_data: "Finance - Payment Wallets & Money Transfers"
+
+  gambling:
+    display_name: "Gambling"
+    slide_title: "Gambling Sponsor Analysis"
+    category_names_in_data:
+      - "Gambling"
+    subcategories:
+      include:
+        - name: "Gambling - Casinos"
+          display_name: "Casinos"
+          key_in_data: "Gambling - Casinos"
+        - name: "Gambling - Lottery"
+          display_name: "Lottery"
+          key_in_data: "Gambling - Lottery"
+        - name: "Gambling - Online"
+          display_name: "Online"
+          key_in_data: "Gambling - Online"
+
+  travel:
+    display_name: "Travel"
+    slide_title: "Travel Sponsor Analysis"
+    category_names_in_data:
+      - "Travel"
+    subcategories:
+      include:
+        - name: "Travel - Airlines"
+          display_name: "Airlines"
+          key_in_data: "Travel - Airlines"
+        - name: "Travel - Rental Cars"
+          display_name: "Car Rental"
+          key_in_data: "Travel - Rental Cars"
+        - name: "Travel - Travel Agencies"
+          display_name: "Booking Sites"
+          key_in_data: "Travel - Travel Agencies"
+        - name: "Travel - Cruises"
+          display_name: "Cruises"
+          key_in_data: "Travel - Cruises"
+      exclude:
+        - "Travel - Retail"  # Explicitly exclude as per instructions
+        - "Travel - Train"
+
+  auto:
+    display_name: "Auto"
+    slide_title: "Auto Sponsor Analysis"
+    category_names_in_data:
+      - "Auto"
+    subcategories:
+      include:
+        - name: "Auto - Car Dealers"
+          display_name: "Dealers"
+          key_in_data: "Auto - Car Dealers"
+        - name: "Auto - Auto Parts & Auto Service"
+          display_name: "Parts & Services"
+          key_in_data: ["Auto - Auto Parts", "Auto - Auto Service"]  # Combine these
+        - name: "Auto - Resale"
+          display_name: "Resale"
+          key_in_data: "Auto - Resale"  # Note: This might not exist in Auto category
+        - name: "Auto - Car Washes"
+          display_name: "Car Washes"
+          key_in_data: "Auto - Car Washes"
+      exclude:
+        - "Auto - EV Charging"
+        - "Auto - Motorcycle Dealers"
+        - "Auto - Oil Change"
+        - "Auto - Tire Service"
+
+  beauty:
+    display_name: "Beauty"
+    slide_title: "Beauty Sponsor Analysis"
+    category_names_in_data:
+      - "Beauty"
+    womens_only: true
+    subcategories:
+      include:  # All 3 subcategories found in data
+        - name: "Beauty - Cosmetics & Skincare"
+          display_name: "Cosmetics & Skincare"
+          key_in_data: "Beauty - Cosmetics & Skincare"
+        - name: "Beauty - Fragrance"
+          display_name: "Fragrance"
+          key_in_data: "Beauty - Fragrance"
+        - name: "Beauty - Salons & Spas"
+          display_name: "Salons & Spas"
+          key_in_data: "Beauty - Salons & Spas"
+
+  health:
+    display_name: "Health"
+    slide_title: "Health & Wellness Sponsor Analysis"
+    category_names_in_data:
+      - "Health"
+    womens_only: true
+    subcategories:
+      include:
+        - name: "Health - Women's Health"
+          display_name: "Women's Health"
+          key_in_data: "Health - Women's Health"
+        - name: "Health - Wellness"
+          display_name: "Wellness"
+          key_in_data: "Health - Wellness"
+        - name: "Health - Vitamins & Supplements"
+          display_name: "Vitamins & Supplements"
+          key_in_data: "Health - Vitamins & Supplements"
+        - name: "Health - Diet Medications"
+          display_name: "Diet Medications"
+          key_in_data: "Health - Diet Medications"
+        - name: "Health - Virtual Health"
+          display_name: "Virtual Health"
+          key_in_data: "Health - Virtual Health"
+
+# Categories to exclude when selecting custom categories
+excluded_from_custom:
+  - "Telcom"  # Note: It's "Telcom" not "Telecom" in the data
+  - "Technology"  # This doesn't appear in the data, but keeping for future
+  - "Insurance"
+  - "Utilities"  # Part of "Home - Utilities"
+  - "Government"  # Not in the data
+  - "Non-Profit"  # Part of "Charitable Giving - Non Profit"
+
+# Configuration for custom category selection
+custom_category_config:
+  mens_teams:
+    count: 4  # Number of custom categories to add
+  womens_teams:
+    count: 2  # Number of custom categories to add
+  selection_method: "composite_index"  # How to rank categories
+  min_audience_pct: 0.20  # Minimum audience percentage to consider
+
+# Slide generation settings
+slide_settings:
+  # Colors for percentage comparison text
+  positive_color: "#00B050"  # Green for positive comparisons
+  negative_color: "#FF0000"  # Red for negative comparisons
+  equal_color: "#000000"     # Black for equal
+
+  # Chart settings
+  show_top_n_brands: 5  # Number of brands to show in brand analysis
+
+  # Insight generation thresholds
+  significant_difference_threshold: 50  # % difference to highlight
+  multiplier_threshold: 2.0  # When to use "2X more likely" language
+
+# Notes on data discrepancies to handle:
+# 1. Auto category doesn't have "Resale" subcategory - it's a separate "Resale" category
+# 2. Parts & Services needs to combine "Auto - Auto Parts" and "Auto - Auto Service"
+# 3. "Telcom" is misspelled in the data (not "Telecom")
+# 4. Some excluded categories might be subcategories (e.g., "Home - Utilities")
