@@ -1,67 +1,58 @@
-# visualizations/fan_wheel.py
+# visualizations/fan_wheel_standalone.py
 """
-Fan Wheel Visualization Generator
+Standalone Fan Wheel Visualization Generator
 Creates circular fan behavior visualization for sports teams
+No dependencies on other project files
 """
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import Wedge, Circle, Polygon
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import numpy as np
-from PIL import Image, ImageDraw
 from pathlib import Path
-import logging
-from typing import Dict, Optional, List, Tuple
 import pandas as pd
-
-from .base_chart import BaseChart
-
-logger = logging.getLogger(__name__)
+from typing import Dict, Optional, Tuple
 
 
-class FanWheel(BaseChart):
+class FanWheelStandalone:
     """Generate fan wheel visualization showing top communities and their merchants"""
 
-    def __init__(self, team_config: Dict[str, any]):
+    def __init__(self, team_name: str = "Jazz",
+                 primary_color: str = "#002B5C",
+                 secondary_color: str = "#F9A01B",
+                 accent_color: str = "#4169E1"):
         """
         Initialize fan wheel generator
 
         Args:
-            team_config: Team configuration with colors and names
+            team_name: Short team name (e.g., "Jazz", "Cowboys")
+            primary_color: Main team color (hex)
+            secondary_color: Secondary team color (hex)
+            accent_color: Accent color for outer ring (hex)
         """
-        super().__init__()
-        self.team_config = team_config
-        self.team_name = team_config.get('team_name', 'Team')
-        self.team_short = team_config.get('team_name_short', self.team_name.split()[-1])
-
-        # Extract colors from team config
-        colors = team_config.get('colors', {})
-        self.primary_color = colors.get('primary', '#002244')
-        self.secondary_color = colors.get('secondary', '#FFB612')
-        self.accent_color = colors.get('accent', '#4169E1')
+        self.team_name = team_name
+        self.primary_color = primary_color
+        self.secondary_color = secondary_color
+        self.accent_color = accent_color
 
         # Visualization parameters
         self.outer_radius = 5.0
         self.logo_radius = 2.8
         self.inner_radius = 1.6
 
-    def create(self, wheel_data: pd.DataFrame,
-               output_path: Optional[Path] = None,
-               team_logo: Optional[Image.Image] = None) -> Path:
+    def create(self, data: pd.DataFrame, output_path: str = None) -> str:
         """
         Create fan wheel visualization
 
         Args:
-            wheel_data: DataFrame with columns: COMMUNITY, MERCHANT, behavior, PERC_INDEX
+            data: DataFrame with columns: COMMUNITY, MERCHANT, behavior
             output_path: Where to save the visualization
-            team_logo: Optional PIL Image of team logo
 
         Returns:
             Path to saved visualization
         """
         if output_path is None:
-            output_path = Path(f'{self.team_short.lower()}_fan_wheel.png')
+            output_path = f'{self.team_name.lower()}_fan_wheel.png'
 
         # Create figure
         fig = plt.figure(figsize=(12, 12), facecolor='white')
@@ -70,7 +61,7 @@ class FanWheel(BaseChart):
         ax.set_ylim(-6, 6)
         ax.axis('off')
 
-        num_items = len(wheel_data)
+        num_items = len(data)
         if num_items == 0:
             raise ValueError("No data provided for fan wheel")
 
@@ -86,10 +77,10 @@ class FanWheel(BaseChart):
         self._add_arrows(ax, num_items, angle_step)
 
         # Draw center circle
-        self._draw_center_circle(ax, team_logo)
+        self._draw_center_circle(ax)
 
         # Add logos and text for each segment
-        self._add_segment_content(ax, wheel_data, angle_step)
+        self._add_segment_content(ax, data, angle_step)
 
         # Save
         plt.tight_layout()
@@ -97,7 +88,7 @@ class FanWheel(BaseChart):
                     facecolor='white', edgecolor='none')
         plt.close()
 
-        logger.info(f"Fan wheel saved to {output_path}")
+        print(f"Fan wheel saved to {output_path}")
         return output_path
 
     def _draw_wedges(self, ax, num_items: int, angle_step: float):
@@ -177,7 +168,7 @@ class FanWheel(BaseChart):
                             zorder=17)
             ax.add_patch(arrow)
 
-    def _draw_center_circle(self, ax, team_logo: Optional[Image.Image] = None):
+    def _draw_center_circle(self, ax):
         """Draw the center circle with team branding"""
         # Center circle
         center_circle = Circle((0, 0), self.inner_radius,
@@ -187,16 +178,16 @@ class FanWheel(BaseChart):
                                zorder=20)
         ax.add_patch(center_circle)
 
-        # For now, just show team text (no logo)
-        fan_text = f"THE {self.team_short.upper()} FAN"
+        # Center text
+        fan_text = f"THE {self.team_name.upper()} FAN"
         ax.text(0, 0, fan_text,
                 ha='center', va='center',
                 fontsize=16, fontweight='bold',
                 color='white', zorder=22)
 
-    def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float):
+    def _add_segment_content(self, ax, data: pd.DataFrame, angle_step: float):
         """Add logos and behavior text to each segment"""
-        for i, (_, row) in enumerate(wheel_data.iterrows()):
+        for i, (_, row) in enumerate(data.iterrows()):
             center_angle = i * angle_step + angle_step / 2 - 90
             angle_rad = np.deg2rad(center_angle)
 
@@ -204,7 +195,7 @@ class FanWheel(BaseChart):
             logo_x = self.logo_radius * np.cos(angle_rad)
             logo_y = self.logo_radius * np.sin(angle_rad)
 
-            # Add logo
+            # Add logo placeholder
             self._add_merchant_logo(ax, row['MERCHANT'], logo_x, logo_y)
 
             # Add behavior text
@@ -230,7 +221,7 @@ class FanWheel(BaseChart):
                          zorder=5)
         ax.add_patch(logo_bg)
 
-        # Add merchant initials as placeholder text
+        # Add merchant initials
         initials = ''.join([word[0].upper() for word in merchant.split()[:2]])
         ax.text(x, y, initials,
                 ha='center', va='center',
@@ -238,30 +229,151 @@ class FanWheel(BaseChart):
                 color='#888888', zorder=6)
 
 
-def create_fan_wheel_from_data(merchant_ranker, team_config: Dict[str, any],
-                               output_path: Optional[Path] = None) -> Path:
-    """
-    Convenience function to create fan wheel using MerchantRanker
+# Test function
+def test_fan_wheel_with_real_data(team_key: str = 'utah_jazz'):
+    """Test fan wheel with real Snowflake data"""
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent.parent))
 
-    Args:
-        merchant_ranker: Instance of MerchantRanker with data
-        team_config: Team configuration dictionary
-        output_path: Optional output path
+    from data_processors.merchant_ranker import MerchantRanker
+    from utils.team_config_manager import TeamConfigManager
 
-    Returns:
-        Path to generated fan wheel
-    """
-    # Get fan wheel data
-    wheel_data = merchant_ranker.get_fan_wheel_data(
-        min_audience_pct=0.20,
-        top_n_communities=10
-    )
+    print(f"\n{'=' * 60}")
+    print(f"FAN WHEEL TEST - {team_key.replace('_', ' ').title()}")
+    print(f"{'=' * 60}")
 
-    if wheel_data.empty:
-        raise ValueError("No fan wheel data available")
+    try:
+        # Get team configuration
+        config_manager = TeamConfigManager()
+        team_config = config_manager.get_team_config(team_key)
+
+        print(f"\nTeam: {team_config['team_name']}")
+        print(f"View Prefix: {team_config['view_prefix']}")
+
+        # Initialize merchant ranker
+        ranker = MerchantRanker(team_view_prefix=team_config['view_prefix'])
+
+        # Get fan wheel data
+        print("\nFetching fan wheel data from Snowflake...")
+        wheel_data = ranker.get_fan_wheel_data(
+            min_audience_pct=0.20,
+            top_n_communities=10
+        )
+
+        if wheel_data.empty:
+            print("❌ No data found!")
+            return None
+
+        print(f"✅ Found {len(wheel_data)} communities")
+
+        # Show data preview
+        print("\nData preview:")
+        print(f"{'Community':<30} {'Merchant':<25} {'Behavior':<25}")
+        print("-" * 80)
+        for _, row in wheel_data.head(5).iterrows():
+            behavior_text = row['behavior'].replace('\n', ' ')
+            print(f"{row['COMMUNITY']:<30} {row['MERCHANT']:<25} {behavior_text:<25}")
+
+        # Create fan wheel
+        print("\nGenerating fan wheel visualization...")
+
+        colors = team_config.get('colors', {})
+        fan_wheel = FanWheelStandalone(
+            team_name=team_config.get('team_name_short', team_key),
+            primary_color=colors.get('primary', '#002244'),
+            secondary_color=colors.get('secondary', '#FFB612'),
+            accent_color=colors.get('accent', '#4169E1')
+        )
+
+        output_path = f"{team_key}_fan_wheel_real_data.png"
+        result = fan_wheel.create(wheel_data, output_path)
+
+        print(f"✅ Fan wheel saved to: {result}")
+        return result
+
+    except Exception as e:
+        print(f"❌ Error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def test_fan_wheel_with_mock_data():
+    """Test fan wheel with mock data"""
+
+    print("\n" + "=" * 60)
+    print("FAN WHEEL TEST - MOCK DATA")
+    print("=" * 60)
+
+    # Create mock data
+    mock_data = pd.DataFrame({
+        'COMMUNITY': [
+            'Live Entertainment Seekers',
+            'Cost Conscious',
+            'Travelers',
+            'Gen Z Brand Shoppers',
+            'Beauty Enthusiasts',
+            'Movie Buffs',
+            'Sports Streamer',
+            'Gamers',
+            'Pet Owners',
+            'Fans of Men\'s Sports'
+        ],
+        'MERCHANT': [
+            'Vivint Arena',
+            'Dollar Tree',
+            'Southwest',
+            'AutoZone',
+            'Ulta',
+            'Megaplex',
+            'ESPN Plus',
+            'PlayStation',
+            'Petco',
+            'StubHub'
+        ],
+        'behavior': [
+            'Attends\nVivint Arena',
+            'Saves at\nDollar Tree',
+            'Flies with\nSouthwest',
+            'Shops at\nAutoZone',
+            'Beauty at\nUlta',
+            'Watches at\nMegaplex',
+            'Streams\nESPN+',
+            'Games on\nPlayStation',
+            'Shops at\nPetco',
+            'Buys at\nStubHub'
+        ]
+    })
 
     # Create fan wheel
-    fan_wheel = FanWheel(team_config)
+    fan_wheel = FanWheelStandalone(
+        team_name="Jazz",
+        primary_color="#002B5C",  # Jazz navy
+        secondary_color="#F9A01B",  # Jazz yellow
+        accent_color="#00471B"  # Jazz green
+    )
 
-    # No team logo for now
-    return fan_wheel.create(wheel_data, output_path, team_logo=None)
+    output_path = fan_wheel.create(mock_data, "test_fan_wheel_mock.png")
+    print(f"\n✅ Created: {output_path}")
+
+    return output_path
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Generate fan wheel visualization')
+    parser.add_argument('--mock', action='store_true', help='Use mock data instead of real data')
+    parser.add_argument('--team', type=str, default='utah_jazz',
+                        choices=['utah_jazz', 'dallas_cowboys'],
+                        help='Team to generate fan wheel for')
+
+    args = parser.parse_args()
+
+    if args.mock:
+        test_fan_wheel_with_mock_data()
+    else:
+        # Test with real data
+        print(f"Generating fan wheel for {args.team}...")
+        test_fan_wheel_with_real_data(args.team)
