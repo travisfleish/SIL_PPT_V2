@@ -78,8 +78,8 @@ class CategorySlide(BaseSlide):
         # Add category insights (left side)
         self._add_category_insights(slide, analysis_results, team_short)
 
-        # Add category metrics table (top right) - adjusted for 16:9
-        self._add_category_table(slide, analysis_results['category_metrics'])
+        # Add category metrics table (top right) - pass results for category name
+        self._add_category_table(slide, analysis_results)
 
         # Add subcategory table (middle right) - adjusted for 16:9
         self._add_subcategory_table(slide, analysis_results['subcategory_stats'])
@@ -158,7 +158,7 @@ class CategorySlide(BaseSlide):
         # Slide title (right) - adjusted position for 16:9
         title_text = slide.shapes.add_textbox(
             Inches(6.333), Inches(0.05),  # Moved right for 16:9
-            Inches(6.8), Inches(0.3)      # Wider for 16:9
+            Inches(6.8), Inches(0.3)  # Wider for 16:9
         )
         title_text.text_frame.text = slide_title
         p = title_text.text_frame.paragraphs[0]
@@ -209,23 +209,26 @@ class CategorySlide(BaseSlide):
             p.font.size = Pt(11)
             p.line_spacing = 1.2
 
-    def _add_category_table(self, slide, metrics: CategoryMetrics):
+    def _add_category_table(self, slide, results: Dict[str, Any]):
         """Add category metrics table (adjusted for 16:9)"""
-        # Table position - moved right for 16:9
-        left = Inches(6.5)  # Moved right
+        # Extract metrics from results
+        metrics = results['category_metrics']
+
+        # Table position - adjusted to prevent bleeding
+        left = Inches(5.8)  # Moved left to fit better
         top = Inches(1.5)
-        width = Inches(6.333)  # Wider for 16:9
-        height = Inches(1.2)
+        width = Inches(6.8)  # Adjusted width to fit within slide
+        height = Inches(0.8)  # Reduced height for better proportions
 
         # Create table
         table_shape = slide.shapes.add_table(2, 4, left, top, width, height)
         table = table_shape.table
 
-        # Set column widths - adjusted for wider table
-        table.columns[0].width = Inches(1.2)
-        table.columns[1].width = Inches(1.7)
-        table.columns[2].width = Inches(1.8)
-        table.columns[3].width = Inches(1.633)
+        # Set column widths - better distribution
+        table.columns[0].width = Inches(1.3)  # Category
+        table.columns[1].width = Inches(1.6)  # Percent of Fans
+        table.columns[2].width = Inches(2.0)  # How likely
+        table.columns[3].width = Inches(1.9)  # Purchases
 
         # Header row
         headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. gen pop',
@@ -236,8 +239,9 @@ class CategorySlide(BaseSlide):
             cell.text = header
             self._format_header_cell(cell)
 
-        # Data row
-        table.cell(1, 0).text = metrics.comparison_population.split('(')[0].strip()  # e.g., "Auto"
+        # Data row - extract category name properly
+        category_name = results.get('display_name', 'Category')
+        table.cell(1, 0).text = category_name
         table.cell(1, 1).text = metrics.format_percent_fans()
         table.cell(1, 2).text = metrics.format_likelihood()
         table.cell(1, 3).text = metrics.format_purchases()
@@ -251,21 +255,21 @@ class CategorySlide(BaseSlide):
         if subcategory_stats.empty:
             return
 
-        # Table position - moved right for 16:9
-        left = Inches(6.5)  # Moved right
-        top = Inches(3.2)
-        width = Inches(6.333)  # Wider for 16:9
+        # Table position - adjusted to prevent bleeding
+        left = Inches(5.8)  # Moved left to fit better
+        top = Inches(2.7)  # Adjusted vertical position
+        width = Inches(6.8)  # Adjusted width to fit within slide
 
         # Create table with header + data rows
         rows = min(len(subcategory_stats), 5) + 1  # Max 5 subcategories + header
         table_shape = slide.shapes.add_table(rows, 4, left, top, width, Inches(0.3 * rows))
         table = table_shape.table
 
-        # Set column widths - adjusted for wider table
-        table.columns[0].width = Inches(1.5)
-        table.columns[1].width = Inches(1.4)
-        table.columns[2].width = Inches(1.7)
-        table.columns[3].width = Inches(1.733)
+        # Set column widths - better distribution
+        table.columns[0].width = Inches(1.6)  # Sub-Category
+        table.columns[1].width = Inches(1.5)  # Percent of Fans
+        table.columns[2].width = Inches(1.9)  # How likely
+        table.columns[3].width = Inches(1.8)  # Purchases
 
         # Headers
         headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. gen pop',
@@ -353,11 +357,12 @@ class CategorySlide(BaseSlide):
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(14)
         p.font.bold = True
+        p.font.style = 'Italic'  # Match the sample
 
         # Insights
         insights_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(3.2),
-            Inches(4.5), Inches(2.0)
+            Inches(4.5), Inches(1.6)  # Reduced height to make room for Top Brand Target
         )
 
         text_frame = insights_box.text_frame
@@ -371,10 +376,10 @@ class CategorySlide(BaseSlide):
             p.font.size = Pt(11)
             p.line_spacing = 1.2
 
-        # Top Brand Target section
+        # Top Brand Target section - positioned just below insights
         if results['recommendation']:
             target_title = slide.shapes.add_textbox(
-                Inches(0.5), Inches(5.4),
+                Inches(0.5), Inches(4.9),  # Moved up to be closer to insights
                 Inches(4), Inches(0.3)
             )
             target_title.text_frame.text = "Top Brand Target"
@@ -382,22 +387,33 @@ class CategorySlide(BaseSlide):
             p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(14)
             p.font.bold = True
+            p.font.style = 'Italic'  # Match the sample
 
-            # Recommendation
+            # Recommendation text
             rec_box = slide.shapes.add_textbox(
-                Inches(0.7), Inches(5.8),
-                Inches(4.5), Inches(1.5)
+                Inches(0.7), Inches(5.3),  # Positioned below title
+                Inches(4.5), Inches(1.8)
             )
 
             rec = results['recommendation']
-            rec_text = f"1.    The {team_name} should target {rec['merchant']} for a sponsorship based on having the highest composite index\n"
-            rec_text += f"      a.    {rec['explanation']}"
 
-            rec_box.text_frame.text = rec_text
-            rec_box.text_frame.word_wrap = True
-            p = rec_box.text_frame.paragraphs[0]
-            p.font.name = self.default_font  # Red Hat Display
-            p.font.size = Pt(11)
+            # Create the recommendation text
+            text_frame = rec_box.text_frame
+            text_frame.word_wrap = True
+
+            # First paragraph - main recommendation
+            p1 = text_frame.paragraphs[0]
+            p1.text = f"1.    The {team_name} should target {rec['merchant']} for a sponsorship based on having the highest composite index"
+            p1.font.name = self.default_font  # Red Hat Display
+            p1.font.size = Pt(11)
+            p1.line_spacing = 1.2
+
+            # Second paragraph - explanation (indented)
+            p2 = text_frame.add_paragraph()
+            p2.text = f"      a.    {rec['explanation']}"
+            p2.font.name = self.default_font  # Red Hat Display
+            p2.font.size = Pt(11)
+            p2.line_spacing = 1.2
 
     def _add_merchant_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add top merchants table (adjusted for 16:9)"""
@@ -406,24 +422,24 @@ class CategorySlide(BaseSlide):
         if merchant_df.empty:
             return
 
-        # Table position - moved right and wider for 16:9
-        left = Inches(6.333)  # Moved right
+        # Table position - adjusted to prevent bleeding
+        left = Inches(5.5)  # Moved left to fit better
         top = Inches(3.0)
-        width = Inches(6.5)   # Wider for 16:9
+        width = Inches(7.3)  # Adjusted width to fit within slide
 
         # Create table
         rows = min(len(merchant_df), 5) + 1  # Max 5 merchants + header
         table_shape = slide.shapes.add_table(rows, 5, left, top, width, Inches(0.35 * rows))
         table = table_shape.table
 
-        # Set column widths - adjusted for wider table
-        table.columns[0].width = Inches(0.6)   # Rank
-        table.columns[1].width = Inches(1.5)   # Brand
-        table.columns[2].width = Inches(1.2)   # % Fans
-        table.columns[3].width = Inches(1.5)   # Likelihood
-        table.columns[4].width = Inches(1.7)   # Purchases
+        # Set column widths - better distribution for readability
+        table.columns[0].width = Inches(0.7)  # Rank
+        table.columns[1].width = Inches(1.8)  # Brand
+        table.columns[2].width = Inches(1.3)  # % Fans
+        table.columns[3].width = Inches(1.7)  # Likelihood
+        table.columns[4].width = Inches(1.8)  # Purchases
 
-        # Headers
+        # Headers with proper text wrapping
         headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand', 'Percent of\nFans Who\nSpend',
                    'How likely\nfans are to\nspend vs.\ngen pop', 'Purchases\nPer Fan\n(vs. Gen\nPop)']
 
@@ -455,14 +471,17 @@ class CategorySlide(BaseSlide):
         text_frame = cell.text_frame
         text_frame.margin_left = Inches(0.05)
         text_frame.margin_right = Inches(0.05)
-        text_frame.margin_top = Inches(0.02)
-        text_frame.margin_bottom = Inches(0.02)
+        text_frame.margin_top = Inches(0.03)
+        text_frame.margin_bottom = Inches(0.03)
+        text_frame.word_wrap = True
 
-        p = text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(9)
-        p.font.bold = True
-        p.alignment = PP_ALIGN.CENTER
+        # Format all paragraphs in the cell (for multi-line headers)
+        for paragraph in text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(10)  # Consistent header font size
+            paragraph.font.bold = True
+            paragraph.alignment = PP_ALIGN.CENTER
+            paragraph.line_spacing = 1.0  # Tighter line spacing for headers
 
     def _format_data_cell(self, cell):
         """Format table data cell"""
@@ -470,19 +489,21 @@ class CategorySlide(BaseSlide):
         text_frame = cell.text_frame
         text_frame.margin_left = Inches(0.05)
         text_frame.margin_right = Inches(0.05)
-        text_frame.margin_top = Inches(0.02)
-        text_frame.margin_bottom = Inches(0.02)
+        text_frame.margin_top = Inches(0.03)
+        text_frame.margin_bottom = Inches(0.03)
+        text_frame.word_wrap = True
 
-        p = text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(10)
-        p.alignment = PP_ALIGN.CENTER
+        # Format all paragraphs in the cell
+        for paragraph in text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(11)  # Consistent data font size
+            paragraph.alignment = PP_ALIGN.CENTER
 
-        # Color coding for More/Less
-        if 'More' in cell.text:
-            p.font.color.rgb = self.colors['positive']
-        elif 'Less' in cell.text:
-            p.font.color.rgb = self.colors['negative']
+            # Color coding for More/Less
+            if 'More' in cell.text:
+                paragraph.font.color.rgb = self.colors['positive']
+            elif 'Less' in cell.text:
+                paragraph.font.color.rgb = self.colors['negative']
 
 
 # Convenience functions
