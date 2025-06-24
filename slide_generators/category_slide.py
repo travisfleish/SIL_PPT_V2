@@ -35,6 +35,7 @@ class CategorySlide(BaseSlide):
             presentation: Existing presentation to add slide to
         """
         super().__init__(presentation)
+        self.default_font = DEFAULT_FONT_FAMILY
 
         # Colors for the slide
         self.colors = {
@@ -56,7 +57,7 @@ class CategorySlide(BaseSlide):
 
         Args:
             analysis_results: Results from CategoryAnalyzer.analyze_category()
-            team_config: Team configuration
+            team_config: Team configuration with colors, names, etc.
             slide_index: Where to insert slide (None = append)
 
         Returns:
@@ -75,8 +76,8 @@ class CategorySlide(BaseSlide):
         # Add title
         self._add_title(slide, analysis_results['slide_title'])
 
-        # Add category insights (left side)
-        self._add_category_insights(slide, analysis_results, team_short)
+        # Add category insights (left side) - UPDATED TO SHOW ALL INSIGHTS
+        self._add_category_insights(slide, analysis_results, team_short, team_config)
 
         # Add category metrics table (top right) - pass results for category name
         self._add_category_table(slide, analysis_results)
@@ -108,52 +109,44 @@ class CategorySlide(BaseSlide):
         # Extract team info
         team_name = team_config.get('team_name', 'Team')
         team_short = team_config.get('team_name_short', team_name.split()[-1])
-        category_name = analysis_results['display_name']
 
-        # FIX 2: Use blank layout with no automatic placeholders
+        # Use blank layout
         slide = self.presentation.slides.add_slide(self.blank_layout)
 
-        # Add header
-        self._add_header(slide, team_name, f"Sponsor Spending Analysis: {category_name} Brands")
+        # Add header - brand slide uses category name + " Brands"
+        header_title = f"{analysis_results['display_name']} Sponsor Analysis"
+        self._add_header(slide, team_name, header_title)
 
         # Add title
-        self._add_title(slide, f"{category_name} Sponsor Analysis")
+        title = f"{analysis_results['display_name']} Sponsor Analysis"
+        self._add_title(slide, title)
 
-        # Add brand logos placeholder (numbered circles) - adjusted for 16:9
+        # Add brand logos (numbered circles) - adjusted for 16:9
         self._add_brand_logos(slide, analysis_results['merchant_stats'])
 
         # Add brand insights (left side)
         self._add_brand_insights(slide, analysis_results, team_name)
 
-        # Add merchant table (right side) - adjusted for 16:9
-        self._add_merchant_table(slide, analysis_results['merchant_stats'])
+        # Add brand table (right side) - adjusted for 16:9
+        self._add_brand_table(slide, analysis_results['merchant_stats'])
 
-        logger.info(f"Generated {category_name} brand slide")
+        # Add sponsorship recommendation
+        self._add_sponsor_recommendation(slide, analysis_results['recommendation'], team_config)
+
+        logger.info(f"Generated {analysis_results['display_name']} brand slide")
         return self.presentation
 
     def _add_header(self, slide, team_name: str, slide_title: str):
-        """Add header with team name and slide title (adjusted for 16:9)"""
-        # Header background
-        header_rect = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            Inches(0), Inches(0),
-            Inches(13.333), Inches(0.4)  # Full 16:9 width
-        )
-        header_rect.fill.solid()
-        header_rect.fill.fore_color.rgb = self.colors['header_bg']
-        header_rect.line.color.rgb = self.colors['header_border']
-        header_rect.line.width = Pt(0.5)
-
+        """Add header with team name and slide title"""
         # Team name (left)
         team_text = slide.shapes.add_textbox(
-            Inches(0.2), Inches(0.05),
-            Inches(3), Inches(0.3)
+            Inches(0.5), Inches(0.05),
+            Inches(4), Inches(0.3)
         )
         team_text.text_frame.text = team_name
         p = team_text.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(12)
-        p.font.bold = True
 
         # Slide title (right) - adjusted position for 16:9
         title_text = slide.shapes.add_textbox(
@@ -179,8 +172,8 @@ class CategorySlide(BaseSlide):
         p.font.bold = True
         p.font.color.rgb = RGBColor(85, 85, 85)
 
-    def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str):
-        """Add category insights section"""
+    def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
+        """Add category insights section - UPDATED TO SHOW ALL INSIGHTS"""
         # Insights title
         insights_title = slide.shapes.add_textbox(
             Inches(0.5), Inches(1.5),
@@ -192,22 +185,36 @@ class CategorySlide(BaseSlide):
         p.font.size = Pt(14)
         p.font.bold = True
 
-        # Insights list
+        # Insights list - adjusted height to accommodate all insights
         insights_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(1.9),
-            Inches(4.5), Inches(3.5)
+            Inches(4.5), Inches(4.0)  # Increased height from 3.5 to 4.0
         )
 
         text_frame = insights_box.text_frame
         text_frame.word_wrap = True
 
-        # Add each insight as a numbered item
-        for i, insight in enumerate(results['insights'][:4], 1):  # Max 4 insights
+        # Add ALL insights (not limited to 4)
+        for i, insight in enumerate(results['insights'], 1):
             p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
-            p.text = f"{i}.    {insight}"
+            p.text = f"{i}. {insight}"
             p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(11)
             p.line_spacing = 1.2
+
+        # Add NBA comparison label if there are NBA insights
+        if any("NBA" in insight for insight in results['insights']):
+            # Add a subtle label for the NBA comparison section
+            nba_label = slide.shapes.add_textbox(
+                Inches(0.5), Inches(6.0),
+                Inches(4), Inches(0.3)
+            )
+            nba_label.text_frame.text = f"{team_config.get('league', 'NBA')} Fans vs. {team_config.get('league', 'NBA')} Fans"
+            p = nba_label.text_frame.paragraphs[0]
+            p.font.name = self.default_font
+            p.font.size = Pt(11)
+            p.font.bold = True
+            p.font.italic = True
 
     def _add_category_table(self, slide, results: Dict[str, Any]):
         """Add category metrics table (adjusted for 16:9)"""
@@ -371,49 +378,93 @@ class CategorySlide(BaseSlide):
         # Add merchant insights
         for i, insight in enumerate(results['merchant_insights'][:4], 1):
             p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
-            p.text = f"{i}.    {insight}"
+            p.text = f"{i}. {insight}"
             p.font.name = self.default_font  # Red Hat Display
-            p.font.size = Pt(11)
-            p.line_spacing = 1.2
+            p.font.size = Pt(10)
+            p.line_spacing = 1.0
 
-        # Top Brand Target section - positioned just below insights
-        if results['recommendation']:
-            target_title = slide.shapes.add_textbox(
-                Inches(0.5), Inches(4.9),  # Moved up to be closer to insights
-                Inches(4), Inches(0.3)
-            )
-            target_title.text_frame.text = "Top Brand Target"
-            p = target_title.text_frame.paragraphs[0]
-            p.font.name = self.default_font  # Red Hat Display
-            p.font.size = Pt(14)
-            p.font.bold = True
-            p.font.style = 'Italic'  # Match the sample
+    def _add_brand_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
+        """Add brand ranking table - adjusted for 16:9"""
+        merchant_df, _ = merchant_stats
 
-            # Recommendation text
-            rec_box = slide.shapes.add_textbox(
-                Inches(0.7), Inches(5.3),  # Positioned below title
-                Inches(4.5), Inches(1.8)
-            )
+        if merchant_df.empty:
+            return
 
-            rec = results['recommendation']
+        # Create table - adjusted position and size for 16:9
+        rows = min(len(merchant_df) + 1, 6)  # Header + max 5 brands
+        cols = 5
+        left = Inches(5.833)  # Moved right for 16:9
+        top = Inches(1.2)
+        width = Inches(7.0)  # Wider for 16:9
+        height = Inches(0.35 * rows)
 
-            # Create the recommendation text
-            text_frame = rec_box.text_frame
-            text_frame.word_wrap = True
+        table = slide.shapes.add_table(rows, cols, left, top, width, height).table
 
-            # First paragraph - main recommendation
-            p1 = text_frame.paragraphs[0]
-            p1.text = f"1.    The {team_name} should target {rec['merchant']} for a sponsorship based on having the highest composite index"
-            p1.font.name = self.default_font  # Red Hat Display
-            p1.font.size = Pt(11)
-            p1.line_spacing = 1.2
+        # Headers
+        headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand',
+                   'Percent of\nFans Who\nSpend',
+                   'How likely\nfans are to\nspend vs.\ngen pop',
+                   'Purchases\nPer Fan\n(vs. Gen\nPop)']
 
-            # Second paragraph - explanation (indented)
-            p2 = text_frame.add_paragraph()
-            p2.text = f"      a.    {rec['explanation']}"
-            p2.font.name = self.default_font  # Red Hat Display
-            p2.font.size = Pt(11)
-            p2.line_spacing = 1.2
+        for i, header in enumerate(headers):
+            cell = table.cell(0, i)
+            cell.text = header
+            self._format_header_cell(cell, small=True)
+
+        # Data rows
+        for row_idx, (_, row) in enumerate(merchant_df.iterrows(), 1):
+            if row_idx >= rows:
+                break
+
+            table.cell(row_idx, 0).text = str(row['Rank'])
+            table.cell(row_idx, 1).text = row['Brand']
+            table.cell(row_idx, 2).text = row['Percent of Fans Who Spend']
+            table.cell(row_idx, 3).text = row['How likely fans are to spend vs. gen pop']
+            table.cell(row_idx, 4).text = row['Purchases Per Fan (vs. Gen Pop)']
+
+            # Format cells
+            for col in range(5):
+                self._format_data_cell(table.cell(row_idx, col), small=True)
+
+    def _add_sponsor_recommendation(self, slide, recommendation: Optional[Dict[str, Any]], team_config: Dict[str, Any]):
+        """Add Top Brand Target and sponsorship recommendation"""
+        if not recommendation:
+            return
+
+        # Top Brand Target header
+        target_title = slide.shapes.add_textbox(
+            Inches(0.5), Inches(5.0),
+            Inches(4), Inches(0.3)
+        )
+        target_title.text_frame.text = "Top Brand Target"
+        p = target_title.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(14)
+        p.font.bold = True
+
+        # Recommendation content
+        rec_box = slide.shapes.add_textbox(
+            Inches(0.7), Inches(5.4),
+            Inches(6), Inches(1.2)
+        )
+
+        text_frame = rec_box.text_frame
+        text_frame.word_wrap = True
+
+        # Main recommendation with team name
+        team_name = team_config.get('team_name', 'Team')
+        p1 = text_frame.paragraphs[0]
+        p1.text = f"1. The {team_name} should target {recommendation['merchant']} for a sponsorship based on having the highest composite index"
+        p1.font.name = self.default_font  # Red Hat Display
+        p1.font.size = Pt(11)
+        p1.line_spacing = 1.2
+
+        # Second paragraph - explanation (indented)
+        p2 = text_frame.add_paragraph()
+        p2.text = f"      a.    {recommendation['explanation']}"
+        p2.font.name = self.default_font  # Red Hat Display
+        p2.font.size = Pt(11)
+        p2.line_spacing = 1.2
 
     def _add_merchant_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add top merchants table (adjusted for 16:9)"""
@@ -462,7 +513,7 @@ class CategorySlide(BaseSlide):
             for col in range(5):
                 self._format_data_cell(table.cell(row_idx + 1, col))
 
-    def _format_header_cell(self, cell):
+    def _format_header_cell(self, cell, small: bool = False):
         """Format table header cell"""
         cell.fill.solid()
         cell.fill.fore_color.rgb = self.colors['table_header']
@@ -478,12 +529,15 @@ class CategorySlide(BaseSlide):
         # Format all paragraphs in the cell (for multi-line headers)
         for paragraph in text_frame.paragraphs:
             paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(10)  # Consistent header font size
+            paragraph.font.size = Pt(8) if small else Pt(10)  # Smaller font for compact tables
             paragraph.font.bold = True
             paragraph.alignment = PP_ALIGN.CENTER
             paragraph.line_spacing = 1.0  # Tighter line spacing for headers
 
-    def _format_data_cell(self, cell):
+        # Vertical alignment
+        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    def _format_data_cell(self, cell, small: bool = False):
         """Format table data cell"""
         # Format text
         text_frame = cell.text_frame
@@ -496,14 +550,17 @@ class CategorySlide(BaseSlide):
         # Format all paragraphs in the cell
         for paragraph in text_frame.paragraphs:
             paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(11)  # Consistent data font size
+            paragraph.font.size = Pt(8) if small else Pt(11)  # Consistent data font size
             paragraph.alignment = PP_ALIGN.CENTER
 
             # Color coding for More/Less
-            if 'More' in cell.text:
+            if 'More' in cell.text or 'more' in cell.text:
                 paragraph.font.color.rgb = self.colors['positive']
-            elif 'Less' in cell.text:
+            elif 'Less' in cell.text or 'less' in cell.text or 'fewer' in cell.text:
                 paragraph.font.color.rgb = self.colors['negative']
+
+        # Vertical alignment
+        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
 
 
 # Convenience functions

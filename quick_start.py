@@ -59,7 +59,7 @@ def quick_generate(team_key: str = 'utah_jazz', categories_only: Optional[List[s
     try:
         output_path = builder.build_presentation(
             include_custom_categories=True,
-            custom_category_count=2  # Reduced for faster testing
+            custom_category_count=4  # Reduced for faster testing
         )
 
         print(f"\n✅ Success! Generated: {output_path.name}")

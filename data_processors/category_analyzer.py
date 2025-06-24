@@ -1,80 +1,80 @@
 # data_processors/category_analyzer.py
 """
-Process category and subcategory spending data for PowerPoint generation
-Includes validation and data quality checks based on Snowflake data analysis
+Category analyzer that processes spending data by category
+Generates insights and recommendations for sponsorship opportunities
 """
 
 import pandas as pd
 import numpy as np
+from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Union
 import yaml
 import logging
-from dataclasses import dataclass
 from datetime import datetime
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class CategoryMetrics:
-    """Container for category-level metrics"""
-    percent_fans: float
-    percent_likely: float
-    percent_purchases: float
-    composite_index: float
-    total_spend: float
-    spc: float
-    audience_count: int = 0
-    comparison_population: str = ""
+    """Data class for category-level metrics"""
+    percent_fans: float  # Percentage of fans who spend in category
+    percent_likely: float  # How much more/less likely to spend
+    percent_purchases: float  # Purchase frequency difference
+    composite_index: float  # Combined metric
+    total_spend: float  # Total category spend
+    spc: float  # Spend per customer
+    audience_count: int  # Number of fans
+    comparison_population: str  # Who we're comparing to
 
     def format_percent_fans(self) -> str:
-        return f"{self.percent_fans * 100:.1f}%"
+        """Format percentage of fans who spend"""
+        return f"{self.percent_fans * 100:.0f}%"
 
     def format_likelihood(self) -> str:
-        return f"{abs(self.percent_likely):.0f}% {'More' if self.percent_likely > 0 else 'Less'}"
+        """Format likelihood comparison"""
+        if abs(self.percent_likely) < 1:
+            return "Equally likely"
+        return f"{abs(self.percent_likely):.0f}% {'More' if self.percent_likely > 0 else 'Less'} likely"
 
     def format_purchases(self) -> str:
-        return f"{abs(self.percent_purchases):.0f}% {'more' if self.percent_purchases > 0 else 'fewer'}"
+        """Format purchase frequency comparison"""
+        if abs(self.percent_purchases) < 1:
+            return "Equal purchases"
+        return f"{abs(self.percent_purchases):.0f}% {'More' if self.percent_purchases > 0 else 'Fewer'}"
 
     def validate(self) -> List[str]:
-        """Validate metrics for reasonable values"""
+        """Validate metrics are reasonable"""
         issues = []
-
         if self.percent_fans > 1.0:
-            issues.append(f"percent_fans > 100%: {self.percent_fans}")
-
+            issues.append(f"Percent fans > 100%: {self.percent_fans * 100:.1f}%")
         if abs(self.percent_likely) > 1000:
-            issues.append(f"percent_likely unrealistic: {self.percent_likely}%")
-
-        if self.spc < 0:
-            issues.append(f"negative SPC: ${self.spc}")
-
+            issues.append(f"Likelihood unrealistic: {self.percent_likely:.0f}%")
+        if self.composite_index > 2000:
+            issues.append(f"Composite index too high: {self.composite_index:.1f}")
         return issues
 
 
 class CategoryAnalyzer:
-    """Process category spending data for sports team analysis"""
+    """Analyzes category spending data and generates insights"""
 
-    def __init__(self,
-                 team_name: str = "Utah Jazz",
-                 team_short: str = "Jazz",
-                 league: str = "NBA",
+    def __init__(self, team_name: str, team_short: str, league: str,
                  config_path: Optional[Path] = None):
         """
-        Initialize with team information and category configuration
+        Initialize the category analyzer
 
         Args:
             team_name: Full team name (e.g., "Utah Jazz")
             team_short: Short team name (e.g., "Jazz")
             league: League name (e.g., "NBA")
-            config_path: Path to categories.yaml
+            config_path: Path to categories config file
         """
         self.team_name = team_name
         self.team_short = team_short
         self.league = league
 
-        # Set up audience names based on team
+        # Standard audiences
         self.audience_name = f"{team_name} Fans"
         self.comparison_pop = f"Local Gen Pop (Excl. {team_short})"
         self.league_fans = f"{league} Fans"
@@ -101,15 +101,13 @@ class CategoryAnalyzer:
 
         # Validation thresholds
         self.max_reasonable_index = 1000  # 1000% = 10x more likely
-        self.min_significant_difference = 5  # 5% minimum to report
+        self.min_significant_difference = 0  # No minimum threshold - report all differences
 
     def analyze_category(self,
                          category_key: str,
                          category_df: pd.DataFrame,
                          subcategory_df: pd.DataFrame,
                          merchant_df: pd.DataFrame,
-                         yoy_category_df: Optional[pd.DataFrame] = None,
-                         yoy_merchant_df: Optional[pd.DataFrame] = None,
                          validate: bool = True) -> Dict[str, Any]:
         """
         Analyze a specific category using multiple data sources
@@ -119,8 +117,6 @@ class CategoryAnalyzer:
             category_df: Data from CATEGORY_INDEXING_ALL_TIME view
             subcategory_df: Data from SUBCATEGORY_INDEXING_ALL_TIME view
             merchant_df: Data from MERCHANT_INDEXING_ALL_TIME view
-            yoy_category_df: Optional YOY category data
-            yoy_merchant_df: Optional YOY merchant data
             validate: Whether to run validation checks
 
         Returns:
@@ -158,7 +154,7 @@ class CategoryAnalyzer:
         # 3. Generate insights with proper data sources
         insights = self._generate_insights(
             category_config, category_metrics, subcategory_stats,
-            category_df, subcategory_df, yoy_category_df
+            category_df, subcategory_df
         )
 
         # 4. Merchant analysis
@@ -166,7 +162,7 @@ class CategoryAnalyzer:
 
         # 5. Generate merchant insights
         merchant_insights = self._generate_merchant_insights(
-            merchant_stats, merchant_df, yoy_merchant_df
+            merchant_stats, merchant_df
         )
 
         # 6. Get sponsorship recommendation
@@ -267,52 +263,54 @@ class CategoryAnalyzer:
                 f"Processing custom category {category_config.get('display_name')} - using all subcategories from data")
 
             # Remove any rows with empty/null subcategories
-            team_data = team_data[team_data['SUBCATEGORY'].notna() & (team_data['SUBCATEGORY'] != '')]
-
+            team_data = team_data[team_data['SUBCATEGORY'].notna()]
         else:
-            # For fixed categories, apply the YAML configuration filters
-            subcats = category_config.get('subcategories', {})
+            # For fixed categories, apply include/exclude logic
+            subcategory_config = category_config.get('subcategories', {})
+            included = subcategory_config.get('include', [])
+            excluded = subcategory_config.get('exclude', [])
 
-            if 'include' in subcats and isinstance(subcats['include'], list):
-                # Get the keys to include
-                include_keys = []
-                for sc in subcats['include']:
-                    key = sc['key_in_data']
-                    if isinstance(key, list):
-                        include_keys.extend(key)
+            # Build subcategory filter
+            if included:
+                # Use specific included subcategories
+                included_names = [sub['key_in_data'] if isinstance(sub, dict) else sub
+                                  for sub in included]
+                # Handle lists (like Auto Parts & Service)
+                all_included = []
+                for name in included_names:
+                    if isinstance(name, list):
+                        all_included.extend(name)
                     else:
-                        include_keys.append(key)
+                        all_included.append(name)
+                team_data = team_data[team_data['SUBCATEGORY'].isin(all_included)]
+            elif excluded:
+                # Exclude specific subcategories
+                team_data = team_data[~team_data['SUBCATEGORY'].isin(excluded)]
 
-                team_data = team_data[team_data['SUBCATEGORY'].isin(include_keys)]
+        if team_data.empty:
+            return pd.DataFrame()
 
-            if 'exclude' in subcats:
-                team_data = team_data[~team_data['SUBCATEGORY'].isin(subcats['exclude'])]
+        # Sort by composite index and take top 4
+        top_subcategories = team_data.nlargest(4, 'COMPOSITE_INDEX')
 
-        # Get top 5 by audience percentage - ensure no duplicates
-        top_5 = (team_data
-                 .drop_duplicates('SUBCATEGORY')
-                 .sort_values('PERC_AUDIENCE', ascending=False)
-                 .head(5))
-
-        # Build display table
+        # Format for display
         results = []
-        for _, row in top_5.iterrows():
-            subcategory = row['SUBCATEGORY']
-
-            # Since we already filtered for the correct comparison population,
-            # we can use the row data directly
+        for _, row in top_subcategories.iterrows():
+            percent_fans = float(row['PERC_AUDIENCE']) * 100
             percent_likely = float(row['PERC_INDEX']) - 100
             percent_purch = self._calculate_percent_diff(
                 float(row['PPC']),
                 float(row['COMPARISON_PPC'])
             )
 
-            # Format subcategory name for display
-            display_name = self._format_subcategory_name(subcategory, category_config)
+            # Format subcategory name
+            subcategory_name = self._format_subcategory_name(
+                row['SUBCATEGORY'], category_config
+            )
 
             results.append({
-                'Subcategory': display_name,
-                'Percent of Fans Who Spend': f"{row['PERC_AUDIENCE'] * 100:.1f}%",
+                'Subcategory': subcategory_name,
+                'Percent of Fans Who Spend': f"{percent_fans:.0f}%",
                 'How likely fans are to spend vs. gen pop':
                     f"{abs(percent_likely):.0f}% {'More' if percent_likely > 0 else 'Less'}",
                 'Purchases per fan vs. gen pop':
@@ -382,44 +380,34 @@ class CategoryAnalyzer:
                            metrics: CategoryMetrics,
                            subcategory_stats: pd.DataFrame,
                            category_df: pd.DataFrame,
-                           subcategory_df: pd.DataFrame,
-                           yoy_df: Optional[pd.DataFrame]) -> List[str]:
+                           subcategory_df: pd.DataFrame) -> List[str]:
         """Generate category insights following template patterns"""
         insights = []
 
         # 1. Likelihood to spend
-        if abs(metrics.percent_likely) >= self.min_significant_difference:
-            insights.append(
-                f"{self.team_short} Fans are {abs(metrics.percent_likely):.0f}% "
-                f"{'MORE' if metrics.percent_likely > 0 else 'LESS'} likely to spend on "
-                f"{category_config['display_name']} than the {self.comparison_pop}"
-            )
+        insights.append(
+            f"{self.team_short} Fans are {abs(metrics.percent_likely):.0f}% "
+            f"{'MORE' if metrics.percent_likely > 0 else 'LESS'} likely to spend on "
+            f"{category_config['display_name']} than the {self.comparison_pop}"
+        )
 
         # 2. Purchase frequency
-        if abs(metrics.percent_purchases) >= self.min_significant_difference:
-            insights.append(
-                f"{self.team_short} Fans make an average of {abs(metrics.percent_purchases):.0f}% "
-                f"{'more' if metrics.percent_purchases > 0 else 'fewer'} purchases per fan on "
-                f"{category_config['display_name']} than the {self.comparison_pop}"
-            )
+        insights.append(
+            f"{self.team_short} Fans make an average of {abs(metrics.percent_purchases):.0f}% "
+            f"{'more' if metrics.percent_purchases > 0 else 'fewer'} purchases per fan on "
+            f"{category_config['display_name']} than the {self.comparison_pop}"
+        )
 
         # 3. Top subcategory highlight (only if we have subcategory data)
         if not subcategory_stats.empty:
             top_sub = subcategory_stats.iloc[0]
             self._add_subcategory_insight(insights, top_sub)
 
-        # 4. Spending amount insight (QSR specific for restaurants)
-        if category_config['display_name'] == 'Restaurants':
-            self._add_qsr_insight(insights, subcategory_df)
+        # 4. Highest spending subcategory
+        self._add_highest_spend_subcategory_insight(insights, subcategory_df)
 
-        # 5. Year-over-year insight
-        if yoy_df is not None and not yoy_df.empty:
-            yoy_insight = self._get_yoy_insight(yoy_df, category_config['display_name'])
-            if yoy_insight:
-                insights.append(yoy_insight)
-
-        # 6. NBA/League comparison - use category data, NOT merchant data
-        nba_insight = self._get_league_comparison_category(category_df, category_config['display_name'])
+        # 5. NBA/League comparison - use subcategory data
+        nba_insight = self._get_league_comparison_subcategory(subcategory_df, category_config)
         if nba_insight:
             insights.append(nba_insight)
 
@@ -433,11 +421,7 @@ class CategoryAnalyzer:
             try:
                 percent = float(likelihood_text.split('%')[0])
 
-                # Validate reasonable range
-                if percent > self.max_reasonable_index:
-                    logger.warning(f"Subcategory index too high: {percent}%, skipping insight")
-                    return
-
+                # No validation - always add the insight
                 if percent > 200:
                     multiplier = round(percent / 100, 1)
                     insights.append(
@@ -452,28 +436,81 @@ class CategoryAnalyzer:
             except ValueError:
                 logger.error(f"Could not parse likelihood: {likelihood_text}")
 
-    def _add_qsr_insight(self, insights: List[str], subcategory_df: pd.DataFrame):
-        """Add QSR insight using correct subcategory data"""
+    def _add_highest_spend_subcategory_insight(self, insights: List[str], subcategory_df: pd.DataFrame):
+        """Add insight for subcategory with highest SPC (spend per customer)"""
         if subcategory_df.empty:
             return
 
-        # Find QSR data for team fans vs local gen pop
-        qsr_data = subcategory_df[
+        # Find subcategory with highest SPC for team fans
+        team_data = subcategory_df[
             (subcategory_df['AUDIENCE'] == self.audience_name) &
-            (subcategory_df['SUBCATEGORY'].str.contains('QSR', case=False, na=False)) &
             (subcategory_df['COMPARISON_POPULATION'] == self.comparison_pop)
             ]
 
-        if not qsr_data.empty:
-            qsr_spc = float(qsr_data.iloc[0]['SPC'])
-            insights.append(
-                f"{self.team_short} fans spend an average of ${qsr_spc:.2f} per fan per year "
-                f"on QSR and Fast Casual Restaurants"
+        if not team_data.empty:
+            # Get subcategory with maximum SPC
+            highest_spend_sub = team_data.nlargest(1, 'SPC').iloc[0]
+
+            # Format subcategory name
+            subcategory_name = self._format_subcategory_name(
+                highest_spend_sub['SUBCATEGORY'],
+                {'display_name': highest_spend_sub.get('CATEGORY', '')}
             )
 
+            insights.append(
+                f"{self.team_short} fans spend an average of ${highest_spend_sub['SPC']:.2f} "
+                f"per fan per year on {subcategory_name} "
+                f"vs. the {self.comparison_pop}"
+            )
+
+    def _get_league_comparison_subcategory(self, subcategory_df: pd.DataFrame,
+                                           category_config: Dict[str, Any]) -> Optional[str]:
+        """Find subcategory where team most over-indexes vs NBA Fans within current category"""
+        if subcategory_df.empty:
+            return None
+
+        # Get category names to filter by
+        if category_config.get('is_custom', False):
+            category_names = [category_config['display_name']]
+        else:
+            category_names = category_config.get('category_names_in_data', [])
+
+        # Filter for ONLY subcategories in the current category
+        category_filter = subcategory_df['CATEGORY'].isin(category_names)
+
+        # Get subcategories comparing to NBA Fans FOR THIS CATEGORY
+        nba_comp = subcategory_df[
+            (subcategory_df['AUDIENCE'] == self.audience_name) &
+            (subcategory_df['COMPARISON_POPULATION'] == 'NBA Fans') &
+            category_filter  # Only subcategories in current category
+            ]
+
+        if nba_comp.empty:
+            return None
+
+        # Find subcategory with highest PERC_INDEX (most over-indexed)
+        best_sub = nba_comp.nlargest(1, 'PERC_INDEX').iloc[0]
+
+        # Calculate how much more likely (PERC_INDEX - 100)
+        index_diff = float(best_sub['PERC_INDEX']) - 100
+
+        # Only report if significant (>5%)
+        if index_diff > self.min_significant_difference:
+            # Format the subcategory name for display
+            subcategory_name = self._format_subcategory_name(
+                best_sub['SUBCATEGORY'],
+                category_config
+            )
+
+            return (
+                f"{self.team_name} fans are {index_diff:.0f}% more likely "
+                f"to spend on {subcategory_name} when compared to the NBA average"
+            )
+
+        return None
+
     def _generate_merchant_insights(self, merchant_stats: Tuple[pd.DataFrame, List[str]],
-                                    merchant_df: pd.DataFrame,
-                                    yoy_merchant_df: Optional[pd.DataFrame]) -> List[str]:
+                                    merchant_df: pd.DataFrame) -> List[str]:
         """Generate merchant-specific insights"""
         merchant_table, top_merchants = merchant_stats
         insights = []
@@ -488,34 +525,33 @@ class CategoryAnalyzer:
             f"spent at {top_merchant['Brand']}"
         )
 
-        # 2. Purchase frequency insight with actual data
-        if yoy_merchant_df is not None and not yoy_merchant_df.empty:
-            # Get average purchases for top merchants
-            yoy_merchant_df = yoy_merchant_df[
-                yoy_merchant_df['MERCHANT'].isin(top_merchants)
-            ]
+        # 2. Average purchases for second merchant (if available)
+        if len(top_merchants) > 1 and len(merchant_df) > 0:
+            second_merchant = top_merchants[1]
+            merchant_data = merchant_df[
+                (merchant_df['MERCHANT'] == second_merchant) &
+                (merchant_df['AUDIENCE'] == self.audience_name)
+                ]
+            if not merchant_data.empty:
+                avg_ppc = float(merchant_data.iloc[0]['PPC'])
+                insights.append(
+                    f"{self.team_name} fans average {avg_ppc:.0f} purchases "
+                    f"per year per fan at {second_merchant}"
+                )
 
-            if not yoy_merchant_df.empty:
-                # Average PPC across years for each merchant
-                ppc_avg = yoy_merchant_df.groupby('MERCHANT')['PPC'].mean()
-                if not ppc_avg.empty:
-                    top_ppc_merchant = ppc_avg.idxmax()
-                    avg_purchases = ppc_avg.max()
-                    insights.append(
-                        f"{self.team_name} fans average {avg_purchases:.0f} purchases "
-                        f"per year per fan at {top_ppc_merchant}"
-                    )
-
-                # Get SPC data for third merchant
-                spc_avg = yoy_merchant_df.groupby('MERCHANT')['SPC'].mean()
-                if len(top_merchants) > 2 and not spc_avg.empty:
-                    third_merchant = top_merchants[2]
-                    if third_merchant in spc_avg:
-                        avg_spend = spc_avg[third_merchant]
-                        insights.append(
-                            f"{self.team_name} fans spent an average of ${avg_spend:.2f} per fan on "
-                            f"{third_merchant} per year"
-                        )
+        # 3. Spending amount for third merchant
+        if len(top_merchants) > 2 and len(merchant_df) > 0:
+            third_merchant = top_merchants[2]
+            merchant_data = merchant_df[
+                (merchant_df['MERCHANT'] == third_merchant) &
+                (merchant_df['AUDIENCE'] == self.audience_name)
+                ]
+            if not merchant_data.empty:
+                avg_spc = float(merchant_data.iloc[0]['SPC'])
+                insights.append(
+                    f"{self.team_name} fans spent an average of ${avg_spc:.2f} per fan "
+                    f"on {third_merchant} per year"
+                )
 
         # 4. Merchant NBA comparison (if available)
         if len(top_merchants) > 3:
@@ -542,44 +578,23 @@ class CategoryAnalyzer:
             perc_index = float(nba_data.iloc[0]['PERC_INDEX'])
             index_diff = perc_index - 100
 
-            if abs(index_diff) >= self.min_significant_difference:
-                return (
-                    f"{self.team_name} fans are {abs(index_diff):.0f}% "
-                    f"{'more' if index_diff > 0 else 'less'} likely to spend on {merchant} "
-                    f"than {self.league} Fans."
-                )
-
-        return None
-
-    def _get_league_comparison_category(self, category_df: pd.DataFrame, category_name: str) -> Optional[str]:
-        """Get comparison to league average at category level (NOT merchant level)"""
-        if category_df.empty:
-            return None
-
-        # Look for league comparison data in CATEGORY data
-        league_comp = category_df[
-            (category_df['AUDIENCE'] == self.audience_name) &
-            (category_df['COMPARISON_POPULATION'] == self.league_fans)
-            ]
-
-        if league_comp.empty:
-            return None
-
-        # Get the index difference
-        perc_index = float(league_comp.iloc[0]['PERC_INDEX'])
-        index_diff = perc_index - 100
-
-        # Only report if significant difference (>5%)
-        if abs(index_diff) > self.min_significant_difference:
+            # Always report, no threshold
             if index_diff > 0:
                 return (
-                    f"{self.team_name} fans are {index_diff:.0f}% more likely "
-                    f"to spend on {category_name} when compared to the {self.league} average"
+                    f"{self.team_name} fans are {abs(index_diff):.0f}% "
+                    f"more likely to spend on {merchant} "
+                    f"than {self.league} Fans."
+                )
+            elif index_diff < 0:
+                return (
+                    f"{self.team_name} fans are {abs(index_diff):.0f}% "
+                    f"less likely to spend on {merchant} "
+                    f"than {self.league} Fans."
                 )
             else:
                 return (
-                    f"{self.team_name} fans are {abs(index_diff):.0f}% less likely "
-                    f"to spend on {category_name} when compared to the {self.league} average"
+                    f"{self.team_name} fans are equally likely to spend on {merchant} "
+                    f"as {self.league} Fans."
                 )
 
         return None
@@ -622,10 +637,6 @@ class CategoryAnalyzer:
             if "991%" in insight or any(str(x) + "%" in insight for x in range(900, 1100)):
                 issues.append(f"Suspiciously high percentage in insight: {insight}")
 
-            # Check for $3311 QSR issue
-            if "$3311" in insight and "QSR" in insight:
-                issues.append("Using category SPC for QSR subcategory")
-
             # Check for unrealistic NBA comparisons
             if "NBA" in insight and any(str(x) + "%" in insight for x in range(500, 20000)):
                 issues.append(f"Unrealistic NBA comparison: {insight}")
@@ -663,28 +674,6 @@ class CategoryAnalyzer:
             if subcategory.startswith(f"{cat_name} - "):
                 return subcategory.replace(f"{cat_name} - ", "")
         return subcategory
-
-    def _get_yoy_insight(self, yoy_df: pd.DataFrame, category_name: str) -> Optional[str]:
-        """Generate year-over-year insight"""
-        # Filter for recent years
-        yoy_df = yoy_df[yoy_df['TRANSACTION_YEAR'].isin(['2023-01-01', '2024-01-01'])]
-
-        if len(yoy_df) < 2:
-            return None
-
-        yoy_df = yoy_df.sort_values('TRANSACTION_YEAR')
-        pct_2023 = float(yoy_df.iloc[0]['PERC_AUDIENCE'])
-        pct_2024 = float(yoy_df.iloc[1]['PERC_AUDIENCE'])
-
-        pct_change = ((pct_2024 - pct_2023) / pct_2023) * 100
-
-        if pct_change > 5:  # Only mention if significant
-            return (
-                f"{category_name} saw an increase of {pct_change:.0f}% of {self.team_short} "
-                f"fans spending on the category in 2024 vs. 2023"
-            )
-
-        return None
 
     def get_custom_categories(self,
                               category_df: pd.DataFrame,
