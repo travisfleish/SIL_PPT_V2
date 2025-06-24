@@ -76,7 +76,7 @@ class CategorySlide(BaseSlide):
         # Add title
         self._add_title(slide, analysis_results['slide_title'])
 
-        # Add category insights (left side) - UPDATED TO SHOW ALL INSIGHTS
+        # Add category insights (left side) - UPDATED TO SEPARATE NBA COMPARISON
         self._add_category_insights(slide, analysis_results, team_short, team_config)
 
         # Add category metrics table (top right) - pass results for category name
@@ -84,9 +84,6 @@ class CategorySlide(BaseSlide):
 
         # Add subcategory table (middle right) - adjusted for 16:9
         self._add_subcategory_table(slide, analysis_results['subcategory_stats'])
-
-        # Add NBA comparison note
-        self._add_nba_comparison(slide, team_config['league'])
 
         logger.info(f"Generated {analysis_results['display_name']} slide")
         return self.presentation
@@ -173,7 +170,7 @@ class CategorySlide(BaseSlide):
         p.font.color.rgb = RGBColor(85, 85, 85)
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
-        """Add category insights section - UPDATED TO SHOW ALL INSIGHTS"""
+        """Add category insights section - UPDATED TO SEPARATE NBA COMPARISON"""
         # Insights title
         insights_title = slide.shapes.add_textbox(
             Inches(0.5), Inches(1.5),
@@ -185,36 +182,63 @@ class CategorySlide(BaseSlide):
         p.font.size = Pt(14)
         p.font.bold = True
 
-        # Insights list - adjusted height to accommodate all insights
+        # Separate insights into regular and NBA comparison
+        regular_insights = []
+        nba_insights = []
+
+        for insight in results['insights']:
+            if "NBA" in insight and "compared to" in insight:
+                nba_insights.append(insight)
+            else:
+                regular_insights.append(insight)
+
+        # Regular insights box
         insights_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(1.9),
-            Inches(4.5), Inches(4.0)  # Increased height from 3.5 to 4.0
+            Inches(4.5), Inches(3.0)  # Reduced height to make room for NBA section
         )
 
         text_frame = insights_box.text_frame
         text_frame.word_wrap = True
 
-        # Add ALL insights (not limited to 4)
-        for i, insight in enumerate(results['insights'], 1):
+        # Add regular insights (first 4)
+        for i, insight in enumerate(regular_insights[:4], 1):
             p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
             p.text = f"{i}. {insight}"
             p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(11)
             p.line_spacing = 1.2
 
-        # Add NBA comparison label if there are NBA insights
-        if any("NBA" in insight for insight in results['insights']):
-            # Add a subtle label for the NBA comparison section
+        # Add NBA comparison section if there are NBA insights
+        if nba_insights:
+            # NBA comparison label
             nba_label = slide.shapes.add_textbox(
-                Inches(0.5), Inches(6.0),
+                Inches(0.5), Inches(5.2),
                 Inches(4), Inches(0.3)
             )
-            nba_label.text_frame.text = f"{team_config.get('league', 'NBA')} Fans vs. {team_config.get('league', 'NBA')} Fans"
+            nba_label.text_frame.text = f"{team_short} Fans vs. {team_config.get('league', 'NBA')} Fans"
             p = nba_label.text_frame.paragraphs[0]
             p.font.name = self.default_font
-            p.font.size = Pt(11)
+            p.font.size = Pt(14)
             p.font.bold = True
-            p.font.italic = True
+
+            # NBA insights box
+            nba_box = slide.shapes.add_textbox(
+                Inches(0.7), Inches(5.6),
+                Inches(4.5), Inches(1.5)
+            )
+
+            nba_text_frame = nba_box.text_frame
+            nba_text_frame.word_wrap = True
+
+            # Add NBA comparison insights (starting from 5)
+            start_num = len(regular_insights[:4]) + 1
+            for i, insight in enumerate(nba_insights, start_num):
+                p = nba_text_frame.add_paragraph() if i > start_num else nba_text_frame.paragraphs[0]
+                p.text = f"{i}. {insight}"
+                p.font.name = self.default_font
+                p.font.size = Pt(11)
+                p.line_spacing = 1.2
 
     def _add_category_table(self, slide, results: Dict[str, Any]):
         """Add category metrics table (adjusted for 16:9)"""
@@ -300,18 +324,6 @@ class CategorySlide(BaseSlide):
             # Format cells
             for col in range(4):
                 self._format_data_cell(table.cell(row_idx, col))
-
-    def _add_nba_comparison(self, slide, league: str):
-        """Add NBA/League comparison note"""
-        comparison_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(5.8),
-            Inches(4), Inches(0.5)
-        )
-        comparison_box.text_frame.text = f"{league} Fans vs. {league} Fans"
-        p = comparison_box.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(12)
-        p.font.bold = True
 
     def _add_brand_logos(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add brand logo placeholders (numbered circles) - adjusted for 16:9"""
