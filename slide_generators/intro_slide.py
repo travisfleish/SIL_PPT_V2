@@ -77,7 +77,7 @@ class IntroSlide(BaseSlide):
         header_rect = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
-            Inches(10), Inches(0.5)
+            Inches(13.333), Inches(0.5)  # Full 16:9 width
         )
         header_rect.fill.solid()
         header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)
@@ -90,8 +90,10 @@ class IntroSlide(BaseSlide):
             Inches(4), Inches(0.3)
         )
         team_text.text_frame.text = team_name
-        team_text.text_frame.paragraphs[0].font.size = Pt(14)
-        team_text.text_frame.paragraphs[0].font.bold = True
+        p = team_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(14)
+        p.font.bold = True
 
     def _add_overview_content(self, slide, team_config: Dict[str, Any]):
         """Add executive overview content"""
@@ -101,8 +103,10 @@ class IntroSlide(BaseSlide):
             Inches(9), Inches(0.5)
         )
         title_box.text_frame.text = "Executive Overview"
-        title_box.text_frame.paragraphs[0].font.size = Pt(24)
-        title_box.text_frame.paragraphs[0].font.bold = True
+        p = title_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(24)
+        p.font.bold = True
 
         # Key findings placeholder
         content_box = slide.shapes.add_textbox(
@@ -112,10 +116,10 @@ class IntroSlide(BaseSlide):
 
         content = f"""Key Findings for {team_config['team_name']}:
 
-• Fan Demographics: Unique audience profile with distinct characteristics
-• Fan Behaviors: High-value communities with strong spending patterns  
-• Category Opportunities: Multiple sponsorship categories with strong fan affinity
-• Custom Insights: Data-driven recommendations for partnership targets
+- Fan Demographics: Unique audience profile with distinct characteristics
+- Fan Behaviors: High-value communities with strong spending patterns  
+- Category Opportunities: Multiple sponsorship categories with strong fan affinity
+- Custom Insights: Data-driven recommendations for partnership targets
 
 This report provides detailed analysis to support sponsorship sales and partnership development."""
 
@@ -123,6 +127,7 @@ This report provides detailed analysis to support sponsorship sales and partners
         content_box.text_frame.word_wrap = True
 
         for paragraph in content_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
             paragraph.font.size = Pt(14)
             paragraph.line_spacing = 1.5
 
@@ -134,8 +139,10 @@ This report provides detailed analysis to support sponsorship sales and partners
             Inches(9), Inches(0.5)
         )
         title_box.text_frame.text = "Report Contents"
-        title_box.text_frame.paragraphs[0].font.size = Pt(24)
-        title_box.text_frame.paragraphs[0].font.bold = True
+        p = title_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(24)
+        p.font.bold = True
 
         # TOC items
         toc_items = [
@@ -159,6 +166,7 @@ This report provides detailed analysis to support sponsorship sales and partners
         content_box.text_frame.word_wrap = True
 
         for paragraph in content_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
             paragraph.font.size = Pt(14)
             paragraph.line_spacing = 1.8
 
@@ -170,8 +178,10 @@ This report provides detailed analysis to support sponsorship sales and partners
             Inches(9), Inches(0.5)
         )
         title_box.text_frame.text = "How To Use This Report:"
-        title_box.text_frame.paragraphs[0].font.size = Pt(24)
-        title_box.text_frame.paragraphs[0].font.bold = True
+        p = title_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(24)
+        p.font.bold = True
 
         # Three columns
         sections = [
@@ -191,16 +201,17 @@ This report provides detailed analysis to support sponsorship sales and partners
 
         # Add each section
         for i, section in enumerate(sections):
-            left = Inches(0.5 + i * 3.2)
+            left = Inches(0.5 + i * 4.2)  # Adjusted for 16:9 spacing
 
             # Section title
             title_box = slide.shapes.add_textbox(
                 left, Inches(1.8),
-                Inches(2.8), Inches(0.8)
+                Inches(3.8), Inches(0.8)
             )
             title_box.text_frame.text = section['title']
             title_box.text_frame.word_wrap = True
             p = title_box.text_frame.paragraphs[0]
+            p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(14)
             p.font.bold = True
             p.alignment = PP_ALIGN.CENTER
@@ -208,12 +219,13 @@ This report provides detailed analysis to support sponsorship sales and partners
             # Section content
             content_box = slide.shapes.add_textbox(
                 left, Inches(2.8),
-                Inches(2.8), Inches(3.5)
+                Inches(3.8), Inches(3.5)
             )
             content_box.text_frame.text = section['content']
             content_box.text_frame.word_wrap = True
 
             for paragraph in content_box.text_frame.paragraphs:
+                paragraph.font.name = self.default_font  # Red Hat Display
                 paragraph.font.size = Pt(11)
                 paragraph.line_spacing = 1.2
                 paragraph.alignment = PP_ALIGN.LEFT
@@ -225,8 +237,10 @@ This report provides detailed analysis to support sponsorship sales and partners
             Inches(8), Inches(1)
         )
         text_box.text_frame.text = "Introduction slide placeholder"
-        text_box.text_frame.paragraphs[0].font.size = Pt(24)
-        text_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+        p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(24)
+        p.alignment = PP_ALIGN.CENTER
 
 
 # Convenience function

@@ -14,6 +14,10 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Default font configuration
+DEFAULT_FONT_FAMILY = "Red Hat Display"
+FALLBACK_FONT = "Arial"
+
 
 class BaseSlide:
     """Base class for all slide generators"""
@@ -29,12 +33,15 @@ class BaseSlide:
             self.presentation = Presentation()
             # FIX 1: Set 16:9 widescreen aspect ratio
             self.presentation.slide_width = Inches(13.333)  # 16:9 width
-            self.presentation.slide_height = Inches(7.5)    # 16:9 height
+            self.presentation.slide_height = Inches(7.5)  # 16:9 height
         else:
             self.presentation = presentation
 
         # FIX 2: Use blank layout (index 6) with NO placeholders/title boxes
         self.blank_layout = self.presentation.slide_layouts[6]  # Changed from [5] to [6]
+
+        # Set default font
+        self.default_font = DEFAULT_FONT_FAMILY
 
     def hex_to_rgb(self, hex_color: str) -> RGBColor:
         """
@@ -61,7 +68,8 @@ class BaseSlide:
                      width: float, height: float,
                      font_size: int = 14,
                      bold: bool = False,
-                     alignment: PP_ALIGN = PP_ALIGN.LEFT) -> None:
+                     alignment: PP_ALIGN = PP_ALIGN.LEFT,
+                     font_name: Optional[str] = None) -> None:
         """
         Add a text box to slide with common formatting
 
@@ -72,7 +80,11 @@ class BaseSlide:
             font_size: Font size in points
             bold: Whether text should be bold
             alignment: Text alignment
+            font_name: Font family (defaults to Red Hat Display)
         """
+        if font_name is None:
+            font_name = self.default_font
+
         text_box = slide.shapes.add_textbox(
             Inches(left), Inches(top),
             Inches(width), Inches(height)
@@ -83,6 +95,7 @@ class BaseSlide:
         text_frame.word_wrap = True
 
         p = text_frame.paragraphs[0]
+        p.font.name = font_name
         p.font.size = Pt(font_size)
         p.font.bold = bold
         p.alignment = alignment
@@ -153,3 +166,25 @@ class BaseSlide:
         height = self.presentation.slide_height / 914400
 
         return width, height
+
+    def apply_font_to_text_frame(self, text_frame, font_name: Optional[str] = None,
+                                 font_size: Optional[int] = None, bold: Optional[bool] = None):
+        """
+        Apply font styling to all paragraphs in a text frame
+
+        Args:
+            text_frame: PowerPoint text frame object
+            font_name: Font family name (defaults to Red Hat Display)
+            font_size: Font size in points
+            bold: Whether text should be bold
+        """
+        if font_name is None:
+            font_name = self.default_font
+
+        for paragraph in text_frame.paragraphs:
+            if font_name:
+                paragraph.font.name = font_name
+            if font_size is not None:
+                paragraph.font.size = Pt(font_size)
+            if bold is not None:
+                paragraph.font.bold = bold

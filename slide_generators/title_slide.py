@@ -112,6 +112,7 @@ class TitleSlide(BaseSlide):
         text_frame.text = team_name.split()[-1][:4].upper()  # e.g., "JAZZ" or "COWB"
 
         p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(36)
         p.font.bold = True
         p.font.color.rgb = RGBColor(255, 255, 255)
@@ -129,6 +130,7 @@ class TitleSlide(BaseSlide):
         text_frame.word_wrap = True
 
         p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(44)
         p.font.bold = True
         p.font.color.rgb = RGBColor(51, 51, 51)
@@ -145,6 +147,7 @@ class TitleSlide(BaseSlide):
         text_frame.text = subtitle
 
         p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(28)
         p.font.bold = False
         p.font.color.rgb = RGBColor(89, 89, 89)
@@ -177,6 +180,7 @@ class TitleSlide(BaseSlide):
         text_frame.text = date_text
 
         p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(12)
         p.font.color.rgb = RGBColor(150, 150, 150)
         p.alignment = PP_ALIGN.RIGHT

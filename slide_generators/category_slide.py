@@ -20,6 +20,9 @@ from data_processors.category_analyzer import CategoryAnalyzer, CategoryMetrics
 
 logger = logging.getLogger(__name__)
 
+# Default font
+DEFAULT_FONT_FAMILY = "Red Hat Display"
+
 
 class CategorySlide(BaseSlide):
     """Generate category analysis slides with insights, subcategory stats, and merchant rankings"""
@@ -147,8 +150,10 @@ class CategorySlide(BaseSlide):
             Inches(3), Inches(0.3)
         )
         team_text.text_frame.text = team_name
-        team_text.text_frame.paragraphs[0].font.size = Pt(12)
-        team_text.text_frame.paragraphs[0].font.bold = True
+        p = team_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(12)
+        p.font.bold = True
 
         # Slide title (right) - adjusted position for 16:9
         title_text = slide.shapes.add_textbox(
@@ -156,8 +161,10 @@ class CategorySlide(BaseSlide):
             Inches(6.8), Inches(0.3)      # Wider for 16:9
         )
         title_text.text_frame.text = slide_title
-        title_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
-        title_text.text_frame.paragraphs[0].font.size = Pt(12)
+        p = title_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.alignment = PP_ALIGN.RIGHT
+        p.font.size = Pt(12)
 
     def _add_title(self, slide, title: str):
         """Add main slide title"""
@@ -166,9 +173,11 @@ class CategorySlide(BaseSlide):
             Inches(12.333), Inches(0.5)  # Adjusted for 16:9 width
         )
         title_box.text_frame.text = title
-        title_box.text_frame.paragraphs[0].font.size = Pt(28)
-        title_box.text_frame.paragraphs[0].font.bold = True
-        title_box.text_frame.paragraphs[0].font.color.rgb = RGBColor(85, 85, 85)
+        p = title_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(28)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(85, 85, 85)
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str):
         """Add category insights section"""
@@ -178,8 +187,10 @@ class CategorySlide(BaseSlide):
             Inches(4), Inches(0.3)
         )
         insights_title.text_frame.text = "Category Insights:"
-        insights_title.text_frame.paragraphs[0].font.size = Pt(14)
-        insights_title.text_frame.paragraphs[0].font.bold = True
+        p = insights_title.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(14)
+        p.font.bold = True
 
         # Insights list
         insights_box = slide.shapes.add_textbox(
@@ -194,13 +205,9 @@ class CategorySlide(BaseSlide):
         for i, insight in enumerate(results['insights'][:4], 1):  # Max 4 insights
             p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
             p.text = f"{i}.    {insight}"
+            p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(11)
             p.line_spacing = 1.2
-
-            # Bold the team name in insights
-            if team_short in p.text:
-                # This is simplified - in production you'd want more sophisticated text formatting
-                p.font.bold = False
 
     def _add_category_table(self, slide, metrics: CategoryMetrics):
         """Add category metrics table (adjusted for 16:9)"""
@@ -290,8 +297,10 @@ class CategorySlide(BaseSlide):
             Inches(4), Inches(0.5)
         )
         comparison_box.text_frame.text = f"{league} Fans vs. {league} Fans"
-        comparison_box.text_frame.paragraphs[0].font.size = Pt(12)
-        comparison_box.text_frame.paragraphs[0].font.bold = True
+        p = comparison_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(12)
+        p.font.bold = True
 
     def _add_brand_logos(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add brand logo placeholders (numbered circles) - adjusted for 16:9"""
@@ -326,9 +335,11 @@ class CategorySlide(BaseSlide):
                 Inches(1.2), Inches(0.4)
             )
             text_box.text_frame.text = str(i + 1)
-            text_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
-            text_box.text_frame.paragraphs[0].font.size = Pt(48)
-            text_box.text_frame.paragraphs[0].font.color.rgb = RGBColor(150, 150, 150)
+            p = text_box.text_frame.paragraphs[0]
+            p.font.name = self.default_font  # Red Hat Display
+            p.alignment = PP_ALIGN.CENTER
+            p.font.size = Pt(48)
+            p.font.color.rgb = RGBColor(150, 150, 150)
 
     def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str):
         """Add brand-specific insights"""
@@ -338,8 +349,10 @@ class CategorySlide(BaseSlide):
             Inches(4), Inches(0.3)
         )
         insights_title.text_frame.text = "Top Brand Insights"
-        insights_title.text_frame.paragraphs[0].font.size = Pt(14)
-        insights_title.text_frame.paragraphs[0].font.bold = True
+        p = insights_title.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(14)
+        p.font.bold = True
 
         # Insights
         insights_box = slide.shapes.add_textbox(
@@ -354,6 +367,7 @@ class CategorySlide(BaseSlide):
         for i, insight in enumerate(results['merchant_insights'][:4], 1):
             p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
             p.text = f"{i}.    {insight}"
+            p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(11)
             p.line_spacing = 1.2
 
@@ -364,8 +378,10 @@ class CategorySlide(BaseSlide):
                 Inches(4), Inches(0.3)
             )
             target_title.text_frame.text = "Top Brand Target"
-            target_title.text_frame.paragraphs[0].font.size = Pt(14)
-            target_title.text_frame.paragraphs[0].font.bold = True
+            p = target_title.text_frame.paragraphs[0]
+            p.font.name = self.default_font  # Red Hat Display
+            p.font.size = Pt(14)
+            p.font.bold = True
 
             # Recommendation
             rec_box = slide.shapes.add_textbox(
@@ -379,7 +395,9 @@ class CategorySlide(BaseSlide):
 
             rec_box.text_frame.text = rec_text
             rec_box.text_frame.word_wrap = True
-            rec_box.text_frame.paragraphs[0].font.size = Pt(11)
+            p = rec_box.text_frame.paragraphs[0]
+            p.font.name = self.default_font  # Red Hat Display
+            p.font.size = Pt(11)
 
     def _add_merchant_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add top merchants table (adjusted for 16:9)"""
@@ -441,6 +459,7 @@ class CategorySlide(BaseSlide):
         text_frame.margin_bottom = Inches(0.02)
 
         p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(9)
         p.font.bold = True
         p.alignment = PP_ALIGN.CENTER
@@ -455,6 +474,7 @@ class CategorySlide(BaseSlide):
         text_frame.margin_bottom = Inches(0.02)
 
         p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(10)
         p.alignment = PP_ALIGN.CENTER
 

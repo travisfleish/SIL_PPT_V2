@@ -152,17 +152,21 @@ class BehaviorsSlide(BaseSlide):
             Inches(3), Inches(0.3)
         )
         team_text.text_frame.text = team_name
-        team_text.text_frame.paragraphs[0].font.size = Pt(14)
-        team_text.text_frame.paragraphs[0].font.bold = True
+        p = team_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(14)
+        p.font.bold = True
 
         # Slide indicator (right)
         slide_text = slide.shapes.add_textbox(
             Inches(6.5), Inches(0.1),  # Adjusted for 16:9
             Inches(6.633), Inches(0.3)  # Adjusted width
         )
-        slide_text.text_frame.text = "Fan Behaviors: How Are Utah Jazz Fans Unique"
-        slide_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
-        slide_text.text_frame.paragraphs[0].font.size = Pt(14)
+        slide_text.text_frame.text = f"Fan Behaviors: How Are {team_name} Fans Unique"
+        p = slide_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.alignment = PP_ALIGN.RIGHT
+        p.font.size = Pt(14)
 
     def _add_title(self, slide, title: str):
         """Add main slide title"""
@@ -198,6 +202,7 @@ class BehaviorsSlide(BaseSlide):
 
         # Format text
         p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(16)
         p.font.bold = True
         p.alignment = PP_ALIGN.LEFT
@@ -251,8 +256,10 @@ class BehaviorsSlide(BaseSlide):
             Inches(0.7), Inches(0.3)
         )
         logo_box.text_frame.text = team_config.get('team_name_short', 'Team')
-        logo_box.text_frame.paragraphs[0].font.size = Pt(10)
-        logo_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+        p = logo_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(10)
+        p.alignment = PP_ALIGN.CENTER
 
     def _set_slide_background(self, slide, color_hex: str):
         """Set slide background color"""
@@ -279,23 +286,3 @@ def create_behaviors_slide(merchant_ranker: MerchantRanker,
     """
     generator = BehaviorsSlide(presentation)
     return generator.generate(merchant_ranker, team_config)
-
-
-# Test function
-if __name__ == "__main__":
-    from utils.team_config_manager import TeamConfigManager
-
-    # Test with Utah Jazz
-    config_manager = TeamConfigManager()
-    team_config = config_manager.get_team_config('utah_jazz')
-
-    # Initialize merchant ranker
-    ranker = MerchantRanker(team_view_prefix=team_config['view_prefix'])
-
-    # Create slide
-    pres = create_behaviors_slide(ranker, team_config)
-
-    # Save
-    output_path = "test_behaviors_slide.pptx"
-    pres.save(output_path)
-    print(f"Saved test presentation to {output_path}")

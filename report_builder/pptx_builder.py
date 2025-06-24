@@ -35,6 +35,10 @@ from utils.team_config_manager import TeamConfigManager
 
 logger = logging.getLogger(__name__)
 
+# Default font configuration
+DEFAULT_FONT_FAMILY = "Red Hat Display"
+FALLBACK_FONT = "Arial"
+
 
 class PowerPointBuilder:
     """Main orchestrator for building complete PowerPoint presentations"""
@@ -67,6 +71,9 @@ class PowerPointBuilder:
             league=self.league
         )
 
+        # Validate and set presentation font
+        self.presentation_font = self._validate_font()
+
         # FIX 1 & 2: Initialize presentation with proper 16:9 formatting
         self.presentation = Presentation()
         self.presentation.slide_width = Inches(13.333)  # 16:9 widescreen width
@@ -89,6 +96,54 @@ class PowerPointBuilder:
         self.slides_created = []
 
         logger.info(f"Initialized PowerPoint builder for {self.team_name} (16:9 format)")
+        logger.info(f"Using font: {self.presentation_font}")
+
+    def _validate_font(self) -> str:
+        """
+        Validate that Red Hat Display font is available
+
+        Returns:
+            Font name to use (Red Hat Display or fallback)
+        """
+        try:
+            # Try to create a test presentation with Red Hat Display
+            test_pres = Presentation()
+            test_slide = test_pres.slides.add_slide(test_pres.slide_layouts[5])
+            test_box = test_slide.shapes.add_textbox(0, 0, 100, 100)
+            test_box.text_frame.text = "Test"
+            test_box.text_frame.paragraphs[0].font.name = DEFAULT_FONT_FAMILY
+
+            logger.info(f"✓ {DEFAULT_FONT_FAMILY} font validated and available")
+            return DEFAULT_FONT_FAMILY
+
+        except Exception as e:
+            logger.warning(f"⚠ {DEFAULT_FONT_FAMILY} font may not be available: {e}")
+            logger.warning(f"Using fallback font: {FALLBACK_FONT}")
+
+            # Update all slide generators to use fallback font
+            self._update_slide_generators_font(FALLBACK_FONT)
+
+            return FALLBACK_FONT
+
+    def _update_slide_generators_font(self, font_name: str):
+        """
+        Update the default font in all slide generators
+
+        Args:
+            font_name: Font to use as default
+        """
+        # Update base slide
+        import slide_generators.base_slide as base_slide
+        base_slide.DEFAULT_FONT_FAMILY = font_name
+
+        # Update individual slide generators
+        import slide_generators.demographics_slide as demo_slide
+        demo_slide.DEFAULT_FONT_FAMILY = font_name
+
+        import slide_generators.category_slide as cat_slide
+        cat_slide.DEFAULT_FONT_FAMILY = font_name
+
+        logger.info(f"Updated all slide generators to use font: {font_name}")
 
     def build_presentation(self,
                            include_custom_categories: bool = True,
@@ -104,6 +159,7 @@ class PowerPointBuilder:
             Path to the generated PowerPoint file
         """
         logger.info(f"Starting presentation build for {self.team_name}")
+        logger.info(f"Font: {self.presentation_font}")
 
         try:
             # 1. Create title slide
@@ -137,6 +193,10 @@ class PowerPointBuilder:
         logger.info("Creating title slide...")
 
         title_generator = TitleSlide(self.presentation)
+
+        # Ensure the slide generator uses the validated font
+        title_generator.default_font = self.presentation_font
+
         self.presentation = title_generator.generate(
             team_config=self.team_config,
             subtitle="Sponsorship Insights Report"
@@ -178,6 +238,10 @@ class PowerPointBuilder:
 
             # Create slide
             demo_generator = DemographicsSlide(self.presentation)
+
+            # Ensure the slide generator uses the validated font
+            demo_generator.default_font = self.presentation_font
+
             self.presentation = demo_generator.generate(
                 demographic_data=demographic_data,
                 chart_dir=self.charts_dir,
@@ -197,6 +261,10 @@ class PowerPointBuilder:
 
         try:
             behaviors_generator = BehaviorsSlide(self.presentation)
+
+            # Ensure the slide generator uses the validated font
+            behaviors_generator.default_font = self.presentation_font
+
             self.presentation = behaviors_generator.generate(
                 self.merchant_ranker,
                 self.team_config
@@ -311,6 +379,9 @@ class PowerPointBuilder:
             # Create slides
             category_generator = CategorySlide(self.presentation)
 
+            # Ensure the slide generator uses the validated font
+            category_generator.default_font = self.presentation_font
+
             # Category analysis slide
             self.presentation = category_generator.generate(results, self.team_config)
             self.slides_created.append(f"{results['display_name']} Analysis")
@@ -328,10 +399,12 @@ class PowerPointBuilder:
     def _add_placeholder_slide(self, message: str):
         """Add a placeholder slide when data is not available"""
         slide = self.presentation.slides.add_slide(self.blank_layout)  # Uses layout[6]
-        text_box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(8), Inches(1))
+        text_box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(11.333), Inches(1))
         text_box.text = message
-        text_box.text_frame.paragraphs[0].font.size = Pt(24)
-        text_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+        p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.presentation_font  # Use validated font
+        p.font.size = Pt(24)
+        p.alignment = PP_ALIGN.CENTER
         self.slides_created.append(f"Placeholder: {message}")
 
     def _is_womens_team(self) -> bool:
@@ -363,7 +436,8 @@ class PowerPointBuilder:
             f.write(f"Team: {self.team_name}\n")
             f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Output: {pptx_path.name}\n")
-            f.write(f"Format: 16:9 Widescreen (13.333\" x 7.5\")\n\n")
+            f.write(f"Format: 16:9 Widescreen (13.333\" x 7.5\")\n")
+            f.write(f"Font: {self.presentation_font}\n\n")
             f.write(f"Slides Created ({len(self.slides_created)}):\n")
             for i, slide in enumerate(self.slides_created, 1):
                 f.write(f"  {i}. {slide}\n")
@@ -371,7 +445,97 @@ class PowerPointBuilder:
             f.write(f"  Prefix: {self.view_prefix}\n")
             f.write(f"  Demographics: {self.config_manager.get_view_name(self.team_key, 'demographics')}\n")
 
+            # Add font validation status
+            f.write(f"\nFont Configuration:\n")
+            f.write(f"  Requested: {DEFAULT_FONT_FAMILY}\n")
+            f.write(f"  Used: {self.presentation_font}\n")
+            if self.presentation_font != DEFAULT_FONT_FAMILY:
+                f.write(f"  Note: Using fallback font as {DEFAULT_FONT_FAMILY} was not available\n")
+
         logger.info(f"Summary saved to: {summary_path}")
+
+    def check_font_installation(self) -> Dict[str, Any]:
+        """
+        Check if Red Hat Display font is properly installed
+
+        Returns:
+            Dictionary with font status information
+        """
+        import platform
+        import os
+
+        font_status = {
+            'requested_font': DEFAULT_FONT_FAMILY,
+            'fallback_font': FALLBACK_FONT,
+            'system': platform.system(),
+            'font_available': False,
+            'font_paths': [],
+            'instructions': []
+        }
+
+        system = platform.system()
+
+        if system == "Windows":
+            # Check Windows font directory
+            fonts_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts')
+            if os.path.exists(fonts_dir):
+                red_hat_fonts = [f for f in os.listdir(fonts_dir) if 'RedHat' in f or 'Red Hat' in f]
+                font_status['font_paths'] = red_hat_fonts
+                font_status['font_available'] = len(red_hat_fonts) > 0
+
+            if not font_status['font_available']:
+                font_status['instructions'] = [
+                    "1. Download Red Hat Display from: https://fonts.google.com/specimen/Red+Hat+Display",
+                    "2. Extract the ZIP file",
+                    "3. Select all .ttf files",
+                    "4. Right-click and select 'Install for all users'",
+                    "5. Restart your Python environment"
+                ]
+
+        elif system == "Darwin":  # macOS
+            # Check common font locations
+            font_dirs = [
+                os.path.expanduser("~/Library/Fonts"),
+                "/Library/Fonts",
+                "/System/Library/Fonts"
+            ]
+
+            for font_dir in font_dirs:
+                if os.path.exists(font_dir):
+                    red_hat_fonts = [f for f in os.listdir(font_dir) if 'RedHat' in f or 'Red Hat' in f]
+                    font_status['font_paths'].extend(red_hat_fonts)
+
+            font_status['font_available'] = len(font_status['font_paths']) > 0
+
+            if not font_status['font_available']:
+                font_status['instructions'] = [
+                    "1. Download Red Hat Display from: https://fonts.google.com/specimen/Red+Hat+Display",
+                    "2. Extract the ZIP file",
+                    "3. Double-click each .ttf file",
+                    "4. Click 'Install Font' in Font Book",
+                    "5. Restart your Python environment"
+                ]
+
+        elif system == "Linux":
+            # Check using fc-list if available
+            try:
+                import subprocess
+                result = subprocess.run(['fc-list', ':family'],
+                                        capture_output=True, text=True)
+                font_status['font_available'] = 'Red Hat Display' in result.stdout
+            except:
+                pass
+
+            if not font_status['font_available']:
+                font_status['instructions'] = [
+                    "1. Download Red Hat Display from: https://fonts.google.com/specimen/Red+Hat+Display",
+                    "2. Extract the ZIP file",
+                    "3. Copy .ttf files to ~/.fonts/ or /usr/share/fonts/",
+                    "4. Run: fc-cache -f -v",
+                    "5. Restart your Python environment"
+                ]
+
+        return font_status
 
 
 def build_report(team_key: str, **kwargs) -> Path:
@@ -386,4 +550,50 @@ def build_report(team_key: str, **kwargs) -> Path:
         Path to generated PowerPoint file
     """
     builder = PowerPointBuilder(team_key)
+
+    # Log font status
+    font_status = builder.check_font_installation()
+    if not font_status['font_available']:
+        logger.warning(f"Font '{DEFAULT_FONT_FAMILY}' not installed on system")
+        logger.info("Installation instructions:")
+        for instruction in font_status['instructions']:
+            logger.info(f"  {instruction}")
+
     return builder.build_presentation(**kwargs)
+
+
+def validate_fonts_before_build():
+    """
+    Validate fonts before building any presentations
+    Can be called from main.py
+    """
+    try:
+        # Test font availability
+        test_pres = Presentation()
+        test_slide = test_pres.slides.add_slide(test_pres.slide_layouts[5])
+        test_box = test_slide.shapes.add_textbox(0, 0, 100, 100)
+        test_box.text_frame.text = "Font Test"
+
+        # Try Red Hat Display
+        p = test_box.text_frame.paragraphs[0]
+        p.font.name = DEFAULT_FONT_FAMILY
+
+        logger.info(f"✓ Font validation passed: {DEFAULT_FONT_FAMILY} is available")
+        return True
+
+    except Exception as e:
+        logger.warning(f"⚠ Font validation failed: {DEFAULT_FONT_FAMILY} may not be available")
+        logger.warning(f"  Error: {str(e)}")
+        logger.info(f"  Will use fallback font: {FALLBACK_FONT}")
+
+        # Print installation instructions
+        print("\n" + "=" * 60)
+        print("Red Hat Display Font Installation Required")
+        print("=" * 60)
+        print("\nTo use Red Hat Display font:")
+        print("1. Download from: https://fonts.google.com/specimen/Red+Hat+Display")
+        print("2. Install all .ttf files on your system")
+        print("3. Restart your Python environment")
+        print("=" * 60 + "\n")
+
+        return False

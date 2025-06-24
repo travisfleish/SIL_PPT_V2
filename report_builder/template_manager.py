@@ -34,12 +34,12 @@ class TemplateManager:
         # Default style configurations
         self.styles = {
             'fonts': {
-                'title': {'name': 'Arial', 'size': 28, 'bold': True},
-                'subtitle': {'name': 'Arial', 'size': 20, 'bold': False},
-                'heading': {'name': 'Arial', 'size': 14, 'bold': True},
-                'body': {'name': 'Arial', 'size': 11, 'bold': False},
-                'table_header': {'name': 'Arial', 'size': 9, 'bold': True},
-                'table_body': {'name': 'Arial', 'size': 10, 'bold': False}
+                'title': {'name': 'Red Hat Display', 'size': 28, 'bold': True},
+                'subtitle': {'name': 'Red Hat Display', 'size': 20, 'bold': False},
+                'heading': {'name': 'Red Hat Display', 'size': 14, 'bold': True},
+                'body': {'name': 'Red Hat Display', 'size': 11, 'bold': False},
+                'table_header': {'name': 'Red Hat Display', 'size': 9, 'bold': True},
+                'table_body': {'name': 'Red Hat Display', 'size': 10, 'bold': False}
             },
             'colors': {
                 'primary': RGBColor(0, 34, 68),  # Default blue

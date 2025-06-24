@@ -15,6 +15,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Default font
+DEFAULT_FONT_FAMILY = "Red Hat Display"
+
 
 class DemographicsSlide:
     """Generate the complete demographics slide with all charts"""
@@ -36,6 +39,9 @@ class DemographicsSlide:
 
         # FIX 2: Use blank layout (index 6) with no placeholders
         self.blank_layout = self.presentation.slide_layouts[6]
+
+        # Set default font
+        self.default_font = DEFAULT_FONT_FAMILY
 
     def generate(self,
                  demographic_data: Dict[str, Any],
@@ -102,8 +108,10 @@ class DemographicsSlide:
             Inches(3), Inches(0.3)
         )
         team_text.text_frame.text = team_name
-        team_text.text_frame.paragraphs[0].font.size = Pt(14)
-        team_text.text_frame.paragraphs[0].font.bold = True
+        p = team_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(14)
+        p.font.bold = True
 
         # Slide title (right)
         title_text = slide.shapes.add_textbox(
@@ -111,8 +119,10 @@ class DemographicsSlide:
             Inches(7.133), Inches(0.3)  # Adjusted for 16:9 width
         )
         title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
-        title_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
-        title_text.text_frame.paragraphs[0].font.size = Pt(14)
+        p = title_text.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.alignment = PP_ALIGN.RIGHT
+        p.font.size = Pt(14)
 
     def _add_team_logo(self, slide, team_short: str, colors: Dict[str, str]):
         """Add team logo circle"""
@@ -148,6 +158,7 @@ class DemographicsSlide:
         )
         text_box.text_frame.text = team_short
         p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(36)
         p.font.bold = True
         p.font.color.rgb = RGBColor(255, 255, 255)
@@ -168,6 +179,7 @@ class DemographicsSlide:
         text_box.text_frame.word_wrap = True
 
         p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(14)
         p.font.bold = True
         p.alignment = PP_ALIGN.LEFT
@@ -179,13 +191,13 @@ class DemographicsSlide:
         # Chart positions adjusted for 16:9: (chart_name, left, top, width, height)
         chart_positions = [
             # Top row
-            ('generation_chart', 2.8, 0.8, 2.5, 1.8),     # Slightly wider
-            ('income_chart', 5.5, 0.8, 2.5, 1.8),         # Moved right, wider
-            ('gender_chart', 8.2, 0.8, 2.3, 1.8),         # Moved right for 16:9
+            ('generation_chart', 2.8, 0.8, 2.5, 1.8),  # Slightly wider
+            ('income_chart', 5.5, 0.8, 2.5, 1.8),  # Moved right, wider
+            ('gender_chart', 8.2, 0.8, 2.3, 1.8),  # Moved right for 16:9
 
             # Bottom row
-            ('occupation_chart', 2.8, 2.8, 3.8, 1.8),     # Wider for 16:9
-            ('children_chart', 6.8, 2.8, 2.8, 1.8)        # Moved right, wider
+            ('occupation_chart', 2.8, 2.8, 3.8, 1.8),  # Wider for 16:9
+            ('children_chart', 6.8, 2.8, 2.8, 1.8)  # Moved right, wider
         ]
 
         for chart_name, left, top, width, height in chart_positions:
@@ -242,6 +254,7 @@ class DemographicsSlide:
         # KEY title
         p = text_frame.add_paragraph()
         p.text = "KEY"
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(12)
         p.font.bold = True
 
@@ -255,6 +268,7 @@ class DemographicsSlide:
         for item in items:
             p = text_frame.add_paragraph()
             p.text = item
+            p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(10)
             p.level = 0
 
@@ -281,6 +295,7 @@ class DemographicsSlide:
         text_frame.clear()
         p = text_frame.add_paragraph()
         p.text = "Ethnicity"
+        p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(16)
         p.alignment = PP_ALIGN.CENTER
         text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
