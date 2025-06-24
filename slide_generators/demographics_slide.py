@@ -28,11 +28,14 @@ class DemographicsSlide:
         """
         if presentation is None:
             self.presentation = Presentation()
+            # FIX 1: Set 16:9 aspect ratio for new presentations
+            self.presentation.slide_width = Inches(13.333)
+            self.presentation.slide_height = Inches(7.5)
         else:
             self.presentation = presentation
 
-        # Get blank slide layout
-        self.blank_layout = self.presentation.slide_layouts[5]
+        # FIX 2: Use blank layout (index 6) with no placeholders
+        self.blank_layout = self.presentation.slide_layouts[6]
 
     def generate(self,
                  demographic_data: Dict[str, Any],
@@ -56,11 +59,8 @@ class DemographicsSlide:
         team_short = team_config.get('team_name_short', team_name.split()[-1])
         colors = team_config.get('colors', {})
 
-        # Add slide
-        if slide_index is not None:
-            slide = self.presentation.slides.add_slide(slide_index, self.blank_layout)
-        else:
-            slide = self.presentation.slides.add_slide(self.blank_layout)
+        # FIX 2: Use blank layout with no title placeholder
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
         # Add header
         self._add_header(slide, team_name)
@@ -89,7 +89,7 @@ class DemographicsSlide:
         header_rect = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
-            Inches(10), Inches(0.5)
+            Inches(13.333), Inches(0.5)  # Adjusted for 16:9 width
         )
         header_rect.fill.solid()
         header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)
@@ -107,8 +107,8 @@ class DemographicsSlide:
 
         # Slide title (right)
         title_text = slide.shapes.add_textbox(
-            Inches(4), Inches(0.1),
-            Inches(5.8), Inches(0.3)
+            Inches(6), Inches(0.1),  # Adjusted for 16:9
+            Inches(7.133), Inches(0.3)  # Adjusted for 16:9 width
         )
         title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
         title_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
@@ -176,16 +176,16 @@ class DemographicsSlide:
         """Add all demographic charts in the correct positions"""
         chart_dir = Path(chart_dir)
 
-        # Chart positions: (chart_name, left, top, width, height)
+        # Chart positions adjusted for 16:9: (chart_name, left, top, width, height)
         chart_positions = [
             # Top row
-            ('generation_chart', 2.8, 0.8, 2.3, 1.8),
-            ('income_chart', 5.2, 0.8, 2.3, 1.8),
-            ('gender_chart', 7.6, 0.8, 2.0, 1.8),
+            ('generation_chart', 2.8, 0.8, 2.5, 1.8),     # Slightly wider
+            ('income_chart', 5.5, 0.8, 2.5, 1.8),         # Moved right, wider
+            ('gender_chart', 8.2, 0.8, 2.3, 1.8),         # Moved right for 16:9
 
             # Bottom row
-            ('occupation_chart', 2.8, 2.8, 3.5, 1.8),
-            ('children_chart', 6.4, 2.8, 2.5, 1.8)
+            ('occupation_chart', 2.8, 2.8, 3.8, 1.8),     # Wider for 16:9
+            ('children_chart', 6.8, 2.8, 2.8, 1.8)        # Moved right, wider
         ]
 
         for chart_name, left, top, width, height in chart_positions:
@@ -220,7 +220,7 @@ class DemographicsSlide:
         # Box position
         left = Inches(0.3)
         top = Inches(5.0)
-        width = Inches(4.0)
+        width = Inches(4.5)  # Slightly wider for 16:9
         height = Inches(1.2)
 
         # Create box
@@ -260,10 +260,10 @@ class DemographicsSlide:
 
     def _add_ethnicity_section(self, slide):
         """Add ethnicity placeholder"""
-        # Box position
-        left = Inches(6.5)
+        # Box position (adjusted for 16:9)
+        left = Inches(8.5)  # Moved right for 16:9
         top = Inches(5.0)
-        width = Inches(3.0)
+        width = Inches(3.5)  # Wider for 16:9
         height = Inches(1.2)
 
         # Create box

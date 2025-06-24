@@ -63,11 +63,8 @@ class CategorySlide(BaseSlide):
         team_name = team_config.get('team_name', 'Team')
         team_short = team_config.get('team_name_short', team_name.split()[-1])
 
-        # Add slide
-        if slide_index is not None:
-            slide = self.presentation.slides.add_slide(slide_index, self.blank_layout)
-        else:
-            slide = self.presentation.slides.add_slide(self.blank_layout)
+        # FIX 2: Use blank layout with no automatic placeholders
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
         # Add header
         self._add_header(slide, team_name, analysis_results['slide_title'])
@@ -78,10 +75,10 @@ class CategorySlide(BaseSlide):
         # Add category insights (left side)
         self._add_category_insights(slide, analysis_results, team_short)
 
-        # Add category metrics table (top right)
+        # Add category metrics table (top right) - adjusted for 16:9
         self._add_category_table(slide, analysis_results['category_metrics'])
 
-        # Add subcategory table (middle right)
+        # Add subcategory table (middle right) - adjusted for 16:9
         self._add_subcategory_table(slide, analysis_results['subcategory_stats'])
 
         # Add NBA comparison note
@@ -110,11 +107,8 @@ class CategorySlide(BaseSlide):
         team_short = team_config.get('team_name_short', team_name.split()[-1])
         category_name = analysis_results['display_name']
 
-        # Add slide
-        if slide_index is not None:
-            slide = self.presentation.slides.add_slide(slide_index, self.blank_layout)
-        else:
-            slide = self.presentation.slides.add_slide(self.blank_layout)
+        # FIX 2: Use blank layout with no automatic placeholders
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
         # Add header
         self._add_header(slide, team_name, f"Sponsor Spending Analysis: {category_name} Brands")
@@ -122,25 +116,25 @@ class CategorySlide(BaseSlide):
         # Add title
         self._add_title(slide, f"{category_name} Sponsor Analysis")
 
-        # Add brand logos placeholder (numbered circles)
+        # Add brand logos placeholder (numbered circles) - adjusted for 16:9
         self._add_brand_logos(slide, analysis_results['merchant_stats'])
 
         # Add brand insights (left side)
         self._add_brand_insights(slide, analysis_results, team_name)
 
-        # Add merchant table (right side)
+        # Add merchant table (right side) - adjusted for 16:9
         self._add_merchant_table(slide, analysis_results['merchant_stats'])
 
         logger.info(f"Generated {category_name} brand slide")
         return self.presentation
 
     def _add_header(self, slide, team_name: str, slide_title: str):
-        """Add header with team name and slide title"""
+        """Add header with team name and slide title (adjusted for 16:9)"""
         # Header background
         header_rect = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
-            Inches(10), Inches(0.4)
+            Inches(13.333), Inches(0.4)  # Full 16:9 width
         )
         header_rect.fill.solid()
         header_rect.fill.fore_color.rgb = self.colors['header_bg']
@@ -156,10 +150,10 @@ class CategorySlide(BaseSlide):
         team_text.text_frame.paragraphs[0].font.size = Pt(12)
         team_text.text_frame.paragraphs[0].font.bold = True
 
-        # Slide title (right)
+        # Slide title (right) - adjusted position for 16:9
         title_text = slide.shapes.add_textbox(
-            Inches(5), Inches(0.05),
-            Inches(4.8), Inches(0.3)
+            Inches(6.333), Inches(0.05),  # Moved right for 16:9
+            Inches(6.8), Inches(0.3)      # Wider for 16:9
         )
         title_text.text_frame.text = slide_title
         title_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
@@ -169,7 +163,7 @@ class CategorySlide(BaseSlide):
         """Add main slide title"""
         title_box = slide.shapes.add_textbox(
             Inches(0.5), Inches(0.6),
-            Inches(9), Inches(0.5)
+            Inches(12.333), Inches(0.5)  # Adjusted for 16:9 width
         )
         title_box.text_frame.text = title
         title_box.text_frame.paragraphs[0].font.size = Pt(28)
@@ -209,22 +203,22 @@ class CategorySlide(BaseSlide):
                 p.font.bold = False
 
     def _add_category_table(self, slide, metrics: CategoryMetrics):
-        """Add category metrics table"""
-        # Table position
-        left = Inches(5.5)
+        """Add category metrics table (adjusted for 16:9)"""
+        # Table position - moved right for 16:9
+        left = Inches(6.5)  # Moved right
         top = Inches(1.5)
-        width = Inches(4.3)
+        width = Inches(6.333)  # Wider for 16:9
         height = Inches(1.2)
 
         # Create table
         table_shape = slide.shapes.add_table(2, 4, left, top, width, height)
         table = table_shape.table
 
-        # Set column widths
-        table.columns[0].width = Inches(0.8)
-        table.columns[1].width = Inches(1.2)
-        table.columns[2].width = Inches(1.5)
-        table.columns[3].width = Inches(1.3)
+        # Set column widths - adjusted for wider table
+        table.columns[0].width = Inches(1.2)
+        table.columns[1].width = Inches(1.7)
+        table.columns[2].width = Inches(1.8)
+        table.columns[3].width = Inches(1.633)
 
         # Header row
         headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. gen pop',
@@ -246,25 +240,25 @@ class CategorySlide(BaseSlide):
             self._format_data_cell(table.cell(1, i))
 
     def _add_subcategory_table(self, slide, subcategory_stats: pd.DataFrame):
-        """Add subcategory statistics table"""
+        """Add subcategory statistics table (adjusted for 16:9)"""
         if subcategory_stats.empty:
             return
 
-        # Table position
-        left = Inches(5.5)
+        # Table position - moved right for 16:9
+        left = Inches(6.5)  # Moved right
         top = Inches(3.2)
-        width = Inches(4.3)
+        width = Inches(6.333)  # Wider for 16:9
 
         # Create table with header + data rows
         rows = min(len(subcategory_stats), 5) + 1  # Max 5 subcategories + header
         table_shape = slide.shapes.add_table(rows, 4, left, top, width, Inches(0.3 * rows))
         table = table_shape.table
 
-        # Set column widths
-        table.columns[0].width = Inches(1.2)
-        table.columns[1].width = Inches(1.0)
-        table.columns[2].width = Inches(1.3)
-        table.columns[3].width = Inches(1.3)
+        # Set column widths - adjusted for wider table
+        table.columns[0].width = Inches(1.5)
+        table.columns[1].width = Inches(1.4)
+        table.columns[2].width = Inches(1.7)
+        table.columns[3].width = Inches(1.733)
 
         # Headers
         headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. gen pop',
@@ -300,16 +294,16 @@ class CategorySlide(BaseSlide):
         comparison_box.text_frame.paragraphs[0].font.bold = True
 
     def _add_brand_logos(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add brand logo placeholders (numbered circles)"""
+        """Add brand logo placeholders (numbered circles) - adjusted for 16:9"""
         merchant_df, top_merchants = merchant_stats
 
         if merchant_df.empty:
             return
 
-        # Position for logos
+        # Position for logos - adjusted spacing for 16:9
         start_x = Inches(0.5)
         y = Inches(1.2)
-        spacing = Inches(1.8)
+        spacing = Inches(2.4)  # Wider spacing for 16:9
 
         # Add numbered circles for top 5 brands
         for i in range(min(5, len(merchant_df))):
@@ -388,28 +382,28 @@ class CategorySlide(BaseSlide):
             rec_box.text_frame.paragraphs[0].font.size = Pt(11)
 
     def _add_merchant_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add top merchants table"""
+        """Add top merchants table (adjusted for 16:9)"""
         merchant_df, _ = merchant_stats
 
         if merchant_df.empty:
             return
 
-        # Table position
-        left = Inches(5.5)
+        # Table position - moved right and wider for 16:9
+        left = Inches(6.333)  # Moved right
         top = Inches(3.0)
-        width = Inches(4.3)
+        width = Inches(6.5)   # Wider for 16:9
 
         # Create table
         rows = min(len(merchant_df), 5) + 1  # Max 5 merchants + header
         table_shape = slide.shapes.add_table(rows, 5, left, top, width, Inches(0.35 * rows))
         table = table_shape.table
 
-        # Set column widths
-        table.columns[0].width = Inches(0.4)  # Rank
-        table.columns[1].width = Inches(1.2)  # Brand
-        table.columns[2].width = Inches(0.8)  # % Fans
-        table.columns[3].width = Inches(1.0)  # Likelihood
-        table.columns[4].width = Inches(0.9)  # Purchases
+        # Set column widths - adjusted for wider table
+        table.columns[0].width = Inches(0.6)   # Rank
+        table.columns[1].width = Inches(1.5)   # Brand
+        table.columns[2].width = Inches(1.2)   # % Fans
+        table.columns[3].width = Inches(1.5)   # Likelihood
+        table.columns[4].width = Inches(1.7)   # Purchases
 
         # Headers
         headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand', 'Percent of\nFans Who\nSpend',

@@ -41,7 +41,7 @@ class PowerPointBuilder:
 
     def __init__(self, team_key: str):
         """
-        Initialize the PowerPoint builder
+        Initialize the PowerPoint builder with proper 16:9 formatting
 
         Args:
             team_key: Team identifier (e.g., 'utah_jazz', 'dallas_cowboys')
@@ -67,8 +67,13 @@ class PowerPointBuilder:
             league=self.league
         )
 
-        # Initialize presentation
+        # FIX 1 & 2: Initialize presentation with proper 16:9 formatting
         self.presentation = Presentation()
+        self.presentation.slide_width = Inches(13.333)  # 16:9 widescreen width
+        self.presentation.slide_height = Inches(7.5)  # 16:9 widescreen height
+
+        # Use blank layout for consistent formatting (no title boxes)
+        self.blank_layout = self.presentation.slide_layouts[6]
 
         # Setup directories
         self.output_dir = Path(f'output/{self.team_key}_{self.timestamp}')
@@ -83,7 +88,7 @@ class PowerPointBuilder:
         # Track progress
         self.slides_created = []
 
-        logger.info(f"Initialized PowerPoint builder for {self.team_name}")
+        logger.info(f"Initialized PowerPoint builder for {self.team_name} (16:9 format)")
 
     def build_presentation(self,
                            include_custom_categories: bool = True,
@@ -322,7 +327,7 @@ class PowerPointBuilder:
 
     def _add_placeholder_slide(self, message: str):
         """Add a placeholder slide when data is not available"""
-        slide = self.presentation.slides.add_slide(self.presentation.slide_layouts[5])
+        slide = self.presentation.slides.add_slide(self.blank_layout)  # Uses layout[6]
         text_box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(8), Inches(1))
         text_box.text = message
         text_box.text_frame.paragraphs[0].font.size = Pt(24)
@@ -357,7 +362,8 @@ class PowerPointBuilder:
             f.write(f"{'=' * 50}\n\n")
             f.write(f"Team: {self.team_name}\n")
             f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Output: {pptx_path.name}\n\n")
+            f.write(f"Output: {pptx_path.name}\n")
+            f.write(f"Format: 16:9 Widescreen (13.333\" x 7.5\")\n\n")
             f.write(f"Slides Created ({len(self.slides_created)}):\n")
             for i, slide in enumerate(self.slides_created, 1):
                 f.write(f"  {i}. {slide}\n")

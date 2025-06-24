@@ -49,19 +49,10 @@ class TitleSlide(BaseSlide):
         team_name = team_config.get('team_name', 'Team')
         team_colors = team_config.get('colors', {})
 
-        # Add slide using title slide layout (index 0)
-        if self.presentation.slide_layouts:
-            slide = self.presentation.slides.add_slide(self.presentation.slide_layouts[0])
-        else:
-            slide = self.presentation.slides.add_slide(self.blank_layout)
+        # FIX 2: Use blank layout (no automatic title placeholder)
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
-        # Clear any placeholders
-        for shape in slide.shapes:
-            if shape.is_placeholder:
-                sp = shape.element
-                sp.getparent().remove(sp)
-
-        # Add background color or gradient if desired
+        # Add background color
         background = slide.background
         fill = background.fill
         fill.solid()
@@ -70,10 +61,10 @@ class TitleSlide(BaseSlide):
         # Add team logo circle (placeholder)
         self._add_team_logo_circle(slide, team_name, team_colors)
 
-        # Add title
+        # Add title manually (no automatic placeholder)
         self._add_title_text(slide, team_name)
 
-        # Add subtitle
+        # Add subtitle manually
         self._add_subtitle_text(slide, subtitle)
 
         # Add decorative elements (optional)
@@ -85,7 +76,7 @@ class TitleSlide(BaseSlide):
     def _add_team_logo_circle(self, slide, team_name: str, team_colors: Dict[str, str]):
         """Add team logo placeholder circle"""
         # Position for logo
-        left = Inches(4)
+        left = Inches(5.5)
         top = Inches(1.5)
         size = Inches(2)
 
@@ -127,10 +118,10 @@ class TitleSlide(BaseSlide):
         p.alignment = PP_ALIGN.CENTER
 
     def _add_title_text(self, slide, team_name: str):
-        """Add main title text"""
+        """Add main title text manually"""
         title_box = slide.shapes.add_textbox(
             Inches(1), Inches(4),
-            Inches(8), Inches(1)
+            Inches(11.333), Inches(1)  # Adjusted for 16:9 width
         )
 
         text_frame = title_box.text_frame
@@ -144,10 +135,10 @@ class TitleSlide(BaseSlide):
         p.alignment = PP_ALIGN.CENTER
 
     def _add_subtitle_text(self, slide, subtitle: str):
-        """Add subtitle text"""
+        """Add subtitle text manually"""
         subtitle_box = slide.shapes.add_textbox(
             Inches(1), Inches(5),
-            Inches(8), Inches(0.8)
+            Inches(11.333), Inches(0.8)  # Adjusted for 16:9 width
         )
 
         text_frame = subtitle_box.text_frame
@@ -166,8 +157,8 @@ class TitleSlide(BaseSlide):
             line_y = Inches(5.8)
             line = slide.shapes.add_shape(
                 MSO_SHAPE.RECTANGLE,
-                Inches(3), line_y,
-                Inches(4), Pt(3)
+                Inches(4), line_y,
+                Inches(5.333), Pt(3)  # Adjusted for 16:9 width
             )
             line.fill.solid()
             line.fill.fore_color.rgb = self.hex_to_rgb(team_colors['accent'])
@@ -175,8 +166,8 @@ class TitleSlide(BaseSlide):
 
         # Add date in bottom right
         date_box = slide.shapes.add_textbox(
-            Inches(6.5), Inches(6.8),
-            Inches(3), Inches(0.3)
+            Inches(8.833), Inches(6.8),  # Adjusted for 16:9 width
+            Inches(4), Inches(0.3)
         )
 
         from datetime import datetime

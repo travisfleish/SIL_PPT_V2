@@ -60,11 +60,8 @@ class BehaviorsSlide(BaseSlide):
         logger.info("Generating community index chart...")
         chart_path = self._create_community_chart(merchant_ranker, colors)
 
-        # Add slide
-        if slide_index is not None:
-            slide = self.presentation.slides.add_slide(slide_index, self.blank_layout)
-        else:
-            slide = self.presentation.slides.add_slide(self.blank_layout)
+        # FIX 2: Use blank layout with no automatic placeholders
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
         # Set slide background to white
         self._set_slide_background(slide, 'FFFFFF')
@@ -76,7 +73,7 @@ class BehaviorsSlide(BaseSlide):
         title = f"Fan Behaviors: How Are {team_name} Fans Unique"
         self._add_title(slide, title)
 
-        # Add visualizations
+        # Add visualizations (adjusted positions for 16:9)
         self._add_fan_wheel(slide, fan_wheel_path)
         self._add_community_chart(slide, chart_path)
 
@@ -138,11 +135,11 @@ class BehaviorsSlide(BaseSlide):
 
     def _add_header(self, slide, team_name: str):
         """Add header with team name and slide title"""
-        # Header background
+        # Header background (adjusted for 16:9)
         header_rect = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
-            Inches(10), Inches(0.5)
+            Inches(13.333), Inches(0.5)  # Full 16:9 width
         )
         header_rect.fill.solid()
         header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)
@@ -160,8 +157,8 @@ class BehaviorsSlide(BaseSlide):
 
         # Slide indicator (right)
         slide_text = slide.shapes.add_textbox(
-            Inches(6.5), Inches(0.1),
-            Inches(3.3), Inches(0.3)
+            Inches(6.5), Inches(0.1),  # Adjusted for 16:9
+            Inches(6.633), Inches(0.3)  # Adjusted width
         )
         slide_text.text_frame.text = "Fan Behaviors: How Are Utah Jazz Fans Unique"
         slide_text.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
@@ -173,20 +170,20 @@ class BehaviorsSlide(BaseSlide):
         pass
 
     def _add_fan_wheel(self, slide, image_path: Path):
-        """Add fan wheel image to slide"""
+        """Add fan wheel image to slide (adjusted for 16:9)"""
         # Position on left side
         left = Inches(0.3)
         top = Inches(1.5)
-        width = Inches(4.5)
+        width = Inches(4.8)  # Slightly wider for 16:9
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
 
     def _add_community_chart(self, slide, image_path: Path):
-        """Add community index chart to slide"""
+        """Add community index chart to slide (adjusted for 16:9)"""
         # Position on right side
-        left = Inches(5.0)
+        left = Inches(5.3)  # Moved right for 16:9
         top = Inches(1.5)
-        width = Inches(4.7)
+        width = Inches(5.0)  # Wider for 16:9
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
 
@@ -194,7 +191,7 @@ class BehaviorsSlide(BaseSlide):
         """Add insight text below fan wheel"""
         text_box = slide.shapes.add_textbox(
             Inches(0.3), Inches(6.0),
-            Inches(4.5), Inches(1.0)
+            Inches(4.8), Inches(1.0)  # Adjusted for 16:9
         )
         text_box.text_frame.text = insight
         text_box.text_frame.word_wrap = True
@@ -248,10 +245,10 @@ class BehaviorsSlide(BaseSlide):
 
     def _add_team_logo(self, slide, team_config: Dict[str, Any]):
         """Add small team logo in corner"""
-        # For now, just add a small text placeholder
+        # For now, just add a small text placeholder (adjusted for 16:9)
         logo_box = slide.shapes.add_textbox(
-            Inches(9.3), Inches(0.1),
-            Inches(0.6), Inches(0.3)
+            Inches(12.533), Inches(0.1),  # Moved right for 16:9
+            Inches(0.7), Inches(0.3)
         )
         logo_box.text_frame.text = team_config.get('team_name_short', 'Team')
         logo_box.text_frame.paragraphs[0].font.size = Pt(10)

@@ -20,18 +20,21 @@ class BaseSlide:
 
     def __init__(self, presentation: Optional[Presentation] = None):
         """
-        Initialize base slide generator
+        Initialize base slide generator with proper 16:9 formatting
 
         Args:
             presentation: Existing presentation to add slides to
         """
         if presentation is None:
             self.presentation = Presentation()
+            # FIX 1: Set 16:9 widescreen aspect ratio
+            self.presentation.slide_width = Inches(13.333)  # 16:9 width
+            self.presentation.slide_height = Inches(7.5)    # 16:9 height
         else:
             self.presentation = presentation
 
-        # Get blank slide layout
-        self.blank_layout = self.presentation.slide_layouts[5]  # Blank layout
+        # FIX 2: Use blank layout (index 6) with NO placeholders/title boxes
+        self.blank_layout = self.presentation.slide_layouts[6]  # Changed from [5] to [6]
 
     def hex_to_rgb(self, hex_color: str) -> RGBColor:
         """
