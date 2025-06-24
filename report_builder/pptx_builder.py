@@ -1,0 +1,383 @@
+# report_builder/pptx_builder.py
+"""
+Main PowerPoint builder that orchestrates the entire presentation generation
+Combines all slide generators to create the complete sponsorship insights report
+"""
+
+import logging
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+
+# Import data processors
+from data_processors.demographic_processor import DemographicsProcessor
+from data_processors.merchant_ranker import MerchantRanker
+from data_processors.category_analyzer import CategoryAnalyzer
+from data_processors.snowflake_connector import query_to_dataframe
+
+# Import slide generators
+from slide_generators.title_slide import TitleSlide
+from slide_generators.demographics_slide import DemographicsSlide
+from slide_generators.behaviors_slide import BehaviorsSlide
+from slide_generators.category_slide import CategorySlide
+
+# Import visualizations
+from visualizations.demographic_charts import DemographicCharts
+
+# Import utilities
+from utils.team_config_manager import TeamConfigManager
+
+# from utils.logo_downloader import LogoDownloader  # Not implemented yet
+
+logger = logging.getLogger(__name__)
+
+
+class PowerPointBuilder:
+    """Main orchestrator for building complete PowerPoint presentations"""
+
+    def __init__(self, team_key: str):
+        """
+        Initialize the PowerPoint builder
+
+        Args:
+            team_key: Team identifier (e.g., 'utah_jazz', 'dallas_cowboys')
+        """
+        self.team_key = team_key
+        self.timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        # Load team configuration
+        self.config_manager = TeamConfigManager()
+        self.team_config = self.config_manager.get_team_config(team_key)
+
+        # Extract key values
+        self.team_name = self.team_config['team_name']
+        self.team_short = self.team_config['team_name_short']
+        self.league = self.team_config['league']
+        self.view_prefix = self.team_config['view_prefix']
+
+        # Initialize data processors
+        self.merchant_ranker = MerchantRanker(team_view_prefix=self.view_prefix)
+        self.category_analyzer = CategoryAnalyzer(
+            team_name=self.team_name,
+            team_short=self.team_short,
+            league=self.league
+        )
+
+        # Initialize presentation
+        self.presentation = Presentation()
+
+        # Setup directories
+        self.output_dir = Path(f'output/{self.team_key}_{self.timestamp}')
+        self.temp_dir = self.output_dir / 'temp'
+        self.charts_dir = self.temp_dir / 'charts'
+        self.logos_dir = self.temp_dir / 'logos'
+
+        # Create directories
+        for dir_path in [self.output_dir, self.temp_dir, self.charts_dir, self.logos_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+
+        # Track progress
+        self.slides_created = []
+
+        logger.info(f"Initialized PowerPoint builder for {self.team_name}")
+
+    def build_presentation(self,
+                           include_custom_categories: bool = True,
+                           custom_category_count: Optional[int] = None) -> Path:
+        """
+        Build the complete PowerPoint presentation
+
+        Args:
+            include_custom_categories: Whether to include custom categories
+            custom_category_count: Number of custom categories (default: 4 for men's, 2 for women's)
+
+        Returns:
+            Path to the generated PowerPoint file
+        """
+        logger.info(f"Starting presentation build for {self.team_name}")
+
+        try:
+            # 1. Create title slide
+            self._create_title_slide()
+
+            # 2. Create demographics slide
+            self._create_demographics_slide()
+
+            # 3. Create behaviors slide
+            self._create_behaviors_slide()
+
+            # 4. Create category slides (fixed categories)
+            self._create_fixed_category_slides()
+
+            # 5. Create custom category slides (if requested)
+            if include_custom_categories:
+                self._create_custom_category_slides(custom_category_count)
+
+            # 6. Save presentation
+            output_path = self._save_presentation()
+
+            logger.info(f"Presentation completed with {len(self.slides_created)} slides")
+            return output_path
+
+        except Exception as e:
+            logger.error(f"Error building presentation: {str(e)}")
+            raise
+
+    def _create_title_slide(self):
+        """Create the title slide"""
+        logger.info("Creating title slide...")
+
+        title_generator = TitleSlide(self.presentation)
+        self.presentation = title_generator.generate(
+            team_config=self.team_config,
+            subtitle="Sponsorship Insights Report"
+        )
+
+        self.slides_created.append("Title Slide")
+        logger.info("✓ Title slide created")
+
+    def _create_demographics_slide(self):
+        """Create the demographics slide with all charts"""
+        logger.info("Creating demographics slide...")
+
+        try:
+            # Load demographics data
+            demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
+            query = f"SELECT * FROM {demographics_view}"
+            df = query_to_dataframe(query)
+
+            if df.empty:
+                logger.warning("No demographics data found")
+                self._add_placeholder_slide("Demographics data not available")
+                return
+
+            # Process demographics
+            processor = DemographicsProcessor(
+                data_source=df,
+                team_name=self.team_name,
+                league=self.league
+            )
+
+            demographic_data = processor.process_all_demographics()
+
+            # Generate charts
+            charter = DemographicCharts(team_colors=self.team_config.get('colors'))
+            charts = charter.create_all_demographic_charts(
+                demographic_data,
+                output_dir=self.charts_dir
+            )
+
+            # Create slide
+            demo_generator = DemographicsSlide(self.presentation)
+            self.presentation = demo_generator.generate(
+                demographic_data=demographic_data,
+                chart_dir=self.charts_dir,
+                team_config=self.team_config
+            )
+
+            self.slides_created.append("Demographics")
+            logger.info("✓ Demographics slide created")
+
+        except Exception as e:
+            logger.error(f"Error creating demographics slide: {str(e)}")
+            self._add_placeholder_slide("Demographics slide - error loading data")
+
+    def _create_behaviors_slide(self):
+        """Create the fan behaviors slide"""
+        logger.info("Creating behaviors slide...")
+
+        try:
+            behaviors_generator = BehaviorsSlide(self.presentation)
+            self.presentation = behaviors_generator.generate(
+                self.merchant_ranker,
+                self.team_config
+            )
+
+            self.slides_created.append("Fan Behaviors")
+            logger.info("✓ Behaviors slide created")
+
+        except Exception as e:
+            logger.error(f"Error creating behaviors slide: {str(e)}")
+            self._add_placeholder_slide("Behaviors slide - error loading data")
+
+    def _create_fixed_category_slides(self):
+        """Create slides for all fixed categories"""
+        logger.info("Creating fixed category slides...")
+
+        # Define fixed categories based on team type
+        is_womens_team = self._is_womens_team()
+
+        fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+        if is_womens_team:
+            fixed_categories.extend(['beauty', 'health'])
+
+        for category_key in fixed_categories:
+            self._create_category_slide(category_key, is_custom=False)
+
+    def _create_custom_category_slides(self, custom_count: Optional[int] = None):
+        """Create slides for custom categories"""
+        logger.info("Creating custom category slides...")
+
+        # Determine number of custom categories
+        is_womens_team = self._is_womens_team()
+        if custom_count is None:
+            custom_count = 2 if is_womens_team else 4
+
+        # Get all category data for selection
+        try:
+            category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
+            all_category_df = query_to_dataframe(category_query)
+
+            # Get custom categories
+            custom_categories = self.category_analyzer.get_custom_categories(
+                category_df=all_category_df,
+                is_womens_team=is_womens_team
+            )
+
+            # Create slides for each custom category
+            for i, custom_cat in enumerate(custom_categories[:custom_count]):
+                category_name = custom_cat['display_name']
+                logger.info(f"Creating custom category slide {i + 1}: {category_name}")
+                self._create_category_slide(category_name, is_custom=True)
+
+        except Exception as e:
+            logger.error(f"Error creating custom category slides: {str(e)}")
+
+    def _create_category_slide(self, category_key: str, is_custom: bool = False):
+        """Create slides for a single category"""
+        try:
+            logger.info(f"Creating slides for {category_key} {'[CUSTOM]' if is_custom else '[FIXED]'}...")
+
+            # Load category data
+            if is_custom:
+                cat_config = self.category_analyzer.create_custom_category_config(category_key)
+                cat_names = [category_key]
+            else:
+                cat_config = self.category_analyzer.categories.get(category_key, {})
+                cat_names = cat_config.get('category_names_in_data', [])
+
+            if not cat_names:
+                logger.warning(f"No configuration found for {category_key}")
+                return
+
+            # Build WHERE clause
+            category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat}'" for cat in cat_names])
+
+            # Load data
+            category_df = query_to_dataframe(f"""
+                SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME 
+                WHERE {category_where}
+            """)
+
+            subcategory_df = query_to_dataframe(f"""
+                SELECT * FROM {self.view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
+                WHERE {category_where}
+            """)
+
+            merchant_df = query_to_dataframe(f"""
+                SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME 
+                WHERE {category_where}
+                AND AUDIENCE = '{self.category_analyzer.audience_name}'
+                ORDER BY PERC_AUDIENCE DESC
+                LIMIT 100
+            """)
+
+            # Add config for custom categories temporarily
+            if is_custom:
+                self.category_analyzer.categories[category_key] = cat_config
+
+            # Analyze category
+            results = self.category_analyzer.analyze_category(
+                category_key=category_key,
+                category_df=category_df,
+                subcategory_df=subcategory_df,
+                merchant_df=merchant_df,
+                validate=False
+            )
+
+            # Clean up temporary config
+            if is_custom:
+                del self.category_analyzer.categories[category_key]
+
+            # Create slides
+            category_generator = CategorySlide(self.presentation)
+
+            # Category analysis slide
+            self.presentation = category_generator.generate(results, self.team_config)
+            self.slides_created.append(f"{results['display_name']} Analysis")
+
+            # Brand analysis slide
+            self.presentation = category_generator.generate_brand_slide(results, self.team_config)
+            self.slides_created.append(f"{results['display_name']} Brands")
+
+            logger.info(f"✓ Created {results['display_name']} slides")
+
+        except Exception as e:
+            logger.error(f"Error creating {category_key} slides: {str(e)}")
+            self._add_placeholder_slide(f"{category_key.title()} - error loading data")
+
+    def _add_placeholder_slide(self, message: str):
+        """Add a placeholder slide when data is not available"""
+        slide = self.presentation.slides.add_slide(self.presentation.slide_layouts[5])
+        text_box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(8), Inches(1))
+        text_box.text = message
+        text_box.text_frame.paragraphs[0].font.size = Pt(24)
+        text_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+        self.slides_created.append(f"Placeholder: {message}")
+
+    def _is_womens_team(self) -> bool:
+        """Determine if this is a women's team"""
+        # This is a simplified check - you might want to add this to team config
+        womens_indicators = ["women's", "ladies", "wnba", "nwsl"]
+        return any(indicator in self.team_name.lower() for indicator in womens_indicators)
+
+    def _save_presentation(self) -> Path:
+        """Save the presentation to file"""
+        filename = f"{self.team_key}_sponsorship_insights_{self.timestamp}.pptx"
+        output_path = self.output_dir / filename
+
+        self.presentation.save(str(output_path))
+        logger.info(f"Presentation saved to: {output_path}")
+
+        # Create summary file
+        self._create_summary_file(output_path)
+
+        return output_path
+
+    def _create_summary_file(self, pptx_path: Path):
+        """Create a summary text file with build information"""
+        summary_path = self.output_dir / 'build_summary.txt'
+
+        with open(summary_path, 'w') as f:
+            f.write(f"PowerPoint Build Summary\n")
+            f.write(f"{'=' * 50}\n\n")
+            f.write(f"Team: {self.team_name}\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Output: {pptx_path.name}\n\n")
+            f.write(f"Slides Created ({len(self.slides_created)}):\n")
+            for i, slide in enumerate(self.slides_created, 1):
+                f.write(f"  {i}. {slide}\n")
+            f.write(f"\nView Configuration:\n")
+            f.write(f"  Prefix: {self.view_prefix}\n")
+            f.write(f"  Demographics: {self.config_manager.get_view_name(self.team_key, 'demographics')}\n")
+
+        logger.info(f"Summary saved to: {summary_path}")
+
+
+def build_report(team_key: str, **kwargs) -> Path:
+    """
+    Convenience function to build a complete PowerPoint report
+
+    Args:
+        team_key: Team identifier
+        **kwargs: Additional arguments for PowerPointBuilder.build_presentation()
+
+    Returns:
+        Path to generated PowerPoint file
+    """
+    builder = PowerPointBuilder(team_key)
+    return builder.build_presentation(**kwargs)
