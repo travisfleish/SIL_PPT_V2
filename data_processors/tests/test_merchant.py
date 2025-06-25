@@ -1,209 +1,260 @@
-#!/usr/bin/env python3
+# test_restaurants_insights.py
 """
-Simple test script to validate MerchantRanker data
-Tests key functionality including Live Entertainment Seekers filtering
+Test script for restaurants category merchant insights
 """
 
+import sys
+from pathlib import Path
 import pandas as pd
-from datetime import datetime
-from data_processors.merchant_ranker import MerchantRanker
+
+# Add parent directories to path
+sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from data_processors.category_analyzer import CategoryAnalyzer
+from data_processors.snowflake_connector import query_to_dataframe, test_connection
 from utils.team_config_manager import TeamConfigManager
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-def test_merchant_ranker(team_key: str = 'utah_jazz'):
-    """Test merchant ranker for a specific team"""
-
+def test_restaurants_category():
+    """Test Restaurants category with proper whitespace handling"""
     print(f"\n{'=' * 80}")
-    print(f"Testing MerchantRanker for {team_key.replace('_', ' ').title()}")
+    print(f"TESTING RESTAURANTS MERCHANT INSIGHTS")
     print(f"{'=' * 80}")
 
+    # Test connection
+    print("\n1. Testing Snowflake connection...")
+    if not test_connection():
+        print("❌ Failed to connect to Snowflake")
+        return None
+    print("✅ Connected to Snowflake")
+
     # Get team configuration
-    config = TeamConfigManager()
-    team_config = config.get_team_config(team_key)
+    config_manager = TeamConfigManager()
+    team_config = config_manager.get_team_config('utah_jazz')
     view_prefix = team_config['view_prefix']
-    comparison_pop = team_config['comparison_population']
 
-    print(f"\nTeam: {team_config['team_name']}")
-    print(f"View Prefix: {view_prefix}")
-    print(f"Comparison Population: {comparison_pop}")
+    # Initialize analyzer
+    analyzer = CategoryAnalyzer(
+        team_name=team_config['team_name'],
+        team_short=team_config['team_name_short'],
+        league=team_config['league']
+    )
 
-    # Initialize ranker
-    ranker = MerchantRanker(team_view_prefix=view_prefix)
-
-    # Test 1: Get top communities
-    print(f"\n{'─' * 60}")
-    print("TEST 1: Top Communities (min 20% audience)")
-    print(f"{'─' * 60}")
+    # IMPORTANT: Use TRIM in the SQL query to handle whitespace
+    print("\n2. Loading Restaurants merchant data with TRIM...")
+    merchant_query = f"""
+    SELECT 
+        TRIM(AUDIENCE) as AUDIENCE,
+        TRIM(COMPARISON_POPULATION) as COMPARISON_POPULATION,
+        TRIM(MERCHANT) as MERCHANT,
+        TRIM(PARENT_MERCHANT) as PARENT_MERCHANT,
+        TRIM(CATEGORY) as CATEGORY,
+        TRIM(SUBCATEGORY) as SUBCATEGORY,
+        AUDIENCE_COUNT,
+        TOTAL_AUDIENCE_COUNT,
+        PERC_AUDIENCE,
+        AUDIENCE_TRANSACTIONS,
+        AUDIENCE_TOTAL_SPEND,
+        SPC,
+        SPP,
+        PPC,
+        COMPARISON_COUNT,
+        COMPARISON_TOTAL_COUNT,
+        PERC_COMPARISON,
+        COMPARISON_TOTAL_SPEND,
+        COMPARISON_SPC,
+        COMPARISON_SPP,
+        COMPARISON_PPC,
+        PERC_INDEX,
+        SPC_INDEX,
+        SPP_INDEX,
+        PPC_INDEX,
+        COMPOSITE_INDEX
+    FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
+    WHERE TRIM(CATEGORY) = 'Restaurants'
+    """
 
     try:
-        communities_df = ranker.get_top_communities(
-            min_audience_pct=0.20,
-            comparison_pop=comparison_pop
-        )
+        merchant_df = query_to_dataframe(merchant_query)
+        print(f"✅ Loaded {len(merchant_df)} merchant records")
 
-        if communities_df.empty:
-            print("❌ No communities found!")
-        else:
-            print(f"✅ Found {len(communities_df)} communities\n")
-            print(f"{'Rank':<5} {'Community':<35} {'Audience %':<12} {'Index':<10}")
-            print(f"{'-' * 5} {'-' * 35} {'-' * 12} {'-' * 10}")
+        # Show sample data
+        if not merchant_df.empty:
+            print("\nSample of loaded data:")
+            print(f"Unique audiences: {merchant_df['AUDIENCE'].unique()}")
+            print(f"Unique comparison populations: {merchant_df['COMPARISON_POPULATION'].unique()}")
 
-            for i, row in communities_df.iterrows():
-                print(
-                    f"{i + 1:<5} {row['COMMUNITY']:<35} {row['PERC_AUDIENCE']:>10.2%} {row['COMPOSITE_INDEX']:>10.0f}")
+            # Check Utah Jazz data
+            utah_data = merchant_df[merchant_df['AUDIENCE'] == 'Utah Jazz Fans']
+            print(f"\nUtah Jazz Fans records: {len(utah_data)}")
+
+            if not utah_data.empty:
+                print("\nTop 5 merchants by audience %:")
+                top_5 = utah_data.nlargest(5, 'PERC_AUDIENCE')[['MERCHANT', 'PERC_AUDIENCE', 'COMPOSITE_INDEX']]
+                print(top_5)
 
     except Exception as e:
-        print(f"❌ Error getting communities: {e}")
+        print(f"❌ Failed to load merchant data: {str(e)}")
+        return None
+
+    # Create minimal dataframes for other data
+    category_df = pd.DataFrame()
+    subcategory_df = pd.DataFrame()
+
+    # Run the analysis
+    print("\n3. Running category analysis...")
+    try:
+        results = analyzer.analyze_category(
+            category_key='restaurants',
+            category_df=category_df,
+            subcategory_df=subcategory_df,
+            merchant_df=merchant_df,
+            validate=False
+        )
+        print("✅ Analysis completed successfully")
+
+        # Display results
+        print(f"\n{'=' * 60}")
+        print("MERCHANT INSIGHTS:")
+        print(f"{'=' * 60}")
+
+        for i, insight in enumerate(results.get('merchant_insights', []), 1):
+            print(f"\nInsight {i}: {insight}")
+
+        # Display recommendation
+        print(f"\n{'=' * 60}")
+        print("SPONSORSHIP RECOMMENDATION:")
+        print(f"{'=' * 60}")
+
+        rec = results.get('recommendation')
+        if rec:
+            print(f"\nTarget: {rec['merchant']}")
+            print(f"Composite Index: {rec['composite_index']:.0f}")
+            print(f"Explanation: {rec['explanation']}")
+
+        # Show merchant stats table
+        print(f"\n{'=' * 60}")
+        print("TOP 5 MERCHANTS TABLE:")
+        print(f"{'=' * 60}")
+        merchant_table, top_merchants = results.get('merchant_stats', (pd.DataFrame(), []))
+        if not merchant_table.empty:
+            print(merchant_table.to_string(index=False))
+
+            # Also show PPC and SPC values for verification
+            print(f"\n{'=' * 60}")
+            print("MERCHANT METRICS FOR VERIFICATION:")
+            print(f"{'=' * 60}")
+            print(f"{'Merchant':<25} {'PPC':>10} {'SPC':>12} {'Composite':>12}")
+            print("-" * 60)
+
+            # Get comparison data for top 5 merchants
+            for merchant in top_merchants:
+                merchant_data = merchant_df[
+                    (merchant_df['MERCHANT'] == merchant) &
+                    (merchant_df['AUDIENCE'] == 'Utah Jazz Fans') &
+                    (merchant_df['COMPARISON_POPULATION'] == 'Local Gen Pop (Excl. Jazz)')
+                    ]
+                if not merchant_data.empty:
+                    row = merchant_data.iloc[0]
+                    ppc = float(row.get('PPC', 0))
+                    spc = float(row.get('SPC', 0))
+                    composite = float(row.get('COMPOSITE_INDEX', 0))
+                    print(f"{merchant:<25} {ppc:>10.1f} ${spc:>11.2f} {composite:>12.1f}")
+
+            # Also check NBA comparison for insight 4
+            print(f"\n{'=' * 60}")
+            print("NBA COMPARISON FOR VERIFICATION:")
+            print(f"{'=' * 60}")
+            print(f"{'Merchant':<25} {'NBA Index':>10} {'% More Likely':>15}")
+            print("-" * 60)
+
+            for merchant in top_merchants:
+                nba_data = merchant_df[
+                    (merchant_df['MERCHANT'] == merchant) &
+                    (merchant_df['AUDIENCE'] == 'Utah Jazz Fans') &
+                    (merchant_df['COMPARISON_POPULATION'] == 'NBA Fans')
+                    ]
+                if not nba_data.empty:
+                    row = nba_data.iloc[0]
+                    perc_index = float(row.get('PERC_INDEX', 100))
+                    more_likely = perc_index - 100
+                    print(f"{merchant:<25} {perc_index:>10.1f} {more_likely:>14.0f}%")
+
+    except Exception as e:
+        print(f"❌ Analysis failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+    return results
+
+
+def verify_category_data():
+    """Quick check to verify restaurants data exists"""
+    print("\n" + "=" * 80)
+    print("VERIFYING RESTAURANTS CATEGORY DATA")
+    print("=" * 80)
+
+    if not test_connection():
         return
 
-    # Test 2: Get fan wheel data (all top 10 communities with merchants)
-    print(f"\n{'─' * 60}")
-    print("TEST 2: Fan Wheel Data - Top 10 Communities & Their Top Merchants")
-    print(f"{'─' * 60}")
+    # Check restaurants data
+    queries = [
+        ("RESTAURANTS COUNT", """
+        SELECT COUNT(*) as count
+        FROM V_UTAH_JAZZ_SIL_MERCHANT_INDEXING_ALL_TIME
+        WHERE TRIM(CATEGORY) = 'Restaurants'
+        AND TRIM(AUDIENCE) = 'Utah Jazz Fans'
+        """),
 
-    try:
-        wheel_data = ranker.get_fan_wheel_data(min_audience_pct=0.20, top_n_communities=10)
+        ("TOP RESTAURANTS BY AUDIENCE", """
+        SELECT 
+            MERCHANT,
+            PERC_AUDIENCE * 100 as PERCENT_OF_FANS,
+            COMPOSITE_INDEX
+        FROM V_UTAH_JAZZ_SIL_MERCHANT_INDEXING_ALL_TIME
+        WHERE TRIM(CATEGORY) = 'Restaurants'
+        AND TRIM(AUDIENCE) = 'Utah Jazz Fans'
+        AND TRIM(COMPARISON_POPULATION) = 'Local Gen Pop (Excl. Jazz)'
+        ORDER BY PERC_AUDIENCE DESC
+        LIMIT 5
+        """),
 
-        if wheel_data.empty:
-            print("❌ No fan wheel data found!")
-        else:
-            print(f"✅ Found {len(wheel_data)} community-merchant pairs\n")
+        ("CHECK CATEGORY VALUES", """
+        SELECT DISTINCT 
+            CATEGORY,
+            COUNT(*) as count
+        FROM V_UTAH_JAZZ_SIL_MERCHANT_INDEXING_ALL_TIME
+        WHERE CATEGORY LIKE '%Restaurant%'
+        GROUP BY CATEGORY
+        """)
+    ]
 
-            # Check if Live Entertainment Seekers is present
-            has_les = 'Live Entertainment Seekers' in wheel_data['COMMUNITY'].values
-            if has_les:
-                print("🎭 Live Entertainment Seekers Check:")
-                les_data = wheel_data[wheel_data['COMMUNITY'] == 'Live Entertainment Seekers'].iloc[0]
-                print(f"   Merchant: {les_data['MERCHANT']}")
-                print(f"   Subcategory: {les_data['SUBCATEGORY']}")
-
-                # Check if it's NOT professional sports
-                if 'professional sports' not in les_data['SUBCATEGORY'].lower():
-                    print("   ✅ CORRECT: Not a professional sports venue")
-                else:
-                    print("   ❌ ERROR: Professional sports venue still showing!")
-
-            print(f"\n{'#':<3} {'Community':<35} {'Merchant':<30} {'Audience %':<12} {'Behavior':<25}")
-            print(f"{'-' * 3} {'-' * 35} {'-' * 30} {'-' * 12} {'-' * 25}")
-
-            # Sort by community index (should already be sorted, but making sure)
-            wheel_data_sorted = wheel_data.sort_values('COMMUNITY_COMPOSITE_INDEX', ascending=False)
-
-            for i, row in enumerate(wheel_data_sorted.iterrows(), 1):
-                _, data = row
-                behavior_text = data['behavior'].replace('\n', ' ')
-                print(
-                    f"{i:<3} {data['COMMUNITY']:<35} {data['MERCHANT']:<30} {data['PERC_AUDIENCE']:>10.2%} {behavior_text:<25}")
-
-    except Exception as e:
-        print(f"❌ Error getting fan wheel data: {e}")
-
-    # Test 3: Get community index data
-    print(f"\n{'─' * 60}")
-    print("TEST 3: Community Index Data (for bar chart)")
-    print(f"{'─' * 60}")
-
-    try:
-        index_data = ranker.get_community_index_data(min_audience_pct=0.20)
-
-        if index_data.empty:
-            print("❌ No index data found!")
-        else:
-            print(f"✅ Found {len(index_data)} communities for index chart\n")
-
-            # Show top 5
-            print(f"{'Community':<35} {'Audience Index':<15}")
-            print(f"{'-' * 35} {'-' * 15}")
-
-            for _, row in index_data.head(5).iterrows():
-                print(f"{row['Community']:<35} {row['Audience_Index']:>10.0f}")
-
-    except Exception as e:
-        print(f"❌ Error getting index data: {e}")
-
-    # Summary
-    print(f"\n{'─' * 60}")
-    print("SUMMARY")
-    print(f"{'─' * 60}")
-
-    print(f"✓ Approved communities loaded: {len(ranker.approved_communities)}")
-    print(f"✓ Community actions loaded: {len(ranker.community_actions)}")
-    print(f"✓ Community view: {ranker.community_view}")
-    print(f"✓ Merchant view: {ranker.merchant_view}")
-
-
-def validate_all_teams():
-    """Run validation for all configured teams"""
-
-    print("\n🏆 MERCHANT RANKER VALIDATION")
-    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    teams = ['utah_jazz', 'dallas_cowboys']
-
-    for team in teams:
+    for label, query in queries:
+        print(f"\n{label}:")
         try:
-            test_merchant_ranker(team)
+            result = query_to_dataframe(query)
+            print(result)
         except Exception as e:
-            print(f"\n❌ Critical error testing {team}: {e}")
-            import traceback
-            traceback.print_exc()
-
-    print(f"\n✅ Validation complete at {datetime.now().strftime('%H:%M:%S')}")
+            print(f"Error: {e}")
 
 
-def quick_check():
-    """Quick check showing all top 10 communities and their merchants"""
+def main():
+    """Main test function"""
+    print("\n🧪 RESTAURANTS MERCHANT INSIGHTS TEST")
+    print("=" * 80)
 
-    print("\n⚡ QUICK CHECK - TOP 10 COMMUNITIES & MERCHANTS")
-    print("=" * 100)
+    # First verify the data exists
+    verify_category_data()
 
-    for team_key in ['utah_jazz', 'dallas_cowboys']:
-        try:
-            config = TeamConfigManager()
-            team_config = config.get_team_config(team_key)
-            ranker = MerchantRanker(team_view_prefix=team_config['view_prefix'])
-
-            # Get data
-            wheel_data = ranker.get_fan_wheel_data(min_audience_pct=0.20, top_n_communities=10)
-
-            print(f"\n{team_config['team_name'].upper()}")
-            print("-" * 100)
-
-            if wheel_data.empty:
-                print("  ❌ No data found!")
-            else:
-                # Sort by composite index
-                wheel_data_sorted = wheel_data.sort_values('COMMUNITY_COMPOSITE_INDEX', ascending=False)
-
-                print(f"{'#':<3} {'Community':<35} {'Top Merchant':<30} {'Index':<8}")
-                print(f"{'-' * 3} {'-' * 35} {'-' * 30} {'-' * 8}")
-
-                for i, row in enumerate(wheel_data_sorted.iterrows(), 1):
-                    _, data = row
-                    # Mark Live Entertainment if it's not sports
-                    marker = ""
-                    if data['COMMUNITY'] == 'Live Entertainment Seekers':
-                        if 'professional sports' not in data['SUBCATEGORY'].lower():
-                            marker = " ✓"
-                        else:
-                            marker = " ✗"
-
-                    print(
-                        f"{i:<3} {data['COMMUNITY']:<35} {data['MERCHANT']:<30} {data['COMMUNITY_COMPOSITE_INDEX']:>6.0f}{marker}")
-
-        except Exception as e:
-            print(f"\n{team_key}: ERROR - {e}")
+    # Then run the test
+    test_restaurants_category()
 
 
 if __name__ == "__main__":
-    # Quick check first
-    quick_check()
-
-    # Then full validation
-    print("\n" + "=" * 80)
-    user_input = input("\nRun full validation? (y/n): ")
-
-    if user_input.lower() == 'y':
-        validate_all_teams()
-    else:
-        print("Skipping full validation.")
+    main()

@@ -1,20 +1,20 @@
-#!/usr/bin/env python3
+# test_merchant_insights_real.py
 """
-Test script for CategoryAnalyzer using real Snowflake data
-Validates functionality with actual Utah Jazz data
+Test script for revised merchant insights generation using real Snowflake data
+Validates the data-driven selection logic for brand insights
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import sys
+from pathlib import Path
+import pandas as pd
 from datetime import datetime
 import json
 
-# Add project root to path
+# Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from data_processors.category_analyzer import CategoryAnalyzer, CategoryMetrics
+from data_processors.category_analyzer import CategoryAnalyzer
 from data_processors.snowflake_connector import query_to_dataframe, test_connection
 from utils.team_config_manager import TeamConfigManager
 import logging
@@ -23,547 +23,387 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_category_analysis(analyzer, category_key: str, view_prefix: str, is_custom: bool = False) -> dict:
-    """Run full analysis for a single category"""
+def analyze_merchant_metrics(merchant_df: pd.DataFrame, analyzer: CategoryAnalyzer) -> dict:
+    """
+    Analyze merchant data to identify which merchants should win each metric
 
-    print(f"\n{'=' * 70}")
-    print(f"ANALYZING: {category_key.upper()} {'[CUSTOM]' if is_custom else '[FIXED]'}")
-    print(f"{'=' * 70}")
+    Returns:
+        Dictionary with expected winners for each metric
+    """
+    # Filter for team fans
+    team_data = merchant_df[merchant_df['AUDIENCE'] == analyzer.audience_name]
+
+    if team_data.empty:
+        return {}
+
+    # Get top 5 merchants by audience percentage
+    top_5_merchants = (team_data
+                       .sort_values('PERC_AUDIENCE', ascending=False)
+                       .drop_duplicates('MERCHANT')
+                       .head(5)['MERCHANT'].tolist())
+
+    # Initialize tracking variables
+    metrics_analysis = {
+        'top_by_audience': {'merchant': None, 'value': 0},
+        'highest_ppc': {'merchant': None, 'value': 0},
+        'highest_spc': {'merchant': None, 'value': 0},
+        'highest_composite': {'merchant': None, 'value': 0},
+        'best_nba_index': {'merchant': None, 'value': 0, 'diff': 0}
+    }
+
+    # Analyze each top 5 merchant
+    for i, merchant in enumerate(top_5_merchants):
+        # Get data for this merchant
+        m_data = team_data[team_data['MERCHANT'] == merchant].iloc[0]
+
+        # Track top by audience (should be first merchant)
+        if i == 0:
+            metrics_analysis['top_by_audience'] = {
+                'merchant': merchant,
+                'value': float(m_data['PERC_AUDIENCE']) * 100
+            }
+
+        # Check PPC
+        ppc_value = float(m_data.get('PPC', 0))
+        if ppc_value > metrics_analysis['highest_ppc']['value']:
+            metrics_analysis['highest_ppc'] = {
+                'merchant': merchant,
+                'value': ppc_value
+            }
+
+        # Check SPC
+        spc_value = float(m_data.get('SPC', 0))
+        if spc_value > metrics_analysis['highest_spc']['value']:
+            metrics_analysis['highest_spc'] = {
+                'merchant': merchant,
+                'value': spc_value
+            }
+
+        # Check Composite Index
+        composite_value = float(m_data.get('COMPOSITE_INDEX', 0))
+        if composite_value > metrics_analysis['highest_composite']['value']:
+            metrics_analysis['highest_composite'] = {
+                'merchant': merchant,
+                'value': composite_value
+            }
+
+        # Check NBA/League comparison
+        nba_data = merchant_df[
+            (merchant_df['MERCHANT'] == merchant) &
+            (merchant_df['AUDIENCE'] == analyzer.audience_name) &
+            (merchant_df['COMPARISON_POPULATION'] == analyzer.league_fans)
+            ]
+
+        if not nba_data.empty:
+            perc_index = float(nba_data.iloc[0].get('PERC_INDEX', 100))
+            index_diff = perc_index - 100
+
+            if index_diff > metrics_analysis['best_nba_index']['diff']:
+                metrics_analysis['best_nba_index'] = {
+                    'merchant': merchant,
+                    'value': perc_index,
+                    'diff': index_diff
+                }
+
+    return metrics_analysis
+
+
+def test_category_merchants(team_key: str = 'utah_jazz', category_key: str = 'auto'):
+    """
+    Test merchant insights for a specific team and category
+
+    Args:
+        team_key: Team identifier
+        category_key: Category to test
+    """
+    print(f"\n{'=' * 80}")
+    print(f"TESTING MERCHANT INSIGHTS: {team_key} - {category_key}")
+    print(f"{'=' * 80}")
+
+    # Test connection
+    print("\n1. Testing Snowflake connection...")
+    if not test_connection():
+        print("❌ Failed to connect to Snowflake")
+        return None
+    print("✅ Connected to Snowflake")
+
+    # Get team configuration
+    print("\n2. Loading team configuration...")
+    config_manager = TeamConfigManager()
+    team_config = config_manager.get_team_config(team_key)
+    view_prefix = team_config['view_prefix']
+    print(f"✅ Team: {team_config['team_name']}")
+    print(f"   View prefix: {view_prefix}")
+
+    # Initialize analyzer
+    print("\n3. Initializing CategoryAnalyzer...")
+    analyzer = CategoryAnalyzer(
+        team_name=team_config['team_name'],
+        team_short=team_config['team_name_short'],
+        league=team_config['league']
+    )
 
     # Get category configuration
-    if is_custom:
-        # For custom categories, we need to create a temporary config
-        # The category_key for custom categories is the actual category name
-        cat_config = analyzer.create_custom_category_config(category_key)
-        cat_names = [category_key]
-    else:
-        cat_config = analyzer.categories.get(category_key, {})
-        cat_names = cat_config.get('category_names_in_data', [])
-
-    if not cat_names:
-        print(f"⚠️  No category names configured for {category_key}")
+    category_config = analyzer.categories.get(category_key)
+    if not category_config:
+        print(f"❌ Unknown category: {category_key}")
         return None
 
-    # Build WHERE clause for category names
-    category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat}'" for cat in cat_names])
-
-    # Load category data
-    print(f"\n1. Loading category data...")
-    category_query = f"""
-    SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME 
-    WHERE {category_where}
-    """
-    category_df = query_to_dataframe(category_query)
-    print(f"   ✅ Loaded {len(category_df)} rows from CATEGORY view")
-
-    # Load subcategory data
-    print(f"\n2. Loading subcategory data...")
-    subcategory_query = f"""
-    SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
-    WHERE {category_where}
-    """
-    subcategory_df = query_to_dataframe(subcategory_query)
-    print(f"   ✅ Loaded {len(subcategory_df)} rows from SUBCATEGORY view")
+    # Build category filter
+    category_names = category_config.get('category_names_in_data', [])
+    category_list = ','.join([f"'{c}'" for c in category_names])
+    category_where = f"CATEGORY IN ({category_list})"
 
     # Load merchant data
-    print(f"\n3. Loading merchant data...")
+    print(f"\n4. Loading merchant data for {category_config['display_name']}...")
     merchant_query = f"""
     SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
     WHERE {category_where}
-    LIMIT 5000
+    ORDER BY AUDIENCE, MERCHANT, COMPARISON_POPULATION
     """
-    merchant_df = query_to_dataframe(merchant_query)
-    print(f"   ✅ Loaded {len(merchant_df)} rows from MERCHANT view")
 
-    # Load YOY data (optional)
-    print(f"\n4. Loading YOY data...")
-    yoy_category_query = f"""
-    SELECT * FROM {view_prefix}_CATEGORY_INDEXING_YOY 
-    WHERE ({category_where})
-    AND TRANSACTION_YEAR IN ('2023-01-01', '2024-01-01')
-    """
-    yoy_category_df = query_to_dataframe(yoy_category_query)
-    print(f"   ✅ Loaded {len(yoy_category_df)} rows from CATEGORY YOY view")
-
-    yoy_merchant_query = f"""
-    SELECT * FROM {view_prefix}_MERCHANT_INDEXING_YOY 
-    WHERE ({category_where})
-    AND AUDIENCE = '{analyzer.audience_name}'
-    AND TRANSACTION_YEAR IN ('2023-01-01', '2024-01-01')
-    LIMIT 1000
-    """
-    yoy_merchant_df = query_to_dataframe(yoy_merchant_query)
-    print(f"   ✅ Loaded {len(yoy_merchant_df)} rows from MERCHANT YOY view")
-
-    # Run analysis
-    print(f"\n5. Running {category_key} analysis...")
     try:
-        # For custom categories, temporarily add the config
-        if is_custom:
-            analyzer.categories[category_key] = cat_config
+        merchant_df = query_to_dataframe(merchant_query)
+        print(f"✅ Loaded {len(merchant_df)} merchant records")
+    except Exception as e:
+        print(f"❌ Failed to load merchant data: {str(e)}")
+        return None
 
+    # Create minimal dataframes for other required data
+    category_df = pd.DataFrame()
+    subcategory_df = pd.DataFrame()
+
+    # Analyze expected metrics
+    print("\n5. Analyzing merchant metrics...")
+    expected_metrics = analyze_merchant_metrics(merchant_df, analyzer)
+
+    if expected_metrics:
+        print("\nExpected Winners by Metric:")
+        print("-" * 60)
+        print(f"Top by Audience %: {expected_metrics['top_by_audience']['merchant']} "
+              f"({expected_metrics['top_by_audience']['value']:.1f}%)")
+        print(f"Highest PPC: {expected_metrics['highest_ppc']['merchant']} "
+              f"({expected_metrics['highest_ppc']['value']:.1f} purchases)")
+        print(f"Highest SPC: {expected_metrics['highest_spc']['merchant']} "
+              f"(${expected_metrics['highest_spc']['value']:.2f})")
+        print(f"Best {analyzer.league} Index: {expected_metrics['best_nba_index']['merchant']} "
+              f"({expected_metrics['best_nba_index']['diff']:.0f}% more likely)")
+        print(f"Highest Composite: {expected_metrics['highest_composite']['merchant']} "
+              f"({expected_metrics['highest_composite']['value']:.0f})")
+
+    # Run the analysis
+    print("\n6. Running category analysis...")
+    try:
         results = analyzer.analyze_category(
             category_key=category_key,
             category_df=category_df,
             subcategory_df=subcategory_df,
             merchant_df=merchant_df,
-            yoy_category_df=yoy_category_df,
-            yoy_merchant_df=yoy_merchant_df
+            validate=False
         )
-
-        # Mark as custom category
-        results['is_custom'] = is_custom
-
-        # Clean up temporary config
-        if is_custom:
-            del analyzer.categories[category_key]
-
         print("✅ Analysis completed successfully")
-        return results
     except Exception as e:
         print(f"❌ Analysis failed: {str(e)}")
         import traceback
         traceback.print_exc()
         return None
 
+    # Display and validate results
+    print(f"\n{'=' * 60}")
+    print("GENERATED MERCHANT INSIGHTS:")
+    print(f"{'=' * 60}")
 
-def display_results(results: dict):
-    """Display analysis results in a formatted way"""
-    if not results:
-        return
+    validation_results = []
 
-    category_type = "[CUSTOM]" if results.get('is_custom', False) else "[FIXED]"
-    print(f"\n📊 Category: {results['display_name']} {category_type}")
-    print(f"   Slide Title: {results['slide_title']}")
-
-    metrics = results['category_metrics']
-    print(f"\n   Category Metrics:")
-    print(f"   - Percent of fans who spend: {metrics.format_percent_fans()}")
-    print(f"   - Likelihood vs gen pop: {metrics.format_likelihood()}")
-    print(f"   - Purchases vs gen pop: {metrics.format_purchases()}")
-    print(f"   - Composite Index: {metrics.composite_index:.1f}")
-    print(f"   - Total Spend: ${metrics.total_spend:,.2f}")
-    print(f"   - Spend per Customer: ${metrics.spc:.2f}")
-
-    # Subcategory stats
-    print(f"\n📊 Top Subcategories:")
-    if not results['subcategory_stats'].empty:
-        print(results['subcategory_stats'].to_string(index=False))
-    else:
-        print("   No subcategory data available")
-
-    # Insights
-    print(f"\n💡 Category Insights:")
-    for i, insight in enumerate(results['insights'], 1):
-        print(f"   {i}. {insight}")
-
-    # Merchant stats
-    print(f"\n🏪 Top Merchants:")
-    merchant_df, top_merchants = results['merchant_stats']
-    if not merchant_df.empty:
-        print(merchant_df.to_string(index=False))
-    else:
-        print("   No merchant data available")
-
-    # Merchant insights
-    print(f"\n💡 Merchant Insights:")
     for i, insight in enumerate(results['merchant_insights'], 1):
-        print(f"   {i}. {insight}")
+        print(f"\nInsight {i}: {insight}")
 
-    # Sponsorship recommendation
-    if results['recommendation']:
-        rec = results['recommendation']
-        print(f"\n🎯 Sponsorship Recommendation:")
-        print(f"   Target: {rec['merchant']}")
-        print(f"   Composite Index: {rec['composite_index']:.1f}")
-        print(f"   Rationale: {rec['explanation']}")
+        # Validate each insight
+        validation = {'insight_num': i, 'text': insight, 'valid': False, 'issue': None}
 
+        if i == 1:
+            # Should show top merchant by audience
+            expected = expected_metrics['top_by_audience']['merchant']
+            expected_pct = f"{expected_metrics['top_by_audience']['value']:.0f}%"
+            if expected in insight and expected_pct in insight:
+                print(f"   ✅ Correct: Shows {expected} with {expected_pct}")
+                validation['valid'] = True
+            else:
+                print(f"   ❌ Expected: {expected} with {expected_pct}")
+                validation['issue'] = f"Expected {expected} with {expected_pct}"
 
-def create_category_dataframes(results: dict) -> dict:
-    """Convert category results into multiple DataFrames for Excel export"""
+        elif i == 2:
+            # Should show highest PPC merchant
+            expected = expected_metrics['highest_ppc']['merchant']
+            expected_ppc = int(expected_metrics['highest_ppc']['value'])
+            if expected in insight and (
+                    f"{expected_ppc} purchases" in insight or
+                    f"{expected_ppc} purchase" in insight
+            ):
+                print(f"   ✅ Correct: Shows {expected} with highest PPC")
+                validation['valid'] = True
+            else:
+                print(f"   ❌ Expected: {expected} with {expected_ppc} purchases")
+                validation['issue'] = f"Expected {expected} with {expected_ppc} purchases"
 
-    dataframes = {}
+        elif i == 3:
+            # Should show highest SPC merchant
+            expected = expected_metrics['highest_spc']['merchant']
+            expected_spc = expected_metrics['highest_spc']['value']
+            if expected in insight and f"${expected_spc:.2f}" in insight:
+                print(f"   ✅ Correct: Shows {expected} with highest SPC")
+                validation['valid'] = True
+            else:
+                print(f"   ❌ Expected: {expected} with ${expected_spc:.2f}")
+                validation['issue'] = f"Expected {expected} with ${expected_spc:.2f}"
 
-    # 1. Category Summary
-    metrics = results['category_metrics']
-    summary_data = {
-        'Metric': [
-            'Display Name',
-            'Slide Title',
-            'Category Type',
-            'Percent of Fans Who Spend',
-            'Likelihood vs Gen Pop',
-            'Purchases vs Gen Pop',
-            'Composite Index',
-            'Total Spend',
-            'Spend per Customer',
-            'Audience Count'
-        ],
-        'Value': [
-            results['display_name'],
-            results['slide_title'],
-            'CUSTOM' if results.get('is_custom', False) else 'FIXED',
-            metrics.format_percent_fans(),
-            metrics.format_likelihood(),
-            metrics.format_purchases(),
-            f"{metrics.composite_index:.1f}",
-            f"${metrics.total_spend:,.2f}",
-            f"${metrics.spc:.2f}",
-            f"{metrics.audience_count:,}"
-        ]
+        elif i == 4:
+            # Should show best NBA/League comparison
+            expected = expected_metrics['best_nba_index']['merchant']
+            expected_diff = int(expected_metrics['best_nba_index']['diff'])
+            if expected in insight and f"{expected_diff}% more likely" in insight:
+                print(f"   ✅ Correct: Shows {expected} with best league comparison")
+                validation['valid'] = True
+            else:
+                print(f"   ❌ Expected: {expected} {expected_diff}% more likely")
+                validation['issue'] = f"Expected {expected} {expected_diff}% more likely"
+
+        validation_results.append(validation)
+
+    # Check sponsorship recommendation
+    print(f"\n{'=' * 60}")
+    print("SPONSORSHIP RECOMMENDATION:")
+    print(f"{'=' * 60}")
+
+    rec = results.get('recommendation')
+    rec_validation = {'valid': False, 'issue': None}
+
+    if rec:
+        print(f"\nTarget: {rec['merchant']}")
+        print(f"Composite Index: {rec['composite_index']:.0f}")
+        print(f"\nMain: {rec['explanation']}")
+        print(f"Sub-bullet: {rec['sub_explanation']}")
+
+        # Validate recommendation
+        expected_merchant = expected_metrics['highest_composite']['merchant']
+        expected_index = expected_metrics['highest_composite']['value']
+
+        if (rec['merchant'] == expected_merchant and
+                abs(rec['composite_index'] - expected_index) < 1):
+            print(f"\n✅ Correct: Recommends {expected_merchant} with highest composite index")
+            rec_validation['valid'] = True
+        else:
+            print(f"\n❌ Expected: {expected_merchant} with index {expected_index:.0f}")
+            rec_validation['issue'] = f"Expected {expected_merchant} with index {expected_index:.0f}"
+    else:
+        print("\n❌ No recommendation generated")
+        rec_validation['issue'] = "No recommendation generated"
+
+    # Summary
+    print(f"\n{'=' * 60}")
+    print("VALIDATION SUMMARY:")
+    print(f"{'=' * 60}")
+
+    valid_insights = sum(1 for v in validation_results if v['valid'])
+    total_insights = len(validation_results)
+
+    print(f"\nInsights: {valid_insights}/{total_insights} valid")
+    print(f"Recommendation: {'✅ Valid' if rec_validation['valid'] else '❌ Invalid'}")
+
+    if valid_insights == total_insights and rec_validation['valid']:
+        print(f"\n✅ ALL TESTS PASSED!")
+    else:
+        print(f"\n❌ Some tests failed - review issues above")
+
+    return {
+        'team': team_key,
+        'category': category_key,
+        'validation_results': validation_results,
+        'recommendation_validation': rec_validation,
+        'expected_metrics': expected_metrics,
+        'generated_insights': results.get('merchant_insights', []),
+        'generated_recommendation': rec
     }
-    dataframes['Summary'] = pd.DataFrame(summary_data)
-
-    # 2. Subcategories
-    if not results['subcategory_stats'].empty:
-        dataframes['Subcategories'] = results['subcategory_stats']
-
-    # 3. Top Merchants
-    merchant_df, _ = results['merchant_stats']
-    if not merchant_df.empty:
-        dataframes['Top_Merchants'] = merchant_df
-
-    # 4. Category Insights
-    if results['insights']:
-        insights_df = pd.DataFrame({
-            'Insight_Number': range(1, len(results['insights']) + 1),
-            'Insight': results['insights']
-        })
-        dataframes['Category_Insights'] = insights_df
-
-    # 5. Merchant Insights
-    if results['merchant_insights']:
-        merchant_insights_df = pd.DataFrame({
-            'Insight_Number': range(1, len(results['merchant_insights']) + 1),
-            'Insight': results['merchant_insights']
-        })
-        dataframes['Merchant_Insights'] = merchant_insights_df
-
-    # 6. Sponsorship Recommendation
-    if results['recommendation']:
-        rec = results['recommendation']
-        rec_df = pd.DataFrame({
-            'Field': ['Target Merchant', 'Composite Index', 'Rationale'],
-            'Value': [rec['merchant'], f"{rec['composite_index']:.1f}", rec['explanation']]
-        })
-        dataframes['Recommendation'] = rec_df
-
-    return dataframes
 
 
-def test_all_categories():
-    """Test CategoryAnalyzer with all categories including custom ones"""
+def test_multiple_categories(team_key: str = 'utah_jazz'):
+    """Test multiple categories for a team"""
+    print(f"\n{'=' * 80}")
+    print(f"COMPREHENSIVE TEST: {team_key}")
+    print(f"{'=' * 80}")
 
-    print("\n" + "=" * 80)
-    print("CATEGORY ANALYZER TEST - FIXED + CUSTOM CATEGORIES")
-    print("=" * 80)
-
-    # 1. Test Snowflake connection
-    print("\n1. Testing Snowflake connection...")
-    if not test_connection():
-        print("❌ Failed to connect to Snowflake")
-        return
-    print("✅ Connected to Snowflake")
-
-    # 2. Initialize analyzer
-    print("\n2. Initializing CategoryAnalyzer...")
-    analyzer = CategoryAnalyzer(
-        team_name="Utah Jazz",
-        team_short="Jazz",
-        league="NBA"
-    )
-    print("✅ CategoryAnalyzer initialized")
-
-    # 3. Get team configuration for view names
-    print("\n3. Getting team configuration...")
-    config_manager = TeamConfigManager()
-    team_config = config_manager.get_team_config('utah_jazz')
-    view_prefix = team_config['view_prefix']
-    print(f"✅ View prefix: {view_prefix}")
-
-    # 4. Get custom categories first
-    print("\n4. Selecting custom categories...")
-
-    # Load all category data for custom selection
-    category_query = f"""
-    SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME
-    """
-    all_category_df = query_to_dataframe(category_query)
-
-    # Get custom categories
-    custom_categories = analyzer.get_custom_categories(
-        category_df=all_category_df,
-        is_womens_team=False
-    )
-
-    print(f"✅ Selected {len(custom_categories)} custom categories:")
-    for cat in custom_categories:
-        print(f"   - {cat['display_name']} (composite index: {cat['composite_index']:.1f})")
-
-    # 5. Define all categories to test
-    fixed_categories = [
-        'restaurants',
-        'athleisure',
-        'finance',
-        'gambling',
-        'travel',
-        'auto'
-    ]
-
+    # Test fixed categories
+    test_categories = ['restaurants', 'auto', 'athleisure', 'finance']
     all_results = {}
 
-    # 6. Run analysis for fixed categories
-    print("\n5. Analyzing FIXED categories...")
-    for category_key in fixed_categories:
-        results = run_category_analysis(analyzer, category_key, view_prefix, is_custom=False)
+    for category in test_categories:
+        results = test_category_merchants(team_key, category)
         if results:
-            all_results[category_key] = results
-            display_results(results)
+            all_results[category] = results
 
-    # 7. Run analysis for custom categories
-    print("\n6. Analyzing CUSTOM categories...")
-    for custom_cat in custom_categories:
-        # For custom categories, use the display name as the key
-        category_key = custom_cat['display_name']
-        results = run_category_analysis(analyzer, category_key, view_prefix, is_custom=True)
-        if results:
-            # Add custom category metadata
-            results['custom_metadata'] = {
-                'composite_index': custom_cat['composite_index'],
-                'audience_pct': custom_cat['audience_pct'],
-                'selection_rank': custom_categories.index(custom_cat) + 1
-            }
-            all_results[custom_cat['category_key']] = results
-            display_results(results)
+    # Summary report
+    print(f"\n{'=' * 80}")
+    print("OVERALL TEST SUMMARY:")
+    print(f"{'=' * 80}")
 
-    # 8. Save all results to Excel file with multiple sheets
-    print("\n\n" + "=" * 60)
-    print("SAVING ALL RESULTS TO EXCEL")
-    print("=" * 60)
+    for category, results in all_results.items():
+        valid_insights = sum(1 for v in results['validation_results'] if v['valid'])
+        total_insights = len(results['validation_results'])
+        rec_valid = results['recommendation_validation']['valid']
 
-    output_dir = Path('test_output')
-    output_dir.mkdir(exist_ok=True)
+        status = "✅ PASS" if valid_insights == total_insights and rec_valid else "❌ FAIL"
+        print(f"\n{category.upper()}: {status}")
+        print(f"  - Insights: {valid_insights}/{total_insights} valid")
+        print(f"  - Recommendation: {'Valid' if rec_valid else 'Invalid'}")
 
+    # Save detailed results
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_file = output_dir / f'category_analysis_results_with_custom_{timestamp}.xlsx'
+    output_file = f"merchant_insights_test_{team_key}_{timestamp}.json"
 
-    # Create Excel writer
-    with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+    # Convert results to serializable format
+    serializable_results = {}
+    for category, results in all_results.items():
+        serializable_results[category] = {
+            'validation_summary': {
+                'insights_valid': sum(1 for v in results['validation_results'] if v['valid']),
+                'insights_total': len(results['validation_results']),
+                'recommendation_valid': results['recommendation_validation']['valid']
+            },
+            'expected_winners': {
+                metric: {
+                    'merchant': data['merchant'],
+                    'value': float(data['value']) if data['merchant'] else None
+                }
+                for metric, data in results['expected_metrics'].items()
+            },
+            'generated_insights': results['generated_insights'],
+            'issues': [
+                v['issue'] for v in results['validation_results']
+                if not v['valid'] and v['issue']
+            ]
+        }
 
-        # Create overview sheet
-        overview_data = []
-        for cat_key, results in all_results.items():
-            metrics = results['category_metrics']
-            is_custom = results.get('is_custom', False)
+    with open(output_file, 'w') as f:
+        json.dump(serializable_results, f, indent=2)
 
-            row_data = {
-                'Category': results['display_name'],
-                'Type': 'CUSTOM' if is_custom else 'FIXED',
-                'Percent Fans Spend': metrics.format_percent_fans(),
-                'Likelihood vs Gen Pop': metrics.format_likelihood(),
-                'Purchases vs Gen Pop': metrics.format_purchases(),
-                'Composite Index': f"{metrics.composite_index:.1f}",
-                'Total Spend': f"${metrics.total_spend:,.0f}",
-                'SPC': f"${metrics.spc:.2f}",
-                'Top Subcategories': len(results['subcategory_stats']),
-                'Top Merchants': len(results['merchant_stats'][0]) if results['merchant_stats'][0] is not None else 0,
-                'Has Recommendation': 'Yes' if results['recommendation'] else 'No'
-            }
-
-            # Add custom category metadata if available
-            if is_custom and 'custom_metadata' in results:
-                row_data['Selection Rank'] = results['custom_metadata']['selection_rank']
-            else:
-                row_data['Selection Rank'] = '-'
-
-            overview_data.append(row_data)
-
-        overview_df = pd.DataFrame(overview_data)
-
-        # Sort by Type (FIXED first) then by composite index
-        overview_df['Sort_Type'] = overview_df['Type'].map({'FIXED': 0, 'CUSTOM': 1})
-        overview_df['Sort_Index'] = overview_df['Composite Index'].str.replace('$', '').str.replace(',', '').astype(
-            float)
-        overview_df = overview_df.sort_values(['Sort_Type', 'Sort_Index'], ascending=[True, False])
-        overview_df = overview_df.drop(['Sort_Type', 'Sort_Index'], axis=1)
-
-        overview_df.to_excel(writer, sheet_name='Overview', index=False)
-
-        # Create custom categories summary sheet
-        custom_summary_data = []
-        for cat_key, results in all_results.items():
-            if results.get('is_custom', False):
-                metrics = results['category_metrics']
-                custom_summary_data.append({
-                    'Rank': results['custom_metadata']['selection_rank'],
-                    'Category': results['display_name'],
-                    'Composite Index': metrics.composite_index,
-                    'Audience %': f"{results['custom_metadata']['audience_pct'] * 100:.1f}%",
-                    'Total Spend': f"${metrics.total_spend:,.0f}",
-                    'SPC': f"${metrics.spc:.2f}",
-                    'Top Merchant': results['recommendation']['merchant'] if results['recommendation'] else 'N/A'
-                })
-
-        if custom_summary_data:
-            custom_summary_df = pd.DataFrame(custom_summary_data)
-            custom_summary_df = custom_summary_df.sort_values('Rank')
-            custom_summary_df.to_excel(writer, sheet_name='Custom Categories', index=False)
-
-        # Create sheet for each category
-        for cat_key, results in all_results.items():
-            # Create dataframes for this category
-            cat_dataframes = create_category_dataframes(results)
-
-            # Create a safe sheet name (no special characters, limited length)
-            base_name = results['display_name']
-            # Remove any characters that Excel doesn't like
-            safe_name = base_name.replace('[', '').replace(']', '').replace(':', '').replace('*', '').replace('?',
-                                                                                                              '').replace(
-                '/', '').replace('\\', '')
-
-            # Limit to 28 characters to leave room for suffix
-            if len(safe_name) > 28:
-                safe_name = safe_name[:28]
-
-            # Add suffix to indicate Fixed or Custom
-            if results.get('is_custom', False):
-                sheet_name = f"{safe_name} - C"
-            else:
-                sheet_name = f"{safe_name} - F"
-
-            # Write each dataframe to the same sheet with spacing
-            current_row = 0
-            for df_name, df in cat_dataframes.items():
-                # Write section header
-                header_df = pd.DataFrame([[f"=== {df_name.upper().replace('_', ' ')} ==="]])
-                header_df.to_excel(writer, sheet_name=sheet_name,
-                                   startrow=current_row, startcol=0,
-                                   header=False, index=False)
-                current_row += 2
-
-                # Write the dataframe
-                df.to_excel(writer, sheet_name=sheet_name,
-                            startrow=current_row, startcol=0,
-                            index=False)
-                current_row += len(df) + 3  # Add spacing between sections
-
-        # Format the workbook
-        workbook = writer.book
-
-        # Add formats
-        header_format = workbook.add_format({
-            'bold': True,
-            'bg_color': '#D9D9D9',
-            'border': 1
-        })
-
-        currency_format = workbook.add_format({'num_format': '$#,##0.00'})
-        percent_format = workbook.add_format({'num_format': '0.0%'})
-
-        # Apply formatting to Overview sheet
-        worksheet = writer.sheets['Overview']
-        worksheet.set_column('A:A', 20)  # Category column
-        worksheet.set_column('B:L', 18)  # Other columns
-
-    print(f"✅ Results saved to: {output_file}")
-
-    # Also save a simplified CSV for the overview
-    csv_file = output_dir / f'category_overview_with_custom_{timestamp}.csv'
-    overview_df.to_csv(csv_file, index=False)
-    print(f"✅ Overview CSV saved to: {csv_file}")
-
-    # 9. Summary
-    print("\n" + "=" * 60)
-    print("TEST SUMMARY")
-    print("=" * 60)
-
-    fixed_count = sum(1 for r in all_results.values() if not r.get('is_custom', False))
-    custom_count = sum(1 for r in all_results.values() if r.get('is_custom', False))
-
-    print(f"✅ Successfully tested {len(all_results)} categories:")
-    print(f"   - Fixed categories: {fixed_count}")
-    print(f"   - Custom categories: {custom_count}")
-
-    print("\nFixed Categories:")
-    for cat, result in all_results.items():
-        if not result.get('is_custom', False):
-            metrics = result['category_metrics']
-            print(f"   - {result['display_name']}: {metrics.format_percent_fans()} of fans spend")
-
-    print("\nCustom Categories:")
-    for cat, result in all_results.items():
-        if result.get('is_custom', False):
-            metrics = result['category_metrics']
-            print(
-                f"   - {result['display_name']}: {metrics.format_percent_fans()} of fans spend (Rank #{result['custom_metadata']['selection_rank']})")
-
-    print("\n✅ All tests completed successfully!")
-    return all_results
+    print(f"\n📄 Detailed results saved to: {output_file}")
 
 
-def validate_data_structure():
-    """Validate the structure of Snowflake data matches expectations"""
+def main():
+    """Main test function"""
+    print("\n🧪 MERCHANT INSIGHTS VALIDATION TEST")
+    print("Testing data-driven merchant selection logic")
+    print("=" * 80)
 
-    print("\n" + "=" * 60)
-    print("DATA STRUCTURE VALIDATION")
-    print("=" * 60)
+    # Test single category
+    test_category_merchants('utah_jazz', 'auto')
 
-    config_manager = TeamConfigManager()
-    team_config = config_manager.get_team_config('utah_jazz')
-    view_prefix = team_config['view_prefix']
+    # Test multiple categories
+    # test_multiple_categories('utah_jazz')
 
-    # Check each view
-    views_to_check = [
-        ('CATEGORY_INDEXING_ALL_TIME', ['AUDIENCE', 'COMPARISON_POPULATION', 'CATEGORY',
-                                        'PERC_AUDIENCE', 'PERC_INDEX', 'PPC', 'COMPARISON_PPC',
-                                        'SPC', 'COMPOSITE_INDEX']),
-        ('SUBCATEGORY_INDEXING_ALL_TIME', ['AUDIENCE', 'COMPARISON_POPULATION', 'CATEGORY',
-                                           'SUBCATEGORY', 'PERC_AUDIENCE', 'PERC_INDEX']),
-        ('MERCHANT_INDEXING_ALL_TIME', ['AUDIENCE', 'COMPARISON_POPULATION', 'CATEGORY',
-                                        'MERCHANT', 'PERC_AUDIENCE', 'PERC_INDEX', 'COMPOSITE_INDEX'])
-    ]
-
-    for view_suffix, expected_cols in views_to_check:
-        print(f"\n📊 Checking {view_suffix}...")
-
-        query = f"""
-        SELECT * FROM {view_prefix}_{view_suffix}
-        LIMIT 1
-        """
-
-        try:
-            df = query_to_dataframe(query)
-            actual_cols = df.columns.tolist()
-
-            print(f"   Columns found: {len(actual_cols)}")
-
-            # Check for expected columns
-            missing = set(expected_cols) - set(actual_cols)
-            if missing:
-                print(f"   ⚠️  Missing columns: {missing}")
-            else:
-                print(f"   ✅ All expected columns present")
-
-            # Show sample data types
-            print("   Data types:")
-            for col in expected_cols:
-                if col in df.columns:
-                    print(f"      {col}: {df[col].dtype}")
-
-        except Exception as e:
-            print(f"   ❌ Error: {str(e)}")
+    # Test other teams if available
+    # test_category_merchants('dallas_cowboys', 'restaurants')
 
 
 if __name__ == "__main__":
-    # First validate data structure
-    print("Step 1: Validating Snowflake data structure...")
-    validate_data_structure()
-
-    # Then run main test for all categories
-    print("\n\nStep 2: Running CategoryAnalyzer tests for all categories (fixed + custom)...")
-    user_input = input("\nContinue with full test for all categories? (y/n): ")
-
-    if user_input.lower() == 'y':
-        test_results = test_all_categories()
-    else:
-        print("Test cancelled.")
+    main()

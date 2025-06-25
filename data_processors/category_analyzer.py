@@ -511,60 +511,91 @@ class CategoryAnalyzer:
 
     def _generate_merchant_insights(self, merchant_stats: Tuple[pd.DataFrame, List[str]],
                                     merchant_df: pd.DataFrame) -> List[str]:
-        """Generate merchant-specific insights"""
+        """Generate merchant-specific insights based on data-driven criteria"""
         merchant_table, top_merchants = merchant_stats
         insights = []
 
         if merchant_table.empty or not top_merchants:
             return insights
 
-        # 1. Top merchant spending
+        # 1. Top merchant by percent of fans who spend (already #1)
         top_merchant = merchant_table.iloc[0]
         insights.append(
             f"{top_merchant['Percent of Fans Who Spend']} of {self.team_name} fans "
             f"spent at {top_merchant['Brand']}"
         )
 
-        # 2. Average purchases for second merchant (if available)
-        if len(top_merchants) > 1 and len(merchant_df) > 0:
-            second_merchant = top_merchants[1]
+        # Get detailed data for all top 5 merchants
+        merchant_details = {}
+        for merchant in top_merchants:
             merchant_data = merchant_df[
-                (merchant_df['MERCHANT'] == second_merchant) &
+                (merchant_df['MERCHANT'] == merchant) &
                 (merchant_df['AUDIENCE'] == self.audience_name)
                 ]
             if not merchant_data.empty:
-                avg_ppc = float(merchant_data.iloc[0]['PPC'])
+                # Get the first row for this merchant
+                row = merchant_data.iloc[0]
+                merchant_details[merchant] = {
+                    'ppc': float(row.get('PPC', 0)),
+                    'spc': float(row.get('SPC', 0)),
+                    'composite_index': float(row.get('COMPOSITE_INDEX', 0))
+                }
+
+        # 2. Highest purchases per fan (PPC)
+        if merchant_details:
+            highest_ppc_merchant = max(merchant_details.items(),
+                                       key=lambda x: x[1]['ppc'])
+            if highest_ppc_merchant[1]['ppc'] > 0:
                 insights.append(
-                    f"{self.team_name} fans average {avg_ppc:.0f} purchases "
-                    f"per year per fan at {second_merchant}"
+                    f"{self.team_name} fans average {highest_ppc_merchant[1]['ppc']:.0f} purchases "
+                    f"per year per fan at {highest_ppc_merchant[0]}"
                 )
 
-        # 3. Spending amount for third merchant
-        if len(top_merchants) > 2 and len(merchant_df) > 0:
-            third_merchant = top_merchants[2]
-            merchant_data = merchant_df[
-                (merchant_df['MERCHANT'] == third_merchant) &
-                (merchant_df['AUDIENCE'] == self.audience_name)
-                ]
-            if not merchant_data.empty:
-                avg_spc = float(merchant_data.iloc[0]['SPC'])
+        # 3. Highest spend per fan (SPC)
+        if merchant_details:
+            highest_spc_merchant = max(merchant_details.items(),
+                                       key=lambda x: x[1]['spc'])
+            if highest_spc_merchant[1]['spc'] > 0:
                 insights.append(
-                    f"{self.team_name} fans spent an average of ${avg_spc:.2f} per fan "
-                    f"on {third_merchant} per year"
+                    f"{self.team_name} fans spent an average of ${highest_spc_merchant[1]['spc']:.2f} "
+                    f"per fan on {highest_spc_merchant[0]} per year"
                 )
 
-        # 4. Merchant NBA comparison (if available)
-        if len(top_merchants) > 3:
-            fourth_merchant = top_merchants[3]
-            nba_merchant_insight = self._get_merchant_nba_comparison(merchant_df, fourth_merchant)
-            if nba_merchant_insight:
-                insights.append(nba_merchant_insight)
-            else:
-                insights.append(
-                    f"{self.team_name} fans show strong affinity for {fourth_merchant}"
-                )
+        # 4. Best NBA comparison
+        best_nba_comparison = self._get_best_nba_merchant_comparison(merchant_df, top_merchants)
+        if best_nba_comparison:
+            insights.append(best_nba_comparison)
 
         return insights
+
+    def _get_best_nba_merchant_comparison(self, merchant_df: pd.DataFrame,
+                                          top_merchants: List[str]) -> Optional[str]:
+        """Find merchant with highest over-index vs NBA fans"""
+        best_merchant = None
+        best_index_diff = 0
+
+        for merchant in top_merchants:
+            nba_data = merchant_df[
+                (merchant_df['AUDIENCE'] == self.audience_name) &
+                (merchant_df['MERCHANT'] == merchant) &
+                (merchant_df['COMPARISON_POPULATION'] == self.league_fans)
+                ]
+
+            if not nba_data.empty:
+                perc_index = float(nba_data.iloc[0].get('PERC_INDEX', 100))
+                index_diff = perc_index - 100
+
+                if index_diff > best_index_diff:
+                    best_index_diff = index_diff
+                    best_merchant = merchant
+
+        if best_merchant and best_index_diff > 0:
+            return (
+                f"{self.team_name} fans are {best_index_diff:.0f}% more likely to spend "
+                f"on {best_merchant} than the average {self.league} fan"
+            )
+
+        return None
 
     def _get_merchant_nba_comparison(self, merchant_df: pd.DataFrame, merchant: str) -> Optional[str]:
         """Get NBA comparison for specific merchant"""
@@ -600,29 +631,62 @@ class CategoryAnalyzer:
         return None
 
     def _get_sponsorship_recommendation(self, merchant_df: pd.DataFrame) -> Optional[Dict[str, Any]]:
-        """Get top sponsorship recommendation based on composite index"""
+        """Get sponsorship recommendation based on highest composite index among top 5 merchants"""
         if merchant_df.empty:
             return None
 
-        # Get merchant with highest composite index
+        # Filter for team fans
+        team_data = merchant_df[merchant_df['AUDIENCE'] == self.audience_name]
+
+        if team_data.empty:
+            return None
+
+        # Get top 5 merchants by audience percentage (same as merchant stats)
+        top_5_merchants = (team_data
+                           .sort_values('PERC_AUDIENCE', ascending=False)
+                           .drop_duplicates('MERCHANT')
+                           .head(5)['MERCHANT'].tolist())
+
+        if not top_5_merchants:
+            return None
+
+        # Now find the highest composite index ONLY among these top 5
         team_comp_data = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop)
+            (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
+            (merchant_df['MERCHANT'].isin(top_5_merchants))  # Only look at top 5
             ]
 
         if team_comp_data.empty:
             return None
 
-        top_composite = team_comp_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+        # Find merchant with highest composite index among the top 5
+        best_merchant = team_comp_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+
+        merchant_name = best_merchant['MERCHANT']
+        composite_index = float(best_merchant['COMPOSITE_INDEX'])
+
+        # Build recommendation
+        main_recommendation = (
+            f"The {self.team_name} should target {merchant_name} for a sponsorship "
+            f"based on having the highest composite index of {composite_index:.0f}"
+        )
+
+        # Sub-bullet explanation
+        sub_explanation = (
+            f"The {self.team_name} should target {merchant_name} for a sponsorship "
+            f"based on having the highest composite index of {composite_index:.0f}"
+        )
 
         return {
-            'merchant': top_composite['MERCHANT'],
-            'composite_index': float(top_composite['COMPOSITE_INDEX']),
-            'explanation': (
-                f"Fans are more likely to spend with {top_composite['MERCHANT']} "
-                f"and more likely to spend MORE per consumer vs. the {self.comparison_pop} "
-                f"on {top_composite['MERCHANT']}"
-            )
+            'merchant': merchant_name,
+            'composite_index': composite_index,
+            'explanation': main_recommendation,
+            'sub_explanation': sub_explanation,
+            'full_recommendation': {
+                'main': main_recommendation,
+                'sub_bullet': sub_explanation
+            }
         }
 
     def _validate_results(self, metrics: CategoryMetrics,
