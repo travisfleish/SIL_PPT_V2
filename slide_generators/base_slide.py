@@ -31,17 +31,65 @@ class BaseSlide:
         """
         if presentation is None:
             self.presentation = Presentation()
-            # FIX 1: Set 16:9 widescreen aspect ratio
+            # Set 16:9 widescreen aspect ratio
             self.presentation.slide_width = Inches(13.333)  # 16:9 width
             self.presentation.slide_height = Inches(7.5)  # 16:9 height
         else:
             self.presentation = presentation
 
-        # FIX 2: Use blank layout (index 6) with NO placeholders/title boxes
-        self.blank_layout = self.presentation.slide_layouts[6]  # Changed from [5] to [6]
-
         # Set default font
         self.default_font = DEFAULT_FONT_FAMILY
+
+        # IMPORTANT: Setup layouts including SIL custom layouts
+        self._setup_layouts()
+
+    def _setup_layouts(self):
+        """Setup slide layout references based on template structure"""
+        layout_count = len(self.presentation.slide_layouts)
+        logger.info(f"Available slide layouts: {layout_count}")
+
+        # Log all available layouts for debugging
+        for i, layout in enumerate(self.presentation.slide_layouts):
+            logger.debug(f"Layout {i}: {layout.name}")
+
+        # Always keep reference to standard blank layout
+        self.blank_layout = self.presentation.slide_layouts[6]  # Blank layout
+
+        # SIL Template has custom layouts at indices 11 and 12:
+        # Layout 11: Blank blue SIL slide (for title/intro)
+        # Layout 12: Blank white SIL slide (for content pages)
+
+        # Check if we have the SIL custom layouts
+        if layout_count >= 13:  # SIL template has 13 layouts (0-12)
+            # Use the SIL custom layouts
+            self.title_layout = self.presentation.slide_layouts[11]  # Blue SIL layout
+            self.content_layout = self.presentation.slide_layouts[12]  # White SIL layout
+            logger.info("Using SIL custom layouts - Blue (#11) and White (#12)")
+        else:
+            # Fallback to standard layouts if SIL template not loaded properly
+            logger.warning("SIL custom layouts not found, using standard layouts")
+            self.title_layout = self.presentation.slide_layouts[0]  # Standard title
+            self.content_layout = self.presentation.slide_layouts[1]  # Standard content
+
+        logger.info(f"Using layouts - Title: {self.title_layout.name}, Content: {self.content_layout.name}")
+
+    def add_title_slide(self):
+        """Add a new slide using the title layout (SIL blue or standard)"""
+        slide = self.presentation.slides.add_slide(self.title_layout)
+        logger.debug(f"Added title slide using layout: {self.title_layout.name}")
+        return slide
+
+    def add_content_slide(self):
+        """Add a new slide using the content layout (SIL white or standard)"""
+        slide = self.presentation.slides.add_slide(self.content_layout)
+        logger.debug(f"Added content slide using layout: {self.content_layout.name}")
+        return slide
+
+    def add_blank_slide(self):
+        """Add a new slide using the blank layout"""
+        slide = self.presentation.slides.add_slide(self.blank_layout)
+        logger.debug(f"Added blank slide using layout: {self.blank_layout.name}")
+        return slide
 
     def hex_to_rgb(self, hex_color: str) -> RGBColor:
         """

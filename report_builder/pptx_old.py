@@ -74,23 +74,8 @@ class PowerPointBuilder:
         # Validate and set presentation font
         self.presentation_font = self._validate_font()
 
-        # CHANGE: Use combined template instead of blue template
-        COMBINED_TEMPLATE_PATH = Path(__file__).parent.parent / 'templates' / 'sil_combined_template.pptx'
-
-        if COMBINED_TEMPLATE_PATH.exists():
-            try:
-                # Load the combined template
-                self.presentation = Presentation(str(COMBINED_TEMPLATE_PATH))
-                logger.info("Initialized presentation from combined SIL template")
-            except Exception as e:
-                logger.warning(f"Could not load template: {e}. Creating blank presentation.")
-                self.presentation = Presentation()
-        else:
-            # Create blank presentation if no template
-            logger.warning(f"Combined template not found at: {COMBINED_TEMPLATE_PATH}")
-            self.presentation = Presentation()
-
-        # Set 16:9 dimensions regardless of template
+        # FIX 1 & 2: Initialize presentation with proper 16:9 formatting
+        self.presentation = Presentation()
         self.presentation.slide_width = Inches(13.333)  # 16:9 widescreen width
         self.presentation.slide_height = Inches(7.5)  # 16:9 widescreen height
 
@@ -413,14 +398,7 @@ class PowerPointBuilder:
 
     def _add_placeholder_slide(self, message: str):
         """Add a placeholder slide when data is not available"""
-        # CHANGE: Use white template layout if available
-        if len(self.presentation.slides) > 1:
-            # Get the white layout from slide 1
-            white_layout = self.presentation.slides[1].slide_layout
-            slide = self.presentation.slides.add_slide(white_layout)
-        else:
-            slide = self.presentation.slides.add_slide(self.blank_layout)
-
+        slide = self.presentation.slides.add_slide(self.blank_layout)  # Uses layout[6]
         text_box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(11.333), Inches(1))
         text_box.text = message
         p = text_box.text_frame.paragraphs[0]

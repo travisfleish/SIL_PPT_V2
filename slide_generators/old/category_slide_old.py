@@ -20,6 +20,9 @@ from data_processors.category_analyzer import CategoryAnalyzer, CategoryMetrics
 
 logger = logging.getLogger(__name__)
 
+# Default font
+DEFAULT_FONT_FAMILY = "Red Hat Display"
+
 
 class CategorySlide(BaseSlide):
     """Generate category analysis slides with insights, subcategory stats, and merchant rankings"""
@@ -32,6 +35,7 @@ class CategorySlide(BaseSlide):
             presentation: Existing presentation to add slide to
         """
         super().__init__(presentation)
+        self.default_font = DEFAULT_FONT_FAMILY
 
         # Colors for the slide
         self.colors = {
@@ -63,9 +67,8 @@ class CategorySlide(BaseSlide):
         team_name = team_config.get('team_name', 'Team')
         team_short = team_config.get('team_name_short', team_name.split()[-1])
 
-        # Use the content layout (SIL white layout #12)
-        slide = self.add_content_slide()
-        logger.info(f"Added category slide for {analysis_results['display_name']} using SIL white layout")
+        # FIX 2: Use blank layout with no automatic placeholders
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
         # Add header
         self._add_header(slide, team_name, analysis_results['slide_title'])
@@ -104,9 +107,8 @@ class CategorySlide(BaseSlide):
         team_name = team_config.get('team_name', 'Team')
         team_short = team_config.get('team_name_short', team_name.split()[-1])
 
-        # Use the content layout (SIL white layout #12)
-        slide = self.add_content_slide()
-        logger.info(f"Added brand slide for {analysis_results['display_name']} using SIL white layout")
+        # Use blank layout
+        slide = self.presentation.slides.add_slide(self.blank_layout)
 
         # Add header - brand slide uses category name + " Brands"
         header_title = f"{analysis_results['display_name']} Sponsor Analysis"
@@ -475,56 +477,6 @@ class CategorySlide(BaseSlide):
         p2.font.name = self.default_font  # Red Hat Display
         p2.font.size = Pt(11)
         p2.line_spacing = 1.2
-
-    def _format_header_cell(self, cell, small: bool = False):
-        """Format table header cell"""
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = self.colors['table_header']
-
-        # Format text
-        text_frame = cell.text_frame
-        text_frame.margin_left = Inches(0.05)
-        text_frame.margin_right = Inches(0.05)
-        text_frame.margin_top = Inches(0.03)
-        text_frame.margin_bottom = Inches(0.03)
-        text_frame.word_wrap = True
-
-        # Format all paragraphs in the cell (for multi-line headers)
-        for paragraph in text_frame.paragraphs:
-            paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(8) if small else Pt(10)  # Smaller font for compact tables
-            paragraph.font.bold = True
-            paragraph.alignment = PP_ALIGN.CENTER
-            paragraph.line_spacing = 1.0  # Tighter line spacing for headers
-
-        # Vertical alignment
-        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-
-    def _format_data_cell(self, cell, small: bool = False):
-        """Format table data cell"""
-        # Format text
-        text_frame = cell.text_frame
-        text_frame.margin_left = Inches(0.05)
-        text_frame.margin_right = Inches(0.05)
-        text_frame.margin_top = Inches(0.03)
-        text_frame.margin_bottom = Inches(0.03)
-        text_frame.word_wrap = True
-
-        # Format all paragraphs in the cell
-        for paragraph in text_frame.paragraphs:
-            paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(8) if small else Pt(11)  # Consistent data font size
-            paragraph.alignment = PP_ALIGN.CENTER
-
-            # Color coding for More/Less
-            if 'More' in cell.text or 'more' in cell.text:
-                paragraph.font.color.rgb = self.colors['positive']
-            elif 'Less' in cell.text or 'less' in cell.text or 'fewer' in cell.text:
-                paragraph.font.color.rgb = self.colors['negative']
-
-        # Vertical alignment
-        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-
 
     def _add_merchant_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add top merchants table (adjusted for 16:9)"""
