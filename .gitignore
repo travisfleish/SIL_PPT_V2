@@ -72,6 +72,7 @@ output/
 outputs/
 results/
 *.pptx
+!templates/sil_combined_template.pptx
 *.png
 *.jpg
 *.jpeg
