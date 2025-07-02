@@ -739,7 +739,7 @@ class CategorySlide(BaseSlide):
         purchases_match = re.search(r'(\d+)\s+purchases?\s+per\s+year', insight, re.IGNORECASE)
 
         if brand_match and purchases_match:
-            brand = brand_match.group(1).upper()
+            brand = brand_match.group(1)
             purchases = purchases_match.group(1)
 
             return f"{team_short} fans make an average of {purchases} purchases per year at {brand}—more than any other top {category_name} brand"

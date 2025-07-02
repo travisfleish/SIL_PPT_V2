@@ -220,7 +220,9 @@ class CategoryAnalyzer:
         # Get metrics from the row
         row = comp_data.iloc[0]
         percent_fans = float(row['PERC_AUDIENCE'])
-        percent_likely = float(row['PERC_INDEX']) - 100
+
+        # KEEP THE SUBTRACTION - This gives us "% MORE likely"
+        percent_likely = float(row['PERC_INDEX']) - 100  # 430 - 100 = 330% MORE
 
         # Calculate purchase difference
         ppc = float(row['PPC'])
@@ -297,7 +299,10 @@ class CategoryAnalyzer:
         results = []
         for _, row in top_subcategories.iterrows():
             percent_fans = float(row['PERC_AUDIENCE']) * 100
-            percent_likely = float(row['PERC_INDEX']) - 100
+
+            # KEEP THE SUBTRACTION - This gives us "% MORE likely"
+            percent_likely = float(row['PERC_INDEX']) - 100  # 430 - 100 = 330% MORE
+
             percent_purch = self._calculate_percent_diff(
                 float(row['PPC']),
                 float(row['COMPARISON_PPC'])
@@ -348,7 +353,10 @@ class CategoryAnalyzer:
             if not comp_data.empty:
                 row = comp_data.iloc[0]
                 percent_fans = float(row['PERC_AUDIENCE']) * 100
-                percent_likely = float(row['PERC_INDEX']) - 100
+
+                # KEEP THE SUBTRACTION - This gives us "% MORE likely"
+                percent_likely = float(row['PERC_INDEX']) - 100  # 430 - 100 = 330% MORE
+
                 ppc_diff = self._calculate_percent_diff(
                     float(row['PPC']),
                     float(row['COMPARISON_PPC'])
@@ -419,11 +427,14 @@ class CategoryAnalyzer:
 
         if '% More' in likelihood_text:
             try:
-                percent = float(likelihood_text.split('%')[0])
+                percent = float(likelihood_text.split('%')[0])  # This is 330 (% MORE)
 
                 # No validation - always add the insight
                 if percent > 200:
-                    multiplier = round(percent / 100, 1)
+                    # FIX: Calculate multiplier from original PERC_INDEX
+                    perc_index = percent + 100  # 330 + 100 = 430
+                    multiplier = round(perc_index / 100, 1)  # 430 / 100 = 4.3X
+
                     insights.append(
                         f"{self.team_short} Fans are more than {multiplier}X more likely "
                         f"to spend on {top_sub['Subcategory']} vs. the {self.comparison_pop}"
@@ -433,35 +444,42 @@ class CategoryAnalyzer:
                         f"{self.team_short} Fans are {likelihood_text} likely to spend on "
                         f"{top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
-            except ValueError:
-                logger.error(f"Could not parse likelihood: {likelihood_text}")
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Could not parse likelihood text '{likelihood_text}': {e}")
 
-    def _add_highest_spend_subcategory_insight(self, insights: List[str], subcategory_df: pd.DataFrame):
-        """Add insight for subcategory with highest SPC (spend per customer)"""
+    def _add_highest_spend_subcategory_insight(self, insights: List[str],
+                                               subcategory_df: pd.DataFrame):
+        """Add insight about highest SPC subcategory"""
         if subcategory_df.empty:
             return
 
-        # Find subcategory with highest SPC for team fans
+        # Filter for team fans with valid SPC data
         team_data = subcategory_df[
             (subcategory_df['AUDIENCE'] == self.audience_name) &
-            (subcategory_df['COMPARISON_POPULATION'] == self.comparison_pop)
+            (subcategory_df['SPC'] > 0)
             ]
 
-        if not team_data.empty:
-            # Get subcategory with maximum SPC
-            highest_spend_sub = team_data.nlargest(1, 'SPC').iloc[0]
+        if team_data.empty:
+            return
 
-            # Format subcategory name
-            subcategory_name = self._format_subcategory_name(
-                highest_spend_sub['SUBCATEGORY'],
-                {'display_name': highest_spend_sub.get('CATEGORY', '')}
-            )
+        # Find subcategory with highest SPC
+        highest_spc_row = team_data.nlargest(1, 'SPC').iloc[0]
+        spc_value = float(highest_spc_row['SPC'])
+        subcategory_name = self._format_subcategory_name(
+            highest_spc_row['SUBCATEGORY'],
+            {'is_custom': False}  # Assume fixed for formatting
+        )
 
-            insights.append(
-                f"{self.team_short} fans spend an average of ${highest_spend_sub['SPC']:.2f} "
-                f"per fan per year on {subcategory_name} "
-                f"vs. the {self.comparison_pop}"
-            )
+        # Format the SPC value
+        if spc_value >= 1000:
+            formatted_spc = f"${spc_value:,.0f}"
+        else:
+            formatted_spc = f"${spc_value:.2f}"
+
+        insights.append(
+            f"{self.team_short} fans spend an average of {formatted_spc} "
+            f"per fan per year on {subcategory_name}"
+        )
 
     def _get_league_comparison_subcategory(self, subcategory_df: pd.DataFrame,
                                            category_config: Dict[str, Any]) -> Optional[str]:
@@ -491,8 +509,8 @@ class CategoryAnalyzer:
         # Find subcategory with highest PERC_INDEX (most over-indexed)
         best_sub = nba_comp.nlargest(1, 'PERC_INDEX').iloc[0]
 
-        # Calculate how much more likely (PERC_INDEX - 100)
-        index_diff = float(best_sub['PERC_INDEX']) - 100
+        # KEEP THE SUBTRACTION - This gives us "% MORE likely"
+        index_diff = float(best_sub['PERC_INDEX']) - 100  # 430 - 100 = 330% MORE
 
         # Only report if significant (>5%)
         if index_diff > self.min_significant_difference:
@@ -511,118 +529,172 @@ class CategoryAnalyzer:
 
     def _generate_merchant_insights(self, merchant_stats: Tuple[pd.DataFrame, List[str]],
                                     merchant_df: pd.DataFrame) -> List[str]:
-        """Generate merchant-specific insights"""
+        """Generate merchant-specific insights based on data-driven criteria"""
         merchant_table, top_merchants = merchant_stats
         insights = []
 
         if merchant_table.empty or not top_merchants:
             return insights
 
-        # 1. Top merchant spending
+        # 1. Top merchant by audience percentage
         top_merchant = merchant_table.iloc[0]
         insights.append(
             f"{top_merchant['Percent of Fans Who Spend']} of {self.team_name} fans "
             f"spent at {top_merchant['Brand']}"
         )
 
-        # 2. Average purchases for second merchant (if available)
-        if len(top_merchants) > 1 and len(merchant_df) > 0:
-            second_merchant = top_merchants[1]
-            merchant_data = merchant_df[
-                (merchant_df['MERCHANT'] == second_merchant) &
-                (merchant_df['AUDIENCE'] == self.audience_name)
-                ]
-            if not merchant_data.empty:
-                avg_ppc = float(merchant_data.iloc[0]['PPC'])
-                insights.append(
-                    f"{self.team_name} fans average {avg_ppc:.0f} purchases "
-                    f"per year per fan at {second_merchant}"
-                )
+        # 2. Find merchant with highest PPC (purchases per customer)
+        highest_ppc_merchant = self._find_highest_ppc_merchant(merchant_df, top_merchants)
+        if highest_ppc_merchant:
+            insights.append(
+                f"{self.team_name} fans make an average of {highest_ppc_merchant['ppc']:.0f} "
+                f"purchases per year at {highest_ppc_merchant['merchant']}—more than any other "
+                f"top {merchant_table.iloc[0]['Brand'].split()[0]} brand"
+            )
 
-        # 3. Spending amount for third merchant
-        if len(top_merchants) > 2 and len(merchant_df) > 0:
-            third_merchant = top_merchants[2]
-            merchant_data = merchant_df[
-                (merchant_df['MERCHANT'] == third_merchant) &
-                (merchant_df['AUDIENCE'] == self.audience_name)
-                ]
-            if not merchant_data.empty:
-                avg_spc = float(merchant_data.iloc[0]['SPC'])
-                insights.append(
-                    f"{self.team_name} fans spent an average of ${avg_spc:.2f} per fan "
-                    f"on {third_merchant} per year"
-                )
-
-        # 4. Merchant NBA comparison (if available)
-        if len(top_merchants) > 3:
-            fourth_merchant = top_merchants[3]
-            nba_merchant_insight = self._get_merchant_nba_comparison(merchant_df, fourth_merchant)
-            if nba_merchant_insight:
-                insights.append(nba_merchant_insight)
+        # 3. Find merchant with highest SPC (spend per customer)
+        highest_spc_merchant = self._find_highest_spc_merchant(merchant_df, top_merchants)
+        if highest_spc_merchant:
+            spc_value = highest_spc_merchant['spc']
+            if spc_value >= 1000:
+                formatted_spc = f"${spc_value:,.0f}"
             else:
-                insights.append(
-                    f"{self.team_name} fans show strong affinity for {fourth_merchant}"
-                )
+                formatted_spc = f"${spc_value:.2f}"
+
+            insights.append(
+                f"{self.team_name} fans spent an average of {formatted_spc} per fan "
+                f"on {highest_spc_merchant['merchant']} per year"
+            )
+
+        # 4. Best NBA/League comparison
+        best_nba_merchant = self._find_best_nba_comparison(merchant_df, top_merchants)
+        if best_nba_merchant:
+            insights.append(
+                f"{self.team_name} fans are {best_nba_merchant['index_diff']:.0f}% more likely "
+                f"to spend on {best_nba_merchant['merchant']} than {self.league} Fans"
+            )
 
         return insights
 
-    def _get_merchant_nba_comparison(self, merchant_df: pd.DataFrame, merchant: str) -> Optional[str]:
-        """Get NBA comparison for specific merchant"""
-        nba_data = merchant_df[
-            (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['MERCHANT'] == merchant) &
-            (merchant_df['COMPARISON_POPULATION'] == self.league_fans)
-            ]
-
-        if not nba_data.empty:
-            perc_index = float(nba_data.iloc[0]['PERC_INDEX'])
-            index_diff = perc_index - 100
-
-            # Always report, no threshold
-            if index_diff > 0:
-                return (
-                    f"{self.team_name} fans are {abs(index_diff):.0f}% "
-                    f"more likely to spend on {merchant} "
-                    f"than {self.league} Fans."
-                )
-            elif index_diff < 0:
-                return (
-                    f"{self.team_name} fans are {abs(index_diff):.0f}% "
-                    f"less likely to spend on {merchant} "
-                    f"than {self.league} Fans."
-                )
-            else:
-                return (
-                    f"{self.team_name} fans are equally likely to spend on {merchant} "
-                    f"as {self.league} Fans."
-                )
-
-        return None
-
-    def _get_sponsorship_recommendation(self, merchant_df: pd.DataFrame) -> Optional[Dict[str, Any]]:
-        """Get top sponsorship recommendation based on composite index"""
+    def _find_highest_ppc_merchant(self, merchant_df: pd.DataFrame,
+                                   top_merchants: List[str]) -> Optional[Dict[str, Any]]:
+        """Find merchant with highest purchases per customer"""
         if merchant_df.empty:
             return None
 
-        # Get merchant with highest composite index
-        team_comp_data = merchant_df[
+        # Filter for team fans and top merchants
+        filtered_df = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop)
+            (merchant_df['MERCHANT'].isin(top_merchants))
             ]
 
-        if team_comp_data.empty:
+        if filtered_df.empty:
             return None
 
-        top_composite = team_comp_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+        # Find merchant with highest PPC
+        highest_ppc_row = filtered_df.nlargest(1, 'PPC').iloc[0]
 
         return {
-            'merchant': top_composite['MERCHANT'],
-            'composite_index': float(top_composite['COMPOSITE_INDEX']),
-            'explanation': (
-                f"Fans are more likely to spend with {top_composite['MERCHANT']} "
-                f"and more likely to spend MORE per consumer vs. the {self.comparison_pop} "
-                f"on {top_composite['MERCHANT']}"
-            )
+            'merchant': highest_ppc_row['MERCHANT'],
+            'ppc': float(highest_ppc_row['PPC'])
+        }
+
+    def _find_highest_spc_merchant(self, merchant_df: pd.DataFrame,
+                                   top_merchants: List[str]) -> Optional[Dict[str, Any]]:
+        """Find merchant with highest spend per customer"""
+        if merchant_df.empty:
+            return None
+
+        # Filter for team fans and top merchants
+        filtered_df = merchant_df[
+            (merchant_df['AUDIENCE'] == self.audience_name) &
+            (merchant_df['MERCHANT'].isin(top_merchants)) &
+            (merchant_df['SPC'] > 0)  # Ensure valid SPC
+            ]
+
+        if filtered_df.empty:
+            return None
+
+        # Find merchant with highest SPC
+        highest_spc_row = filtered_df.nlargest(1, 'SPC').iloc[0]
+
+        return {
+            'merchant': highest_spc_row['MERCHANT'],
+            'spc': float(highest_spc_row['SPC'])
+        }
+
+    def _find_best_nba_comparison(self, merchant_df: pd.DataFrame,
+                                  top_merchants: List[str]) -> Optional[Dict[str, Any]]:
+        """Find merchant with best NBA/League comparison"""
+        if merchant_df.empty:
+            return None
+
+        # Filter for team fans comparing to NBA/League fans
+        nba_comp = merchant_df[
+            (merchant_df['AUDIENCE'] == self.audience_name) &
+            (merchant_df['COMPARISON_POPULATION'] == self.league_fans) &
+            (merchant_df['MERCHANT'].isin(top_merchants))
+            ]
+
+        if nba_comp.empty:
+            return None
+
+        # Find merchant with highest PERC_INDEX
+        best_merchant = nba_comp.nlargest(1, 'PERC_INDEX').iloc[0]
+
+        # Calculate index difference (no need to subtract 100 anymore)
+        index_diff = float(best_merchant['PERC_INDEX'])
+
+        # Only report if significant
+        if index_diff > self.min_significant_difference:
+            return {
+                'merchant': best_merchant['MERCHANT'],
+                'index_diff': index_diff
+            }
+
+        return None
+
+    def _get_sponsorship_recommendation(self, merchant_df: pd.DataFrame) -> Dict[str, Any]:
+        """Generate sponsorship recommendation based on composite index"""
+        if merchant_df.empty:
+            return {}
+
+        # Filter for team fans
+        team_data = merchant_df[
+            (merchant_df['AUDIENCE'] == self.audience_name) &
+            (merchant_df['COMPOSITE_INDEX'] > 0)
+            ]
+
+        if team_data.empty:
+            return {}
+
+        # Find merchant with highest composite index
+        best_merchant = team_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+        merchant_name = best_merchant['MERCHANT']
+        composite_index = float(best_merchant['COMPOSITE_INDEX'])
+
+        # Generate recommendation text
+        main_recommendation = (
+            f"The {self.team_short} should target {merchant_name} for a sponsorship "
+            f"based on having the highest composite index of {composite_index:.0f}"
+        )
+
+        # Sub-explanation
+        sub_explanation = (
+            "The composite index indicates a brand with significant likelihood "
+            "for more fans to be spending more frequently, and at a higher spend "
+            "per fan vs. other brands"
+        )
+
+        return {
+            'merchant': merchant_name,
+            'composite_index': composite_index,
+            'explanation': main_recommendation,
+            'sub_explanation': sub_explanation,
+            'full_recommendation': {
+                'main': main_recommendation,
+                'sub_bullet': sub_explanation
+            }
         }
 
     def _validate_results(self, metrics: CategoryMetrics,
@@ -698,46 +770,42 @@ class CategoryAnalyzer:
 
         # Default existing categories if not provided
         if existing_categories is None:
-            existing_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
-            if is_womens_team:
-                existing_categories.extend(['beauty', 'health'])
+            existing_fixed = (self.config['fixed_categories']['womens_teams'] if is_womens_team
+                              else self.config['fixed_categories']['mens_teams'])
+            existing_categories = existing_fixed
 
-        # Get the actual category names from config for existing categories
-        existing_category_names = set()
-        for cat_key in existing_categories:
-            if cat_key in self.categories:
-                cat_names = self.categories[cat_key].get('category_names_in_data', [])
-                existing_category_names.update(cat_names)
-
-        # Filter to only team fans vs local gen pop with sufficient audience
+        # Filter for team fans
         team_data = category_df[
             (category_df['AUDIENCE'] == self.audience_name) &
-            (category_df['COMPARISON_POPULATION'] == self.comparison_pop) &
             (category_df['PERC_AUDIENCE'] >= min_audience)
-            ].copy()
+            ]
 
         if team_data.empty:
             logger.warning("No category data found for custom category selection")
             return []
 
-        # Remove duplicates (keep highest composite index per category)
-        team_data = team_data.sort_values('COMPOSITE_INDEX', ascending=False).drop_duplicates('CATEGORY')
+        # Exclude already included categories
+        category_names_to_exclude = []
+        for cat_key in existing_categories:
+            if cat_key in self.categories:
+                category_names_to_exclude.extend(
+                    self.categories[cat_key].get('category_names_in_data', [])
+                )
 
-        # Filter out existing categories and excluded categories
-        available_data = team_data[
-            ~team_data['CATEGORY'].isin(existing_category_names) &
-            ~team_data['CATEGORY'].isin(self.excluded_custom)
-            ]
+        # Also exclude categories from the excluded list
+        category_names_to_exclude.extend(self.excluded_custom)
 
-        # Also filter out any women's only categories if this is a men's team
-        if not is_womens_team:
-            # Remove Beauty and Health categories
-            available_data = available_data[
-                ~available_data['CATEGORY'].isin(['Beauty', 'Health'])
-            ]
+        # Filter out excluded categories
+        available_categories = team_data[
+            ~team_data['CATEGORY'].isin(category_names_to_exclude)
+        ]
 
-        # Sort by composite index and take top N
-        top_categories = available_data.nlargest(n_categories, 'COMPOSITE_INDEX')
+        if available_categories.empty:
+            logger.warning("No available categories after filtering")
+            return []
+
+        # Get top N by composite index
+        top_categories = available_categories.nlargest(n_categories, 'COMPOSITE_INDEX')
 
         # Convert to list of category info
         custom_categories = []

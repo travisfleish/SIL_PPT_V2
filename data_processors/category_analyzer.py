@@ -2,6 +2,8 @@
 """
 Category analyzer that processes spending data by category
 Generates insights and recommendations for sponsorship opportunities
+ENHANCED with OpenAI-powered merchant name standardization
+FIXED: Ensures consistent standardized names throughout all insights
 """
 
 import pandas as pd
@@ -10,6 +12,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 import yaml
 import logging
+import asyncio
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -57,12 +60,12 @@ class CategoryMetrics:
 
 
 class CategoryAnalyzer:
-    """Analyzes category spending data and generates insights"""
+    """Analyzes category spending data and generates insights with merchant name standardization"""
 
     def __init__(self, team_name: str, team_short: str, league: str,
                  config_path: Optional[Path] = None):
         """
-        Initialize the category analyzer
+        Initialize the category analyzer with merchant name standardization
 
         Args:
             team_name: Full team name (e.g., "Utah Jazz")
@@ -78,6 +81,15 @@ class CategoryAnalyzer:
         self.audience_name = f"{team_name} Fans"
         self.comparison_pop = f"Local Gen Pop (Excl. {team_short})"
         self.league_fans = f"{league} Fans"
+
+        # Initialize merchant name standardizer
+        try:
+            from utils.merchant_name_standardizer import MerchantNameStandardizer
+            self.standardizer = MerchantNameStandardizer(cache_enabled=True)
+            logger.info("✅ CategoryAnalyzer: Merchant name standardization enabled")
+        except ImportError:
+            logger.warning("⚠️ CategoryAnalyzer: MerchantNameStandardizer not available")
+            self.standardizer = None
 
         # Load configuration
         if config_path is None:
@@ -103,6 +115,51 @@ class CategoryAnalyzer:
         self.max_reasonable_index = 1000  # 1000% = 10x more likely
         self.min_significant_difference = 0  # No minimum threshold - report all differences
 
+    def standardize_merchant_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Standardize merchant names in merchant DataFrame
+
+        Args:
+            df: DataFrame with 'MERCHANT' column
+
+        Returns:
+            DataFrame with standardized merchant names
+        """
+        if 'MERCHANT' not in df.columns or df.empty or self.standardizer is None:
+            return df
+
+        try:
+            logger.info(
+                f"🔄 CategoryAnalyzer: Standardizing merchant names for {len(df['MERCHANT'].unique())} unique merchants...")
+
+            # Get unique names
+            unique_names = df['MERCHANT'].dropna().unique().tolist()
+
+            if not unique_names:
+                return df
+
+            # Preserve original names
+            df['MERCHANT_ORIGINAL'] = df['MERCHANT'].copy()
+
+            # Get standardized mapping
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                name_mapping = loop.run_until_complete(self.standardizer.standardize_merchants(unique_names))
+            finally:
+                loop.close()
+
+            # OVERWRITE THE MERCHANT COLUMN
+            df['MERCHANT'] = df['MERCHANT'].map(name_mapping).fillna(df['MERCHANT'])
+
+            logger.info("✅ CategoryAnalyzer: Merchant name standardization completed")
+            return df
+
+        except Exception as e:
+            logger.warning(f"⚠️ CategoryAnalyzer: Merchant name standardization failed: {e}")
+            return df
+
     def analyze_category(self,
                          category_key: str,
                          category_df: pd.DataFrame,
@@ -110,7 +167,7 @@ class CategoryAnalyzer:
                          merchant_df: pd.DataFrame,
                          validate: bool = True) -> Dict[str, Any]:
         """
-        Analyze a specific category using multiple data sources
+        Analyze a specific category using multiple data sources with merchant name standardization
 
         Args:
             category_key: Category identifier from config
@@ -122,6 +179,10 @@ class CategoryAnalyzer:
         Returns:
             Complete analysis results including metrics, insights, and recommendations
         """
+        # STANDARDIZE MERCHANT NAMES FIRST
+        if not merchant_df.empty and 'MERCHANT' in merchant_df.columns:
+            merchant_df = self.standardize_merchant_data(merchant_df)
+
         # Get category configuration
         category_config = self.categories.get(category_key)
         if not category_config:
@@ -132,11 +193,11 @@ class CategoryAnalyzer:
             if df is not None and not df.empty:
                 self._clean_dataframe(df)
 
-        # Store raw data for validation
+        # Store raw data for validation (AFTER standardization)
         self.raw_data = {
             'category': category_df,
             'subcategory': subcategory_df,
-            'merchant': merchant_df
+            'merchant': merchant_df  # This now has standardized names
         }
 
         # 1. Category-level analysis
@@ -157,15 +218,15 @@ class CategoryAnalyzer:
             category_df, subcategory_df
         )
 
-        # 4. Merchant analysis
+        # 4. Merchant analysis (now with standardized names)
         merchant_stats = self._get_merchant_stats(merchant_df)
 
-        # 5. Generate merchant insights
+        # 5. Generate merchant insights (now with standardized names)
         merchant_insights = self._generate_merchant_insights(
             merchant_stats, merchant_df
         )
 
-        # 6. Get sponsorship recommendation
+        # 6. Get sponsorship recommendation (now with standardized names)
         recommendation = self._get_sponsorship_recommendation(merchant_df)
 
         # 7. Run validation if requested
@@ -325,7 +386,7 @@ class CategoryAnalyzer:
         return pd.DataFrame(results)
 
     def _get_merchant_stats(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
-        """Get top merchant statistics"""
+        """Get top merchant statistics (now with standardized names)"""
         if df.empty:
             return pd.DataFrame(), []
 
@@ -335,13 +396,13 @@ class CategoryAnalyzer:
         if team_data.empty:
             return pd.DataFrame(), []
 
-        # Get top 5 merchants by audience percentage
+        # Get top 5 merchants by audience percentage (using standardized names)
         top_5_merchants = (team_data
                            .sort_values('PERC_AUDIENCE', ascending=False)
                            .drop_duplicates('MERCHANT')
                            .head(5)['MERCHANT'].tolist())
 
-        # Build comparison table
+        # Build comparison table (now with standardized names)
         results = []
         for merchant in top_5_merchants:
             comp_data = df[
@@ -363,7 +424,7 @@ class CategoryAnalyzer:
                 )
 
                 results.append({
-                    'Brand': merchant,
+                    'Brand': merchant,  # Now using standardized names
                     'Percent of Fans Who Spend': f"{percent_fans:.1f}%",
                     'How likely fans are to spend vs. gen pop':
                         f"{abs(percent_likely):.0f}% {'More' if percent_likely >= 0 else 'Less'}",
@@ -527,32 +588,79 @@ class CategoryAnalyzer:
 
         return None
 
+    def _get_standardized_name_from_table(self, merchant_name: str, merchant_table: pd.DataFrame) -> str:
+        """
+        Get the standardized merchant name from the table
+
+        Args:
+            merchant_name: Original or standardized merchant name to look up
+            merchant_table: DataFrame with standardized names in 'Brand' column
+
+        Returns:
+            Standardized merchant name from the table, or original if not found
+        """
+        # First try exact match with the standardized names in the table
+        exact_match = merchant_table[merchant_table['Brand'] == merchant_name]
+        if not exact_match.empty:
+            return merchant_name  # Already standardized
+
+        # If not found, the merchant_name might be the original name
+        # We need to find it by looking at the MERCHANT_ORIGINAL column in our data
+        if hasattr(self, 'raw_data') and 'merchant' in self.raw_data:
+            merchant_df = self.raw_data['merchant']
+
+            # Look for rows where MERCHANT_ORIGINAL matches
+            if 'MERCHANT_ORIGINAL' in merchant_df.columns:
+                matching_rows = merchant_df[merchant_df['MERCHANT_ORIGINAL'] == merchant_name]
+                if not matching_rows.empty:
+                    # Return the standardized name
+                    standardized_name = matching_rows.iloc[0]['MERCHANT']
+                    return standardized_name
+
+        # Fallback: try to find by partial match in the table
+        for _, row in merchant_table.iterrows():
+            brand = row['Brand']
+            # Simple check for similarity (remove punctuation and compare)
+            if merchant_name.replace("'", "").replace("-", "").upper() == brand.replace("'", "").replace("-",
+                                                                                                         "").upper():
+                return brand
+
+        # If all else fails, return the original name
+        return merchant_name
+
     def _generate_merchant_insights(self, merchant_stats: Tuple[pd.DataFrame, List[str]],
                                     merchant_df: pd.DataFrame) -> List[str]:
-        """Generate merchant-specific insights based on data-driven criteria"""
+        """
+        FIXED: Generate merchant-specific insights ensuring consistent standardized names
+        """
         merchant_table, top_merchants = merchant_stats
         insights = []
 
         if merchant_table.empty or not top_merchants:
             return insights
 
-        # 1. Top merchant by audience percentage
+        # 1. Top merchant by audience percentage (USE STANDARDIZED NAME FROM TABLE)
         top_merchant = merchant_table.iloc[0]
         insights.append(
             f"{top_merchant['Percent of Fans Who Spend']} of {self.team_name} fans "
-            f"spent at {top_merchant['Brand']}"
+            f"spent at {top_merchant['Brand']}"  # USE Brand from table (standardized)
         )
 
-        # 2. Find merchant with highest PPC (purchases per customer)
+        # 2. Find merchant with highest PPC - USE STANDARDIZED NAMES CONSISTENTLY
         highest_ppc_merchant = self._find_highest_ppc_merchant(merchant_df, top_merchants)
         if highest_ppc_merchant:
+            # GET STANDARDIZED NAME FROM TABLE instead of raw data
+            standardized_name = self._get_standardized_name_from_table(
+                highest_ppc_merchant['merchant'], merchant_table
+            )
+
             insights.append(
                 f"{self.team_name} fans make an average of {highest_ppc_merchant['ppc']:.0f} "
-                f"purchases per year at {highest_ppc_merchant['merchant']}—more than any other "
+                f"purchases per year at {standardized_name}—more than any other "
                 f"top {merchant_table.iloc[0]['Brand'].split()[0]} brand"
             )
 
-        # 3. Find merchant with highest SPC (spend per customer)
+        # 3. Find merchant with highest SPC - USE STANDARDIZED NAMES CONSISTENTLY
         highest_spc_merchant = self._find_highest_spc_merchant(merchant_df, top_merchants)
         if highest_spc_merchant:
             spc_value = highest_spc_merchant['spc']
@@ -561,31 +669,41 @@ class CategoryAnalyzer:
             else:
                 formatted_spc = f"${spc_value:.2f}"
 
-            insights.append(
-                f"{self.team_name} fans spent an average of {formatted_spc} per fan "
-                f"on {highest_spc_merchant['merchant']} per year"
+            # GET STANDARDIZED NAME FROM TABLE instead of raw data
+            standardized_name = self._get_standardized_name_from_table(
+                highest_spc_merchant['merchant'], merchant_table
             )
 
-        # 4. Best NBA/League comparison
+            insights.append(
+                f"{self.team_name} fans spent an average of {formatted_spc} per fan "
+                f"on {standardized_name} per year"
+            )
+
+        # 4. Best NBA/League comparison - USE STANDARDIZED NAMES CONSISTENTLY
         best_nba_merchant = self._find_best_nba_comparison(merchant_df, top_merchants)
         if best_nba_merchant:
+            # GET STANDARDIZED NAME FROM TABLE instead of raw data
+            standardized_name = self._get_standardized_name_from_table(
+                best_nba_merchant['merchant'], merchant_table
+            )
+
             insights.append(
                 f"{self.team_name} fans are {best_nba_merchant['index_diff']:.0f}% more likely "
-                f"to spend on {best_nba_merchant['merchant']} than {self.league} Fans"
+                f"to spend on {standardized_name} than {self.league} Fans"
             )
 
         return insights
 
     def _find_highest_ppc_merchant(self, merchant_df: pd.DataFrame,
                                    top_merchants: List[str]) -> Optional[Dict[str, Any]]:
-        """Find merchant with highest purchases per customer"""
+        """Find merchant with highest purchases per customer (uses standardized names)"""
         if merchant_df.empty:
             return None
 
         # Filter for team fans and top merchants
         filtered_df = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['MERCHANT'].isin(top_merchants))
+            (merchant_df['MERCHANT'].isin(top_merchants))  # MERCHANT now has standardized names
             ]
 
         if filtered_df.empty:
@@ -595,20 +713,20 @@ class CategoryAnalyzer:
         highest_ppc_row = filtered_df.nlargest(1, 'PPC').iloc[0]
 
         return {
-            'merchant': highest_ppc_row['MERCHANT'],
+            'merchant': highest_ppc_row['MERCHANT'],  # Returns standardized name
             'ppc': float(highest_ppc_row['PPC'])
         }
 
     def _find_highest_spc_merchant(self, merchant_df: pd.DataFrame,
                                    top_merchants: List[str]) -> Optional[Dict[str, Any]]:
-        """Find merchant with highest spend per customer"""
+        """Find merchant with highest spend per customer (uses standardized names)"""
         if merchant_df.empty:
             return None
 
         # Filter for team fans and top merchants
         filtered_df = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['MERCHANT'].isin(top_merchants)) &
+            (merchant_df['MERCHANT'].isin(top_merchants)) &  # MERCHANT now has standardized names
             (merchant_df['SPC'] > 0)  # Ensure valid SPC
             ]
 
@@ -619,13 +737,13 @@ class CategoryAnalyzer:
         highest_spc_row = filtered_df.nlargest(1, 'SPC').iloc[0]
 
         return {
-            'merchant': highest_spc_row['MERCHANT'],
+            'merchant': highest_spc_row['MERCHANT'],  # Returns standardized name
             'spc': float(highest_spc_row['SPC'])
         }
 
     def _find_best_nba_comparison(self, merchant_df: pd.DataFrame,
                                   top_merchants: List[str]) -> Optional[Dict[str, Any]]:
-        """Find merchant with best NBA/League comparison"""
+        """Find merchant with best NBA/League comparison (uses standardized names)"""
         if merchant_df.empty:
             return None
 
@@ -633,7 +751,7 @@ class CategoryAnalyzer:
         nba_comp = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
             (merchant_df['COMPARISON_POPULATION'] == self.league_fans) &
-            (merchant_df['MERCHANT'].isin(top_merchants))
+            (merchant_df['MERCHANT'].isin(top_merchants))  # MERCHANT now has standardized names
             ]
 
         if nba_comp.empty:
@@ -642,20 +760,20 @@ class CategoryAnalyzer:
         # Find merchant with highest PERC_INDEX
         best_merchant = nba_comp.nlargest(1, 'PERC_INDEX').iloc[0]
 
-        # Calculate index difference (no need to subtract 100 anymore)
+        # Calculate index difference
         index_diff = float(best_merchant['PERC_INDEX'])
 
         # Only report if significant
         if index_diff > self.min_significant_difference:
             return {
-                'merchant': best_merchant['MERCHANT'],
+                'merchant': best_merchant['MERCHANT'],  # Returns standardized name
                 'index_diff': index_diff
             }
 
         return None
 
     def _get_sponsorship_recommendation(self, merchant_df: pd.DataFrame) -> Dict[str, Any]:
-        """Generate sponsorship recommendation based on composite index"""
+        """Generate sponsorship recommendation based on composite index (with standardized names)"""
         if merchant_df.empty:
             return {}
 
@@ -670,10 +788,10 @@ class CategoryAnalyzer:
 
         # Find merchant with highest composite index
         best_merchant = team_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
-        merchant_name = best_merchant['MERCHANT']
+        merchant_name = best_merchant['MERCHANT']  # Now returns standardized name
         composite_index = float(best_merchant['COMPOSITE_INDEX'])
 
-        # Generate recommendation text
+        # Generate recommendation text (now with standardized name)
         main_recommendation = (
             f"The {self.team_short} should target {merchant_name} for a sponsorship "
             f"based on having the highest composite index of {composite_index:.0f}"
@@ -687,7 +805,7 @@ class CategoryAnalyzer:
         )
 
         return {
-            'merchant': merchant_name,
+            'merchant': merchant_name,  # Now standardized name
             'composite_index': composite_index,
             'explanation': main_recommendation,
             'sub_explanation': sub_explanation,
