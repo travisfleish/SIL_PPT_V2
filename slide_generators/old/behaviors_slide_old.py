@@ -60,11 +60,9 @@ class BehaviorsSlide(BaseSlide):
         logger.info("Generating community index chart...")
         chart_path = self._create_community_chart(merchant_ranker, colors)
 
-        # FIX 2: Use blank layout with no automatic placeholders
-        slide = self.presentation.slides.add_slide(self.blank_layout)
-
-        # Set slide background to white
-        self._set_slide_background(slide, 'FFFFFF')
+        # Use the content layout (SIL white layout #12)
+        slide = self.add_content_slide()
+        logger.info("Added behaviors slide using SIL white layout")
 
         # Add header
         self._add_header(slide, team_name)
@@ -260,13 +258,6 @@ class BehaviorsSlide(BaseSlide):
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(10)
         p.alignment = PP_ALIGN.CENTER
-
-    def _set_slide_background(self, slide, color_hex: str):
-        """Set slide background color"""
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = RGBColor.from_string(color_hex)
 
 
 # Convenience function
