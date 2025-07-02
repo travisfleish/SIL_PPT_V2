@@ -13,13 +13,15 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 import logging
 
+from .base_slide import BaseSlide
+
 logger = logging.getLogger(__name__)
 
 # Default font
 DEFAULT_FONT_FAMILY = "Red Hat Display"
 
 
-class DemographicsSlide:
+class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
     """Generate the complete demographics slide with all charts"""
 
     def __init__(self, presentation: Presentation = None):
@@ -29,19 +31,7 @@ class DemographicsSlide:
         Args:
             presentation: Existing presentation to add slide to
         """
-        if presentation is None:
-            self.presentation = Presentation()
-            # FIX 1: Set 16:9 aspect ratio for new presentations
-            self.presentation.slide_width = Inches(13.333)
-            self.presentation.slide_height = Inches(7.5)
-        else:
-            self.presentation = presentation
-
-        # FIX 2: Use blank layout (index 6) with no placeholders
-        self.blank_layout = self.presentation.slide_layouts[6]
-
-        # Set default font
-        self.default_font = DEFAULT_FONT_FAMILY
+        super().__init__(presentation)  # Call parent constructor
 
     def generate(self,
                  demographic_data: Dict[str, Any],
@@ -65,8 +55,9 @@ class DemographicsSlide:
         team_short = team_config.get('team_name_short', team_name.split()[-1])
         colors = team_config.get('colors', {})
 
-        # FIX 2: Use blank layout with no title placeholder
-        slide = self.presentation.slides.add_slide(self.blank_layout)
+        # Use the content layout (SIL white layout #12)
+        slide = self.add_content_slide()
+        logger.info("Added demographics slide using SIL white layout")
 
         # Add header
         self._add_header(slide, team_name)
@@ -302,11 +293,7 @@ class DemographicsSlide:
 
     def _hex_to_rgb(self, hex_color: str) -> RGBColor:
         """Convert hex color to RGBColor"""
-        hex_color = hex_color.lstrip('#')
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-        return RGBColor(r, g, b)
+        return self.hex_to_rgb(hex_color)  # Use parent method
 
     def save(self, output_path: Path) -> Path:
         """Save presentation"""

@@ -2,7 +2,7 @@
 """
 Create demographic visualizations for PowerPoint slides
 Generates charts matching the style from the sample PPT
-Now includes ethnicity chart support and Red Hat Display font
+Now includes ethnicity chart support
 """
 
 import matplotlib.pyplot as plt
@@ -11,21 +11,6 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
-import matplotlib.font_manager as fm
-import warnings
-
-# Try to use Red Hat Display font
-CHART_FONT = 'Red Hat Display'
-FALLBACK_FONT = 'Arial'
-
-# Check if Red Hat Display is available
-available_fonts = [f.name for f in fm.fontManager.ttflist]
-if CHART_FONT in available_fonts:
-    plt.rcParams['font.family'] = CHART_FONT
-    print(f"Using {CHART_FONT} for charts")
-else:
-    plt.rcParams['font.family'] = FALLBACK_FONT
-    warnings.warn(f"{CHART_FONT} not found. Using {FALLBACK_FONT} for charts.")
 
 # Set style for professional appearance
 plt.style.use('default')  # Use default style
@@ -34,10 +19,6 @@ plt.rcParams['axes.facecolor'] = 'white'
 plt.rcParams['axes.edgecolor'] = 'black'
 plt.rcParams['grid.alpha'] = 0.3
 plt.rcParams['font.size'] = 10
-
-# Force matplotlib to use the font for all text elements
-plt.rcParams['font.sans-serif'] = [CHART_FONT, FALLBACK_FONT, 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False  # Proper minus sign rendering
 
 
 class DemographicCharts:
@@ -55,35 +36,11 @@ class DemographicCharts:
         self.title_size = 12
         self.label_size = 9
 
-        # Set font family for this instance
-        self.font_family = CHART_FONT if CHART_FONT in available_fonts else FALLBACK_FONT
-
         self.community_colors = [
             self.colors['primary'],
             self.colors['secondary'],
             self.colors['accent']
         ]
-
-    def _set_font_properties(self, ax):
-        """Apply font properties to an axes object"""
-        # Set font for title
-        ax.title.set_fontfamily(self.font_family)
-
-        # Set font for axis labels
-        ax.xaxis.label.set_fontfamily(self.font_family)
-        ax.yaxis.label.set_fontfamily(self.font_family)
-
-        # Set font for tick labels
-        for label in ax.get_xticklabels():
-            label.set_fontfamily(self.font_family)
-        for label in ax.get_yticklabels():
-            label.set_fontfamily(self.font_family)
-
-        # Set font for legend if exists
-        legend = ax.get_legend()
-        if legend:
-            for text in legend.get_texts():
-                text.set_fontfamily(self.font_family)
 
     def create_grouped_bar_chart(self, data: pd.DataFrame, title: str,
                                  ylabel: str = '% of Total Customer Count',
@@ -101,20 +58,17 @@ class DemographicCharts:
             for bar in bars:
                 height = bar.get_height()
                 if height > 0:
-                    text = ax.text(bar.get_x() + bar.get_width() / 2., height, f'{int(round(height))}%',
-                                   ha='center', va='bottom', fontsize=self.label_size,
-                                   fontfamily=self.font_family)
+                    ax.text(bar.get_x() + bar.get_width() / 2., height, f'{int(round(height))}%',
+                            ha='center', va='bottom', fontsize=self.label_size)
 
         ax.set_xlabel('')
-        ax.set_ylabel(ylabel, fontsize=self.font_size, fontfamily=self.font_family)
-        ax.set_title(title, fontsize=self.title_size, fontweight='bold', pad=20, fontfamily=self.font_family)
+        ax.set_ylabel(ylabel, fontsize=self.font_size)
+        ax.set_title(title, fontsize=self.title_size, fontweight='bold', pad=20)
         ax.set_xticks(indices)
         ax.set_xticklabels(data.index, rotation=rotation, ha='right' if rotation else 'center')
 
-        # Add legend with font
-        legend = ax.legend(loc='upper right', frameon=True, fontsize=self.font_size)
-        for text in legend.get_texts():
-            text.set_fontfamily(self.font_family)
+        # Add legend
+        ax.legend(loc='upper right', frameon=True, fontsize=self.font_size)
 
         max_value = data.max().max()
         ax.set_ylim(0, (max_value if pd.notna(max_value) and max_value > 0 else 100) * 1.15)
@@ -124,9 +78,6 @@ class DemographicCharts:
 
         # Format y-axis as percentages without decimals
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
-
-        # Apply font properties to all text elements
-        self._set_font_properties(ax)
 
         plt.tight_layout()
         return fig
@@ -145,18 +96,12 @@ class DemographicCharts:
             colors = ['#4472C4', '#FFC000']
             wedges, texts, autotexts = ax.pie(percentages, labels=None, colors=colors,
                                               autopct='%1.0f%%', startangle=90,
-                                              textprops={'fontsize': self.font_size,
-                                                         'fontfamily': self.font_family})
+                                              textprops={'fontsize': self.font_size})
             for autotext in autotexts:
                 autotext.set_color('white')
                 autotext.set_fontweight('bold')
-                autotext.set_fontfamily(self.font_family)
-
-            # Set title with font
-            ax.set_title(community, fontsize=self.font_size, pad=20, fontfamily=self.font_family)
-
-        # Set main title with font
-        fig.suptitle(title, fontsize=self.title_size, fontweight='bold', fontfamily=self.font_family)
+            ax.set_title(community, fontsize=self.font_size, pad=20)
+        fig.suptitle(title, fontsize=self.title_size, fontweight='bold')
         plt.tight_layout()
         return fig
 
@@ -209,21 +154,15 @@ class DemographicCharts:
                                 xytext=(0, 3),
                                 textcoords="offset points",
                                 ha='center', va='bottom',
-                                fontsize=self.label_size,
-                                fontfamily=self.font_family)
+                                fontsize=self.label_size)
 
-        # Styling with fonts
-        ax.set_xlabel('Ethnicity', fontsize=self.font_size, fontweight='bold', fontfamily=self.font_family)
-        ax.set_ylabel('Percentage of Community', fontsize=self.font_size, fontweight='bold',
-                      fontfamily=self.font_family)
-        ax.set_title('Ethnicity', fontsize=self.title_size, fontweight='bold', pad=20, fontfamily=self.font_family)
+        # Styling
+        ax.set_xlabel('Ethnicity', fontsize=self.font_size, fontweight='bold')
+        ax.set_ylabel('Percentage of Community', fontsize=self.font_size, fontweight='bold')
+        ax.set_title('Ethnicity', fontsize=self.title_size, fontweight='bold', pad=20)
         ax.set_xticks(x)
         ax.set_xticklabels(data.index, fontsize=self.font_size)
-
-        # Legend with font
-        legend = ax.legend(loc='upper right', frameon=True, fontsize=self.font_size)
-        for text in legend.get_texts():
-            text.set_fontfamily(self.font_family)
+        ax.legend(loc='upper right', frameon=True, fontsize=self.font_size)
 
         # Remove top and right spines
         ax.spines['top'].set_visible(False)
@@ -239,9 +178,6 @@ class DemographicCharts:
         # Add gridlines
         ax.grid(True, axis='y', alpha=0.3, linestyle='--')
         ax.set_axisbelow(True)
-
-        # Apply font properties
-        self._set_font_properties(ax)
 
         plt.tight_layout()
         return fig
@@ -282,7 +218,7 @@ class DemographicCharts:
                         fig = self.create_occupation_chart(df)
                     elif demo_type == 'children':
                         fig = self.create_children_chart(df)
-                    elif demo_type == 'ethnicity':
+                    elif demo_type == 'ethnicity':  # ADD THIS
                         fig = self.create_ethnicity_chart(df)
                     else:
                         fig = self.create_grouped_bar_chart(df, demo_data['title'])

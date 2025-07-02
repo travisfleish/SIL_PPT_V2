@@ -21,7 +21,8 @@ from data_processors.snowflake_connector import query_to_dataframe
 
 # Import slide generators
 from slide_generators.title_slide import TitleSlide
-from slide_generators.demographics_slide import DemographicsSlide
+from slide_generators.demographics_slide1 import DemographicsSlide1
+from slide_generators.demographics_slide2 import DemographicsSlide2
 from slide_generators.behaviors_slide import BehaviorsSlide
 from slide_generators.category_slide import CategorySlide
 
@@ -152,8 +153,11 @@ class PowerPointBuilder:
         base_slide.DEFAULT_FONT_FAMILY = font_name
 
         # Update individual slide generators
-        import slide_generators.demographics_slide as demo_slide
-        demo_slide.DEFAULT_FONT_FAMILY = font_name
+        import slide_generators.demographics_slide1 as demo_slide1
+        demo_slide1.DEFAULT_FONT_FAMILY = font_name
+
+        import slide_generators.demographics_slide2 as demo_slide2
+        demo_slide2.DEFAULT_FONT_FAMILY = font_name
 
         import slide_generators.category_slide as cat_slide
         cat_slide.DEFAULT_FONT_FAMILY = font_name
@@ -180,8 +184,8 @@ class PowerPointBuilder:
             # 1. Create title slide
             self._create_title_slide()
 
-            # 2. Create demographics slide
-            self._create_demographics_slide()
+            # 2. Create demographics slides (now two slides)
+            self._create_demographics_slides()
 
             # 3. Create behaviors slide
             self._create_behaviors_slide()
@@ -220,9 +224,9 @@ class PowerPointBuilder:
         self.slides_created.append("Title Slide")
         logger.info("✓ Title slide created")
 
-    def _create_demographics_slide(self):
-        """Create the demographics slide with all charts"""
-        logger.info("Creating demographics slide...")
+    def _create_demographics_slides(self):
+        """Create both demographics slides with all charts"""
+        logger.info("Creating demographics slides...")
 
         try:
             # Load demographics data
@@ -251,24 +255,35 @@ class PowerPointBuilder:
                 output_dir=self.charts_dir
             )
 
-            # Create slide
-            demo_generator = DemographicsSlide(self.presentation)
+            # Create demographics slide 1 (Gender, Ethnicity, Generation)
+            demo_generator1 = DemographicsSlide1(self.presentation)
+            demo_generator1.default_font = self.presentation_font
 
-            # Ensure the slide generator uses the validated font
-            demo_generator.default_font = self.presentation_font
-
-            self.presentation = demo_generator.generate(
+            self.presentation = demo_generator1.generate(
                 demographic_data=demographic_data,
                 chart_dir=self.charts_dir,
                 team_config=self.team_config
             )
 
-            self.slides_created.append("Demographics")
-            logger.info("✓ Demographics slide created")
+            self.slides_created.append("Demographics Slide 1 (Gender, Ethnicity, Generation)")
+            logger.info("✓ Demographics slide 1 created")
+
+            # Create demographics slide 2 (Income, Children, Occupation)
+            demo_generator2 = DemographicsSlide2(self.presentation)
+            demo_generator2.default_font = self.presentation_font
+
+            self.presentation = demo_generator2.generate(
+                demographic_data=demographic_data,
+                chart_dir=self.charts_dir,
+                team_config=self.team_config
+            )
+
+            self.slides_created.append("Demographics Slide 2 (Income, Children, Occupation)")
+            logger.info("✓ Demographics slide 2 created")
 
         except Exception as e:
-            logger.error(f"Error creating demographics slide: {str(e)}")
-            self._add_placeholder_slide("Demographics slide - error loading data")
+            logger.error(f"Error creating demographics slides: {str(e)}")
+            self._add_placeholder_slide("Demographics slides - error loading data")
 
     def _create_behaviors_slide(self):
         """Create the fan behaviors slide"""
