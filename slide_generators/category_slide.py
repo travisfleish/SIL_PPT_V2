@@ -14,11 +14,159 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.dml import MSO_THEME_COLOR
 import pandas as pd
 import logging
+import re
 
 from .base_slide import BaseSlide
 from data_processors.category_analyzer import CategoryAnalyzer, CategoryMetrics
 
 logger = logging.getLogger(__name__)
+
+
+# Formatting utility functions
+def format_percentage_no_decimal(value):
+    """Format percentage without decimals, handle 0% as EQUAL"""
+    if isinstance(value, str):
+        # Extract number from string like "10.5%"
+        try:
+            num = float(value.replace('%', '').strip())
+        except:
+            return value
+    else:
+        num = float(value)
+
+    # Handle 0% special case
+    if num == 0:
+        return "EQUAL"
+
+    # Round to nearest whole number
+    return f"{int(round(num))}%"
+
+
+def format_currency_no_cents(value):
+    """Format currency without cents and with commas"""
+    if isinstance(value, str):
+        # Extract number from string like "$2,536.17"
+        try:
+            num = float(value.replace('$', '').replace(',', '').strip())
+        except:
+            return value
+    else:
+        num = float(value)
+
+    return f"${int(round(num)):,}"
+
+
+def clean_text_references(text):
+    """Remove (Excl. Jazz Fans) and similar references"""
+    # Remove various exclusion patterns
+    patterns = [
+        r'\(Excl\. [^)]*\)',
+        r'\(excl\. [^)]*\)',
+        r'\(Excluding [^)]*\)',
+        r'\(excluding [^)]*\)'
+    ]
+
+    for pattern in patterns:
+        text = re.sub(pattern, '', text)
+
+    # Clean up extra spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
+
+def format_gen_pop_references(text):
+    """Convert 'gen pop' to 'local gen pop' without duplication"""
+    # First handle cases where "local gen pop" might already exist (fix duplications)
+    text = re.sub(r'\blocal\s+local\s+gen\s+pop\b', 'local gen pop', text, flags=re.IGNORECASE)
+
+    # Handle "Local Gen Pop" (capitalized) -> "local gen pop"
+    text = re.sub(r'\bLocal\s+Gen\s+Pop\b', 'local gen pop', text)
+
+    # Then handle standalone "gen pop" that doesn't already have "local"
+    text = re.sub(r'(?<!local\s)\bgen pop\b', 'local gen pop', text, flags=re.IGNORECASE)
+
+    return text
+
+
+def clean_subcategory_duplication(text, category_name):
+    """Remove category name duplication in subcategory references"""
+    # Convert category name to different case variations for matching
+    category_variations = [
+        category_name,
+        category_name.lower(),
+        category_name.upper(),
+        category_name.title()
+    ]
+
+    # Remove "Category - Subcategory" patterns and just keep "Subcategory"
+    for cat_var in category_variations:
+        # Pattern: "Category - Subcategory" -> "Subcategory"
+        pattern = rf'\b{re.escape(cat_var)}\s*-\s*'
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+
+    return text.strip()
+
+
+def remove_unnecessary_comparisons(text):
+    """Remove comparison language when no actual comparison is provided"""
+    # Remove "vs. the Local Gen Pop" when it's just stating a fact without comparison
+    # Look for patterns like "spend $X vs. the Local Gen Pop" without actual comparison
+
+    # Pattern: "spend $amount vs. the Local Gen Pop" -> "spend $amount"
+    text = re.sub(r'spend\s+(\$[\d,]+)\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1', text, flags=re.IGNORECASE)
+
+    # Pattern: "spend $amount per year vs. the Local Gen Pop" -> "spend $amount per year"
+    text = re.sub(r'spend\s+(\$[\d,]+)\s+per\s+year\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1 per year', text,
+                  flags=re.IGNORECASE)
+
+    return text
+
+
+def process_insight_text_enhanced(insight_text: str, category_name: str = "") -> str:
+    """Enhanced process insight text with all formatting rules including subcategory fixes"""
+    # Apply all formatting rules
+    text = clean_text_references(insight_text)
+    text = format_gen_pop_references(text)
+
+    # Fix capitalization
+    text = text.replace(' MORE ', ' more ')
+
+    # Clean subcategory duplication if category name provided
+    if category_name:
+        text = clean_subcategory_duplication(text, category_name)
+
+    # Remove unnecessary comparison language
+    text = remove_unnecessary_comparisons(text)
+
+    # Format any embedded percentages and currency
+    def format_pct_match(match):
+        return format_percentage_no_decimal(match.group(0))
+
+    text = re.sub(r'\d+\.?\d*%', format_pct_match, text)
+
+    # Find and format currency
+    def format_curr_match(match):
+        return format_currency_no_cents(match.group(0))
+
+    text = re.sub(r'\$[\d,]+\.?\d*', format_curr_match, text)
+
+    return text
+
+
+def process_insight_text(insight_text: str) -> str:
+    """Process insight text with all formatting rules - legacy function for compatibility"""
+    return process_insight_text_enhanced(insight_text)
+
+
+def format_subcategory_text(category_name: str, subcategory_name: str) -> str:
+    """Format subcategory text to avoid duplication"""
+    # If subcategory already contains the category name, just return subcategory
+    if category_name.lower() in subcategory_name.lower():
+        return subcategory_name
+
+    # Otherwise return the full name
+    return f"{category_name} - {subcategory_name}"
 
 
 class CategorySlide(BaseSlide):
@@ -33,7 +181,7 @@ class CategorySlide(BaseSlide):
         """
         super().__init__(presentation)
 
-        # Colors for the slide
+        # Colors for the slide - UPDATED with EQUAL color
         self.colors = {
             'header_bg': RGBColor(240, 240, 240),
             'header_border': RGBColor(200, 200, 200),
@@ -41,6 +189,7 @@ class CategorySlide(BaseSlide):
             'table_border': RGBColor(0, 0, 0),
             'positive': RGBColor(0, 176, 80),  # Green
             'negative': RGBColor(255, 0, 0),  # Red
+            'equal': RGBColor(184, 134, 11),  # Dark yellow for EQUAL
             'neutral': RGBColor(0, 0, 0)  # Black
         }
 
@@ -70,10 +219,11 @@ class CategorySlide(BaseSlide):
         # Add header
         self._add_header(slide, team_name, analysis_results['slide_title'])
 
-        # Add title
-        self._add_title(slide, analysis_results['slide_title'])
+        # Add title - UPDATED to use "Category Analysis: [CATEGORY]"
+        category_title = f"Category Analysis: {analysis_results['display_name']}"
+        self._add_title(slide, category_title)
 
-        # Add category insights (left side) - UPDATED TO SEPARATE NBA COMPARISON
+        # Add category insights (left side) - UPDATED with formatting fixes
         self._add_category_insights(slide, analysis_results, team_short, team_config)
 
         # Add category metrics table (top right) - pass results for category name
@@ -103,29 +253,35 @@ class CategorySlide(BaseSlide):
         # Extract team info
         team_name = team_config.get('team_name', 'Team')
         team_short = team_config.get('team_name_short', team_name.split()[-1])
+        category_name = analysis_results['display_name']
 
         # Use the content layout (SIL white layout #12)
         slide = self.add_content_slide()
         logger.info(f"Added brand slide for {analysis_results['display_name']} using SIL white layout")
 
-        # Add header - brand slide uses category name + " Brands"
-        header_title = f"{analysis_results['display_name']} Sponsor Analysis"
+        # UPDATED brand slide title format based on category
+        if category_name.upper() == "QSR":
+            brand_title = f"Top QSR Brands for {team_name} Fans"
+        else:
+            brand_title = f"Top {category_name} Brands for {team_name} Fans"
+
+        # Add header - brand slide uses updated title format
+        header_title = f"Sponsor Spending Analysis: {category_name} Brands"
         self._add_header(slide, team_name, header_title)
 
-        # Add title
-        title = f"{analysis_results['display_name']} Sponsor Analysis"
-        self._add_title(slide, title)
+        # Add title with updated format
+        self._add_title(slide, brand_title)
 
         # Add brand logos (numbered circles) - adjusted for 16:9
         self._add_brand_logos(slide, analysis_results['merchant_stats'])
 
-        # Add brand insights (left side)
-        self._add_brand_insights(slide, analysis_results, team_name)
+        # Add brand insights (left side) - UPDATED with formatting
+        self._add_brand_insights(slide, analysis_results, team_name, team_short, category_name)
 
         # Add brand table (right side) - adjusted for 16:9
         self._add_brand_table(slide, analysis_results['merchant_stats'])
 
-        # Add sponsorship recommendation
+        # Add sponsorship recommendation - UPDATED with formatting
         self._add_sponsor_recommendation(slide, analysis_results['recommendation'], team_config)
 
         logger.info(f"Generated {analysis_results['display_name']} brand slide")
@@ -168,7 +324,7 @@ class CategorySlide(BaseSlide):
         p.font.color.rgb = RGBColor(85, 85, 85)
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
-        """Add category insights section - UPDATED TO SEPARATE NBA COMPARISON"""
+        """Add category insights section - UPDATED WITH ALL FORMATTING FIXES"""
         # Insights title
         insights_title = slide.shapes.add_textbox(
             Inches(0.5), Inches(1.5),
@@ -176,19 +332,25 @@ class CategorySlide(BaseSlide):
         )
         insights_title.text_frame.text = "Category Insights:"
         p = insights_title.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
+        p.font.name = self.default_font
         p.font.size = Pt(14)
         p.font.bold = True
+
+        # Get category name for subcategory cleaning
+        category_name = results.get('display_name', '')
 
         # Separate insights into regular and NBA comparison
         regular_insights = []
         nba_insights = []
 
         for insight in results['insights']:
-            if "NBA" in insight and "compared to" in insight:
-                nba_insights.append(insight)
+            # Clean and format the insight text with enhanced processing
+            cleaned_insight = process_insight_text_enhanced(insight, category_name)
+
+            if "NBA" in cleaned_insight and "compared to" in cleaned_insight:
+                nba_insights.append(cleaned_insight)
             else:
-                regular_insights.append(insight)
+                regular_insights.append(cleaned_insight)
 
         # Regular insights box
         insights_box = slide.shapes.add_textbox(
@@ -199,11 +361,11 @@ class CategorySlide(BaseSlide):
         text_frame = insights_box.text_frame
         text_frame.word_wrap = True
 
-        # Add regular insights (first 4)
-        for i, insight in enumerate(regular_insights[:4], 1):
-            p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
-            p.text = f"{i}. {insight}"
-            p.font.name = self.default_font  # Red Hat Display
+        # Add regular insights with BULLETS instead of numbers
+        for i, insight in enumerate(regular_insights[:4]):
+            p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
+            p.text = f"• {insight}"  # Changed from f"{i+1}. {insight}"
+            p.font.name = self.default_font
             p.font.size = Pt(11)
             p.line_spacing = 1.2
 
@@ -214,7 +376,7 @@ class CategorySlide(BaseSlide):
                 Inches(0.5), Inches(5.2),
                 Inches(4), Inches(0.3)
             )
-            nba_label.text_frame.text = f"{team_short} Fans vs. {team_config.get('league', 'NBA')} Fans"
+            nba_label.text_frame.text = f"{team_short} Fans vs. {team_config.get('league', 'NBA')} Fans:"
             p = nba_label.text_frame.paragraphs[0]
             p.font.name = self.default_font
             p.font.size = Pt(14)
@@ -229,17 +391,16 @@ class CategorySlide(BaseSlide):
             nba_text_frame = nba_box.text_frame
             nba_text_frame.word_wrap = True
 
-            # Add NBA comparison insights (starting from 5)
-            start_num = len(regular_insights[:4]) + 1
-            for i, insight in enumerate(nba_insights, start_num):
-                p = nba_text_frame.add_paragraph() if i > start_num else nba_text_frame.paragraphs[0]
-                p.text = f"{i}. {insight}"
+            # Add NBA insights with BULLETS instead of numbers
+            for i, insight in enumerate(nba_insights[:2]):
+                p = nba_text_frame.add_paragraph() if i > 0 else nba_text_frame.paragraphs[0]
+                p.text = f"• {insight}"  # Changed from numbered
                 p.font.name = self.default_font
                 p.font.size = Pt(11)
                 p.line_spacing = 1.2
 
     def _add_category_table(self, slide, results: Dict[str, Any]):
-        """Add category metrics table (adjusted for 16:9)"""
+        """Add category metrics table (adjusted for 16:9) with formatting fixes"""
         # Extract metrics from results
         metrics = results['category_metrics']
 
@@ -259,28 +420,30 @@ class CategorySlide(BaseSlide):
         table.columns[2].width = Inches(2.0)  # How likely
         table.columns[3].width = Inches(1.9)  # Purchases
 
-        # Header row
-        headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. gen pop',
-                   'How many more purchases\nper fan v gen pop']
+        # Header row - UPDATED with "local gen pop"
+        headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
+                   'How many more purchases\nper fan vs. local gen pop']
 
         for i, header in enumerate(headers):
             cell = table.cell(0, i)
             cell.text = header
             self._format_header_cell(cell)
 
-        # Data row - extract category name properly
+        # Data row - extract category name properly and apply formatting
         category_name = results.get('display_name', 'Category')
         table.cell(1, 0).text = category_name
-        table.cell(1, 1).text = metrics.format_percent_fans()
-        table.cell(1, 2).text = metrics.format_likelihood()
-        table.cell(1, 3).text = metrics.format_purchases()
+
+        # Apply formatting to the metric values
+        table.cell(1, 1).text = self._format_metric_value(metrics.format_percent_fans())
+        table.cell(1, 2).text = self._format_metric_value(metrics.format_likelihood())
+        table.cell(1, 3).text = self._format_metric_value(metrics.format_purchases())
 
         # Format data cells
         for i in range(4):
             self._format_data_cell(table.cell(1, i))
 
     def _add_subcategory_table(self, slide, subcategory_stats: pd.DataFrame):
-        """Add subcategory statistics table (adjusted for 16:9)"""
+        """Add subcategory statistics table (adjusted for 16:9) with formatting fixes"""
         if subcategory_stats.empty:
             return
 
@@ -300,24 +463,28 @@ class CategorySlide(BaseSlide):
         table.columns[2].width = Inches(1.9)  # How likely
         table.columns[3].width = Inches(1.8)  # Purchases
 
-        # Headers
-        headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. gen pop',
-                   'How many more purchases\nper fan v gen pop']
+        # Headers - UPDATED with "local gen pop"
+        headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
+                   'How many more purchases\nper fan vs. local gen pop']
 
         for i, header in enumerate(headers):
             cell = table.cell(0, i)
             cell.text = header
             self._format_header_cell(cell)
 
-        # Data rows
+        # Data rows with formatting
         for row_idx, (_, row) in enumerate(subcategory_stats.iterrows(), 1):
             if row_idx >= rows:
                 break
 
-            table.cell(row_idx, 0).text = row['Subcategory']
-            table.cell(row_idx, 1).text = row['Percent of Fans Who Spend']
-            table.cell(row_idx, 2).text = row['How likely fans are to spend vs. gen pop']
-            table.cell(row_idx, 3).text = row['Purchases per fan vs. gen pop']
+            # Apply subcategory text formatting to avoid duplication
+            subcategory_text = row['Subcategory']
+            table.cell(row_idx, 0).text = subcategory_text
+
+            # Apply formatting to metric values
+            table.cell(row_idx, 1).text = self._format_metric_value(row['Percent of Fans Who Spend'])
+            table.cell(row_idx, 2).text = self._format_metric_value(row['How likely fans are to spend vs. gen pop'])
+            table.cell(row_idx, 3).text = self._format_metric_value(row['Purchases per fan vs. gen pop'])
 
             # Format cells
             for col in range(4):
@@ -362,8 +529,8 @@ class CategorySlide(BaseSlide):
             p.font.size = Pt(48)
             p.font.color.rgb = RGBColor(150, 150, 150)
 
-    def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str):
-        """Add brand-specific insights"""
+    def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str, team_short: str, category_name: str):
+        """Add brand-specific insights with updated formatting"""
         # Top Brand Insights section
         insights_title = slide.shapes.add_textbox(
             Inches(0.5), Inches(2.8),
@@ -374,9 +541,8 @@ class CategorySlide(BaseSlide):
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(14)
         p.font.bold = True
-        p.font.style = 'Italic'  # Match the sample
 
-        # Insights
+        # Insights box
         insights_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(3.2),
             Inches(4.5), Inches(1.6)  # Reduced height to make room for Top Brand Target
@@ -385,16 +551,28 @@ class CategorySlide(BaseSlide):
         text_frame = insights_box.text_frame
         text_frame.word_wrap = True
 
-        # Add merchant insights
-        for i, insight in enumerate(results['merchant_insights'][:4], 1):
-            p = text_frame.add_paragraph() if i > 1 else text_frame.paragraphs[0]
-            p.text = f"{i}. {insight}"
+        # UPDATED: Format insight #2 with standardized text
+        merchant_insights = results.get('merchant_insights', [])
+
+        for i, insight in enumerate(merchant_insights[:4]):
+            p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
+
+            # Format insight #2 (index 1) with standardized format
+            if i == 1 and 'purchases per year' in insight.lower():
+                # Extract brand and number from insight for standardization
+                formatted_insight = self._format_insight_two(insight, team_short, category_name)
+                p.text = f"• {formatted_insight}"
+            else:
+                # Apply general formatting
+                formatted_insight = process_insight_text(insight)
+                p.text = f"• {formatted_insight}"
+
             p.font.name = self.default_font  # Red Hat Display
             p.font.size = Pt(10)
             p.line_spacing = 1.0
 
     def _add_brand_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add brand ranking table - adjusted for 16:9"""
+        """Add brand ranking table - adjusted for 16:9 with formatting fixes"""
         merchant_df, _ = merchant_stats
 
         if merchant_df.empty:
@@ -413,31 +591,33 @@ class CategorySlide(BaseSlide):
         # Headers
         headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand',
                    'Percent of\nFans Who\nSpend',
-                   'How likely\nfans are to\nspend vs.\ngen pop',
-                   'Purchases\nPer Fan\n(vs. Gen\nPop)']
+                   'How likely\nfans are to\nspend vs.\nlocal gen pop',
+                   'Purchases\nPer Fan\n(vs. Local\nGen Pop)']
 
         for i, header in enumerate(headers):
             cell = table.cell(0, i)
             cell.text = header
             self._format_header_cell(cell, small=True)
 
-        # Data rows
+        # Data rows with formatting
         for row_idx, (_, row) in enumerate(merchant_df.iterrows(), 1):
             if row_idx >= rows:
                 break
 
             table.cell(row_idx, 0).text = str(row['Rank'])
             table.cell(row_idx, 1).text = row['Brand']
-            table.cell(row_idx, 2).text = row['Percent of Fans Who Spend']
-            table.cell(row_idx, 3).text = row['How likely fans are to spend vs. gen pop']
-            table.cell(row_idx, 4).text = row['Purchases Per Fan (vs. Gen Pop)']
+
+            # Apply formatting to metric values
+            table.cell(row_idx, 2).text = self._format_metric_value(row['Percent of Fans Who Spend'])
+            table.cell(row_idx, 3).text = self._format_metric_value(row['How likely fans are to spend vs. gen pop'])
+            table.cell(row_idx, 4).text = self._format_metric_value(row['Purchases Per Fan (vs. Gen Pop)'])
 
             # Format cells
             for col in range(5):
                 self._format_data_cell(table.cell(row_idx, col), small=True)
 
     def _add_sponsor_recommendation(self, slide, recommendation: Optional[Dict[str, Any]], team_config: Dict[str, Any]):
-        """Add Top Brand Target and sponsorship recommendation"""
+        """Add Top Brand Target and sponsorship recommendation with updated formatting"""
         if not recommendation:
             return
 
@@ -461,18 +641,22 @@ class CategorySlide(BaseSlide):
         text_frame = rec_box.text_frame
         text_frame.word_wrap = True
 
-        # Main recommendation with team name
+        # UPDATED: Standardized recommendation format with composite index
         team_name = team_config.get('team_name', 'Team')
+        merchant_name = recommendation.get('merchant', 'Brand')
+        composite_index = recommendation.get('composite_index', 'N/A')
+
+        # First bullet - main recommendation with composite index
         p1 = text_frame.paragraphs[0]
-        p1.text = f"1. The {team_name} should target {recommendation['merchant']} for a sponsorship based on having the highest composite index"
-        p1.font.name = self.default_font  # Red Hat Display
+        p1.text = f"• The {team_name} should target {merchant_name} for a sponsorship based on having the highest composite index of {composite_index}"
+        p1.font.name = self.default_font
         p1.font.size = Pt(11)
         p1.line_spacing = 1.2
 
-        # Second paragraph - explanation (indented)
+        # Second bullet - standardized explanation
         p2 = text_frame.add_paragraph()
-        p2.text = f"      a.    {recommendation['explanation']}"
-        p2.font.name = self.default_font  # Red Hat Display
+        p2.text = "• The composite index indicates a brand with significant likelihood for more fans to be spending more frequently, and at a higher spend per fan vs. other brands"
+        p2.font.name = self.default_font
         p2.font.size = Pt(11)
         p2.line_spacing = 1.2
 
@@ -501,7 +685,7 @@ class CategorySlide(BaseSlide):
         cell.vertical_anchor = MSO_ANCHOR.MIDDLE
 
     def _format_data_cell(self, cell, small: bool = False):
-        """Format table data cell"""
+        """Format table data cell with updated color handling"""
         # Format text
         text_frame = cell.text_frame
         text_frame.margin_left = Inches(0.05)
@@ -516,111 +700,52 @@ class CategorySlide(BaseSlide):
             paragraph.font.size = Pt(8) if small else Pt(11)  # Consistent data font size
             paragraph.alignment = PP_ALIGN.CENTER
 
-            # Color coding for More/Less
+            # UPDATED color coding with EQUAL handling
             if 'More' in cell.text or 'more' in cell.text:
-                paragraph.font.color.rgb = self.colors['positive']
+                paragraph.font.color.rgb = self.colors['positive']  # Green
             elif 'Less' in cell.text or 'less' in cell.text or 'fewer' in cell.text:
-                paragraph.font.color.rgb = self.colors['negative']
+                paragraph.font.color.rgb = self.colors['negative']  # Red
+            elif 'EQUAL' in cell.text or 'Equal' in cell.text:
+                paragraph.font.color.rgb = self.colors['equal']  # Dark yellow
 
         # Vertical alignment
         cell.vertical_anchor = MSO_ANCHOR.MIDDLE
 
+    def _format_metric_value(self, value: str) -> str:
+        """Apply formatting to metric values (percentages, currency, etc.)"""
+        if not value or pd.isna(value):
+            return "N/A"
 
-    def _add_merchant_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add top merchants table (adjusted for 16:9)"""
-        merchant_df, _ = merchant_stats
+        # Clean text references first
+        formatted_value = clean_text_references(str(value))
+        formatted_value = format_gen_pop_references(formatted_value)
 
-        if merchant_df.empty:
-            return
+        # Handle percentage formatting
+        if '%' in formatted_value:
+            formatted_value = format_percentage_no_decimal(formatted_value)
 
-        # Table position - adjusted to prevent bleeding
-        left = Inches(5.5)  # Moved left to fit better
-        top = Inches(3.0)
-        width = Inches(7.3)  # Adjusted width to fit within slide
+        # Handle currency formatting
+        if '$' in formatted_value:
+            formatted_value = format_currency_no_cents(formatted_value)
 
-        # Create table
-        rows = min(len(merchant_df), 5) + 1  # Max 5 merchants + header
-        table_shape = slide.shapes.add_table(rows, 5, left, top, width, Inches(0.35 * rows))
-        table = table_shape.table
+        return formatted_value
 
-        # Set column widths - better distribution for readability
-        table.columns[0].width = Inches(0.7)  # Rank
-        table.columns[1].width = Inches(1.8)  # Brand
-        table.columns[2].width = Inches(1.3)  # % Fans
-        table.columns[3].width = Inches(1.7)  # Likelihood
-        table.columns[4].width = Inches(1.8)  # Purchases
+    def _format_insight_two(self, insight: str, team_short: str, category_name: str) -> str:
+        """Format insight #2 with standardized format"""
+        # Extract relevant information using regex
 
-        # Headers with proper text wrapping
-        headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand', 'Percent of\nFans Who\nSpend',
-                   'How likely\nfans are to\nspend vs.\ngen pop', 'Purchases\nPer Fan\n(vs. Gen\nPop)']
+        # Try to extract brand name and number of purchases
+        brand_match = re.search(r'at ([A-Z\s&\']+)', insight, re.IGNORECASE)
+        purchases_match = re.search(r'(\d+)\s+purchases?\s+per\s+year', insight, re.IGNORECASE)
 
-        for i, header in enumerate(headers):
-            cell = table.cell(0, i)
-            cell.text = header
-            self._format_header_cell(cell)
+        if brand_match and purchases_match:
+            brand = brand_match.group(1).upper()
+            purchases = purchases_match.group(1)
 
-        # Data rows
-        for row_idx in range(min(5, len(merchant_df))):
-            row = merchant_df.iloc[row_idx]
+            return f"{team_short} fans make an average of {purchases} purchases per year at {brand}—more than any other top {category_name} brand"
 
-            table.cell(row_idx + 1, 0).text = str(row['Rank'])
-            table.cell(row_idx + 1, 1).text = row['Brand']
-            table.cell(row_idx + 1, 2).text = row['Percent of Fans Who Spend']
-            table.cell(row_idx + 1, 3).text = row['How likely fans are to spend vs. gen pop']
-            table.cell(row_idx + 1, 4).text = row['Purchases Per Fan (vs. Gen Pop)']
-
-            # Format cells
-            for col in range(5):
-                self._format_data_cell(table.cell(row_idx + 1, col))
-
-    def _format_header_cell(self, cell, small: bool = False):
-        """Format table header cell"""
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = self.colors['table_header']
-
-        # Format text
-        text_frame = cell.text_frame
-        text_frame.margin_left = Inches(0.05)
-        text_frame.margin_right = Inches(0.05)
-        text_frame.margin_top = Inches(0.03)
-        text_frame.margin_bottom = Inches(0.03)
-        text_frame.word_wrap = True
-
-        # Format all paragraphs in the cell (for multi-line headers)
-        for paragraph in text_frame.paragraphs:
-            paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(8) if small else Pt(10)  # Smaller font for compact tables
-            paragraph.font.bold = True
-            paragraph.alignment = PP_ALIGN.CENTER
-            paragraph.line_spacing = 1.0  # Tighter line spacing for headers
-
-        # Vertical alignment
-        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-
-    def _format_data_cell(self, cell, small: bool = False):
-        """Format table data cell"""
-        # Format text
-        text_frame = cell.text_frame
-        text_frame.margin_left = Inches(0.05)
-        text_frame.margin_right = Inches(0.05)
-        text_frame.margin_top = Inches(0.03)
-        text_frame.margin_bottom = Inches(0.03)
-        text_frame.word_wrap = True
-
-        # Format all paragraphs in the cell
-        for paragraph in text_frame.paragraphs:
-            paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(8) if small else Pt(11)  # Consistent data font size
-            paragraph.alignment = PP_ALIGN.CENTER
-
-            # Color coding for More/Less
-            if 'More' in cell.text or 'more' in cell.text:
-                paragraph.font.color.rgb = self.colors['positive']
-            elif 'Less' in cell.text or 'less' in cell.text or 'fewer' in cell.text:
-                paragraph.font.color.rgb = self.colors['negative']
-
-        # Vertical alignment
-        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+        # Fallback to original insight with general formatting
+        return process_insight_text(insight)
 
 
 # Convenience functions
