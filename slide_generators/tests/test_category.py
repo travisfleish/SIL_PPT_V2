@@ -1,265 +1,358 @@
+# test_logo_integration.py
 """
-Test script for Category Slide formatting changes
-Tests composite index rounding and brand table positioning
+Test script to verify logo integration in category slides
+Tests logo loading, fallback generation, and slide creation
 """
 
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.enum.shapes import MSO_SHAPE
-import pandas as pd
-from typing import Dict, Any, List, Tuple
 import os
+import sys
+from pathlib import Path
+import logging
+import pandas as pd
+from pptx import Presentation
+from PIL import Image
+import shutil
+from datetime import datetime
+
+# Add project root to Python path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+# Import your modules
+from slide_generators.category_slide import CategorySlide, create_category_slides
+from utils.logo_manager import LogoManager
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
-# Mock CategorySlide class with only the methods we're testing
-class CategorySlideTest:
-    def __init__(self):
-        self.presentation = Presentation()
-        self.default_font = 'Arial'  # Use Arial for testing (should be Red Hat Display in prod)
-        self.colors = {
-            'header_bg': RGBColor(240, 240, 240),
-            'header_border': RGBColor(200, 200, 200),
-            'table_header': RGBColor(217, 217, 217),
-            'table_border': RGBColor(0, 0, 0),
-            'positive': RGBColor(0, 176, 80),
-            'negative': RGBColor(255, 0, 0),
-            'equal': RGBColor(184, 134, 11),
-            'neutral': RGBColor(0, 0, 0)
-        }
-
-    def create_test_slide(self):
-        """Create a blank slide for testing"""
-        slide_layout = self.presentation.slide_layouts[5]  # Blank layout
-        return self.presentation.slides.add_slide(slide_layout)
-
-    def test_brand_logos_and_table(self):
-        """Test brand logos and table positioning"""
-        slide = self.create_test_slide()
-
-        # Add title for reference
-        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(8), Inches(0.5))
-        title_box.text_frame.text = "TEST: Brand Logos and Table Positioning"
-        p = title_box.text_frame.paragraphs[0]
-        p.font.size = Pt(24)
-        p.font.bold = True
-
-        # Add brand logos (original positioning)
-        print("Adding brand logos...")
-        start_x = Inches(0.5)
-        y = Inches(1.2)  # Original position
-        spacing = Inches(2.4)
-
-        for i in range(5):
-            x = start_x + (i * spacing)
-
-            # Circle
-            circle = slide.shapes.add_shape(
-                MSO_SHAPE.OVAL,
-                x, y,
-                Inches(1.2), Inches(1.2)
-            )
-            circle.fill.solid()
-            circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
-            circle.line.color.rgb = RGBColor(200, 200, 200)
-            circle.line.width = Pt(2)
-
-            # Number
-            text_box = slide.shapes.add_textbox(
-                x, y + Inches(0.4),
-                Inches(1.2), Inches(0.4)
-            )
-            text_box.text_frame.text = str(i + 1)
-            p = text_box.text_frame.paragraphs[0]
-            p.alignment = PP_ALIGN.CENTER
-            p.font.size = Pt(48)
-            p.font.color.rgb = RGBColor(150, 150, 150)
-
-        print(f"Logos positioned at Y = {y}")
-        print(f"Logo bottom edge at Y = {y + Inches(1.2)}")
-
-        # Add OLD table position (for comparison)
-        self._add_comparison_table(slide, "OLD Position - Overlaps!", Inches(1.2), RGBColor(255, 200, 200))
-
-        # Add NEW table position
-        self._add_comparison_table(slide, "NEW Position - No Overlap", Inches(2.8), RGBColor(200, 255, 200))
-
-        return slide
-
-    def _add_comparison_table(self, slide, label, top_position, bg_color):
-        """Add a comparison table at specified position"""
-        # Add label
-        label_box = slide.shapes.add_textbox(
-            Inches(5.833), top_position - Inches(0.3),
-            Inches(3), Inches(0.25)
-        )
-        label_box.text_frame.text = f"{label} (top = {top_position})"
-        p = label_box.text_frame.paragraphs[0]
-        p.font.size = Pt(10)
-        p.font.bold = True
-
-        # Create sample table
-        rows = 4  # Simplified for visibility
-        cols = 5
-        left = Inches(5.833)
-        width = Inches(7.0)
-        height = Inches(0.35 * rows)
-
-        table = slide.shapes.add_table(rows, cols, left, top_position, width, height).table
-
-        # Headers
-        headers = ['Rank', 'Brand', '% Fans', 'Likelihood', 'Purchases']
-        for i, header in enumerate(headers):
-            cell = table.cell(0, i)
-            cell.text = header
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = bg_color
-
-        # Sample data
-        sample_brands = [
-            ['1', 'McDonald\'s', '92%', '35% More', '93% More'],
-            ['2', 'Chick-fil-A', '79%', '78% More', '93% More'],
-            ['3', 'Wendy\'s', '77%', '55% More', '49% More']
-        ]
-
-        for row_idx, row_data in enumerate(sample_brands, 1):
-            for col_idx, value in enumerate(row_data):
-                table.cell(row_idx, col_idx).text = value
-
-    def test_composite_index_formatting(self):
-        """Test composite index rounding"""
-        slide = self.create_test_slide()
-
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(8), Inches(0.5))
-        title_box.text_frame.text = "TEST: Composite Index Formatting"
-        p = title_box.text_frame.paragraphs[0]
-        p.font.size = Pt(24)
-        p.font.bold = True
-
-        # Test cases for composite index
-        test_cases = [
-            {'value': 188.20250000000001, 'expected': '188'},
-            {'value': 156.7, 'expected': '157'},
-            {'value': 200.5, 'expected': '201'},
-            {'value': 199.4, 'expected': '199'},
-            {'value': 'invalid', 'expected': 'N/A'},
-            {'value': None, 'expected': 'N/A'}
-        ]
-
-        y_position = Inches(1.5)
-
-        for i, test_case in enumerate(test_cases):
-            # Create mock recommendation
-            recommendation = {
-                'merchant': f'Test Brand {i + 1}',
-                'composite_index': test_case['value']
-            }
-
-            # Add test section
-            self._add_test_recommendation(slide, recommendation, y_position, test_case['expected'])
-            y_position += Inches(1.2)
-
-        return slide
-
-    def _add_test_recommendation(self, slide, recommendation, y_pos, expected):
-        """Add a test recommendation section"""
-        # Test input label
-        input_box = slide.shapes.add_textbox(Inches(0.5), y_pos, Inches(3), Inches(0.3))
-        input_box.text_frame.text = f"Input: {recommendation.get('composite_index')}"
-        p = input_box.text_frame.paragraphs[0]
-        p.font.size = Pt(10)
-        p.font.color.rgb = RGBColor(100, 100, 100)
-
-        # Format composite index (the code we're testing)
-        composite_index_raw = recommendation.get('composite_index', 0)
-        try:
-            composite_index = int(round(float(composite_index_raw)))
-        except (ValueError, TypeError):
-            composite_index = 'N/A'
-
-        # Show result
-        result_box = slide.shapes.add_textbox(Inches(0.5), y_pos + Inches(0.3), Inches(8), Inches(0.4))
-        team_name = "Utah Jazz"
-        merchant_name = recommendation.get('merchant', 'Brand')
-
-        result_text = f"• The {team_name} should target {merchant_name} for a sponsorship based on having the highest composite index of {composite_index}"
-        result_box.text_frame.text = result_text
-        p = result_box.text_frame.paragraphs[0]
-        p.font.size = Pt(11)
-
-        # Show expected result
-        expected_box = slide.shapes.add_textbox(Inches(0.5), y_pos + Inches(0.7), Inches(3), Inches(0.3))
-        expected_box.text_frame.text = f"Expected: {expected} | Actual: {composite_index} | {'✓' if str(composite_index) == expected else '✗'}"
-        p = expected_box.text_frame.paragraphs[0]
-        p.font.size = Pt(10)
-        if str(composite_index) == expected:
-            p.font.color.rgb = RGBColor(0, 176, 80)  # Green
-        else:
-            p.font.color.rgb = RGBColor(255, 0, 0)  # Red
-
-    def run_all_tests(self):
-        """Run all tests and save presentation"""
-        print("Running Category Slide Tests...")
-        print("-" * 50)
-
-        # Test 1: Brand logos and table positioning
-        print("\nTest 1: Brand Logos and Table Positioning")
-        slide1 = self.test_brand_logos_and_table()
-
-        # Test 2: Composite index formatting
-        print("\nTest 2: Composite Index Formatting")
-        slide2 = self.test_composite_index_formatting()
-
-        # Save test presentation
-        output_file = "category_slide_test_output.pptx"
-        self.presentation.save(output_file)
-        print(f"\nTest presentation saved to: {output_file}")
-        print("\nPlease open the file to visually verify:")
-        print("1. Brand table is positioned below logos (no overlap)")
-        print("2. Composite index values are rounded to whole numbers")
-
-        return output_file
+def create_test_directories():
+    """Create necessary directories for testing"""
+    dirs = [
+        'assets/logos/merchants',
+        'test_output',
+        'test_logos'
+    ]
+    for dir_path in dirs:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
+        logger.info(f"Created directory: {dir_path}")
 
 
-# Additional function to test formatting utilities
-def test_formatting_functions():
-    """Test the formatting utility functions"""
-    print("\nTesting Formatting Functions:")
-    print("-" * 50)
+def create_sample_logos():
+    """Create sample logo images for testing"""
+    logo_dir = Path('assets/logos/merchants')
 
-    # Test composite index formatting
-    test_values = [
-        188.20250000000001,
-        156.7,
-        200.5,
-        199.4,
-        0,
-        -10.7,
-        "invalid",
-        None
+    # List of test brands with different naming conventions
+    test_brands = [
+        ('mcdonalds.png', 'McD', (255, 199, 0)),  # McDonald's yellow
+        ('chick-fil-a.png', 'CFA', (221, 0, 49)),  # Chick-fil-A red
+        ('wendys.png', 'W', (221, 0, 49)),  # Wendy's red
+        ('taco_bell.png', 'TB', (112, 35, 131)),  # Taco Bell purple
+        ('panda_express.png', 'PE', (194, 39, 45)),  # Panda Express red
     ]
 
-    print("\nComposite Index Formatting Tests:")
-    for value in test_values:
+    created_logos = []
+
+    for filename, text, color in test_brands:
+        logo_path = logo_dir / filename
+
+        # Create a simple logo image
+        img = Image.new('RGBA', (200, 200), (255, 255, 255, 255))
+        from PIL import ImageDraw, ImageFont
+        draw = ImageDraw.Draw(img)
+
+        # Draw colored circle
+        draw.ellipse([10, 10, 190, 190], fill=color, outline=(0, 0, 0))
+
+        # Add text
         try:
-            result = int(round(float(value)))
-            print(f"Input: {value} → Output: {result}")
-        except (ValueError, TypeError):
-            print(f"Input: {value} → Output: N/A (error handling)")
+            font = ImageFont.truetype("arial.ttf", 60)
+        except:
+            font = ImageFont.load_default()
+
+        # Center text
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        x = (200 - text_width) // 2
+        y = (200 - text_height) // 2
+
+        draw.text((x, y), text, fill=(255, 255, 255), font=font)
+
+        # Save logo
+        img.save(logo_path)
+        created_logos.append(str(logo_path))
+        logger.info(f"Created sample logo: {logo_path}")
+
+    return created_logos
+
+
+def test_logo_manager():
+    """Test LogoManager functionality"""
+    print("\n" + "="*50)
+    print("TESTING LOGO MANAGER")
+    print("="*50)
+
+    logo_manager = LogoManager()
+
+    # Test 1: List available logos
+    print("\n1. Available logos:")
+    available = logo_manager.list_available_logos()
+    for logo in available:
+        print(f"   - {logo}")
+
+    # Test 2: Test logo loading with existing logo
+    print("\n2. Testing logo loading:")
+    test_cases = [
+        "McDonald's",  # Should find mcdonalds.png
+        "Chick-fil-A",  # Should find chick-fil-a.png
+        "WENDYS",  # Should find wendys.png (case insensitive)
+        "Taco Bell",  # Should find taco_bell.png
+        "Burger King",  # Should NOT find - will create fallback
+        "Subway"  # Should NOT find - will create fallback
+    ]
+
+    for brand in test_cases:
+        logo = logo_manager.get_logo(brand)
+        if logo:
+            print(f"   ✓ {brand}: Logo loaded (size: {logo.size})")
+        else:
+            print(f"   ✗ {brand}: No logo found")
+
+    # Test 3: Test fallback logo generation
+    print("\n3. Testing fallback logo generation:")
+    fallback_brands = ["Burger King", "Subway", "Pizza Hut"]
+
+    for brand in fallback_brands:
+        fallback = logo_manager.create_fallback_logo(brand)
+        fallback_path = Path('test_output') / f'fallback_{brand.replace(" ", "_")}.png'
+        fallback.save(fallback_path)
+        print(f"   - Created fallback for {brand}: {fallback_path}")
+
+    # Test 4: Test missing logos report
+    print("\n4. Testing missing logos report:")
+    all_brands = test_cases + ["Little Caesars", "Jimmy John's", "Domino's"]
+    report = logo_manager.add_missing_logos_report(all_brands)
+
+    print("   Logo availability:")
+    for brand, has_logo in report.items():
+        status = "✓" if has_logo else "✗"
+        print(f"   {status} {brand}")
+
+    return logo_manager
+
+
+def create_test_analysis_results():
+    """Create mock analysis results for testing"""
+
+    # Create mock merchant data
+    merchant_data = pd.DataFrame({
+        'Rank': [1, 2, 3, 4, 5],
+        'Brand': ["McDonald's", "Chick-fil-A", "Wendy's", "Taco Bell", "Panda Express"],
+        'Percent of Fans Who Spend': ['92%', '79%', '77%', '68%', '56%'],
+        'How likely fans are to spend vs. gen pop': ['35% More', '78% More', '55% More', '77% More', '64% More'],
+        'Purchases Per Fan (vs. Gen Pop)': ['93% More', '80% More', '45% More', '60% More', '33% More'],
+        'COMPOSITE_INDEX': [188, 158, 144, 137, 120]
+    })
+
+    # Create mock analysis results
+    analysis_results = {
+        'category_name': 'restaurants',
+        'display_name': 'Restaurants',
+        'slide_title': 'Sponsor Spending Analysis: Restaurants',
+        'category_metrics': type('obj', (object,), {
+            'format_percent_fans': lambda: '92%',
+            'format_likelihood': lambda: '35% More',
+            'format_purchases': lambda: '93% More'
+        })(),
+        'insights': [
+            "92% of Utah Jazz fans spent at McDonald's",
+            "Jazz fans make an average of 14 purchases per year at McDonald's—more than any other top Restaurants brand",
+            "Utah Jazz fans spent an average of $546 per fan on McDonald's per year",
+            "Utah Jazz fans are 158% more likely to spend on Panda Express than NBA Fans"
+        ],
+        'merchant_insights': [
+            "92% of Utah Jazz fans spent at McDonald's",
+            "Jazz fans make an average of 14 purchases per year at McDonald's",
+            "Utah Jazz fans spent an average of $546 per fan on McDonald's per year",
+            "Utah Jazz fans are 158% more likely to spend on Panda Express than NBA Fans"
+        ],
+        'subcategory_stats': pd.DataFrame({
+            'Subcategory': ['Fast Food', 'Casual Dining', 'Coffee Shops'],
+            'Percent of Fans Who Spend': ['92%', '85%', '78%'],
+            'How likely fans are to spend vs. gen pop': ['35% More', '28% More', '22% More'],
+            'Purchases per fan vs. gen pop': ['93% More', '75% More', '60% More']
+        }),
+        'merchant_stats': (merchant_data, merchant_data['Brand'].tolist()),
+        'recommendation': {
+            'merchant': "McDonald's",
+            'composite_index': 188
+        }
+    }
+
+    return analysis_results
+
+
+def test_slide_generation():
+    """Test actual slide generation with logos"""
+    print("\n" + "="*50)
+    print("TESTING SLIDE GENERATION")
+    print("="*50)
+
+    # Create team configuration
+    team_config = {
+        'team_name': 'Utah Jazz',
+        'team_name_short': 'Jazz',
+        'league': 'NBA',
+        'primary_color': RGBColor(0, 43, 92),  # Jazz navy
+        'secondary_color': RGBColor(249, 160, 27)  # Jazz gold
+    }
+
+    # Create analysis results
+    analysis_results = create_test_analysis_results()
+
+    # Initialize presentation
+    presentation = Presentation()
+
+    # Create CategorySlide instance
+    slide_generator = CategorySlide(presentation)
+
+    # Test missing logos report
+    print("\n1. Checking for missing logos:")
+    missing = slide_generator.check_missing_logos({'restaurants': analysis_results})
+    if missing:
+        for category, logos in missing.items():
+            print(f"   Category '{category}' missing: {', '.join(logos)}")
+    else:
+        print("   All logos found!")
+
+    # Generate category analysis slide
+    print("\n2. Generating category analysis slide...")
+    presentation = slide_generator.generate(analysis_results, team_config)
+    print("   ✓ Category analysis slide created")
+
+    # Generate brand slide with logos
+    print("\n3. Generating brand slide with logos...")
+    presentation = slide_generator.generate_brand_slide(analysis_results, team_config)
+    print("   ✓ Brand slide with logos created")
+
+    # Save presentation
+    output_path = Path('test_output') / f'test_slides_with_logos_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pptx'
+    presentation.save(output_path)
+    print(f"\n4. Presentation saved to: {output_path}")
+
+    return str(output_path)
+
+
+def test_mixed_logos():
+    """Test with mix of available and missing logos"""
+    print("\n" + "="*50)
+    print("TESTING MIXED LOGO SCENARIOS")
+    print("="*50)
+
+    # Create analysis with mix of brands (some with logos, some without)
+    merchant_data = pd.DataFrame({
+        'Rank': [1, 2, 3, 4, 5],
+        'Brand': ["McDonald's", "Burger King", "Wendy's", "Subway", "Taco Bell"],
+        'Percent of Fans Who Spend': ['92%', '79%', '77%', '68%', '56%'],
+        'How likely fans are to spend vs. gen pop': ['35% More', '78% More', '55% More', '77% More', '64% More'],
+        'Purchases Per Fan (vs. Gen Pop)': ['93% More', '80% More', '45% More', '60% More', '33% More'],
+        'COMPOSITE_INDEX': [188, 158, 144, 137, 120]
+    })
+
+    analysis_results = create_test_analysis_results()
+    analysis_results['merchant_stats'] = (merchant_data, merchant_data['Brand'].tolist())
+    analysis_results['display_name'] = 'QSR'  # Test QSR special formatting
+
+    team_config = {
+        'team_name': 'Dallas Cowboys',
+        'team_name_short': 'Cowboys',
+        'league': 'NFL'
+    }
+
+    # Generate slides
+    presentation = Presentation()
+    slide_generator = CategorySlide(presentation)
+
+    print("\n1. Brand logo status:")
+    logo_manager = slide_generator.logo_manager
+    for brand in merchant_data['Brand']:
+        logo = logo_manager.get_logo(brand)
+        status = "Found" if logo else "Will use fallback"
+        print(f"   - {brand}: {status}")
+
+    print("\n2. Generating slides with mixed logos...")
+    presentation = slide_generator.generate(analysis_results, team_config)
+    presentation = slide_generator.generate_brand_slide(analysis_results, team_config)
+
+    output_path = Path('test_output') / 'test_mixed_logos.pptx'
+    presentation.save(output_path)
+    print(f"\n3. Mixed logo presentation saved to: {output_path}")
+
+
+def cleanup_test_files(keep_outputs=True):
+    """Clean up test files"""
+    print("\n" + "="*50)
+    print("CLEANUP")
+    print("="*50)
+
+    if not keep_outputs:
+        # Remove test outputs
+        if Path('test_output').exists():
+            shutil.rmtree('test_output')
+            print("   - Removed test_output directory")
+
+    # Always remove test logos (keep actual logos)
+    test_logo_dir = Path('test_logos')
+    if test_logo_dir.exists():
+        shutil.rmtree(test_logo_dir)
+        print("   - Removed test_logos directory")
+
+
+def main():
+    """Run all tests"""
+    print("\n" + "="*70)
+    print("SPORTS INNOVATION LAB - LOGO INTEGRATION TEST SUITE")
+    print("="*70)
+
+    try:
+        # Setup
+        create_test_directories()
+        created_logos = create_sample_logos()
+
+        # Run tests
+        logo_manager = test_logo_manager()
+        output_path = test_slide_generation()
+        test_mixed_logos()
+
+        # Summary
+        print("\n" + "="*50)
+        print("TEST SUMMARY")
+        print("="*50)
+        print(f"✓ Created {len(created_logos)} sample logos")
+        print(f"✓ Logo Manager tested successfully")
+        print(f"✓ Slides generated with logos")
+        print(f"✓ Mixed logo scenarios handled")
+        print(f"\nCheck the generated PowerPoint files in: test_output/")
+        print("\nTo add real logos:")
+        print("1. Add logo files to: assets/logos/merchants/")
+        print("2. Use filenames like: mcdonalds.png, burger_king.png, etc.")
+        print("3. Supported formats: .png, .jpg, .jpeg, .gif, .bmp")
+
+    except Exception as e:
+        logger.error(f"Test failed: {str(e)}", exc_info=True)
+        raise
+    finally:
+        # Cleanup (keep outputs for inspection)
+        cleanup_test_files(keep_outputs=True)
 
 
 if __name__ == "__main__":
-    # Run the visual tests
-    tester = CategorySlideTest()
-    tester.run_all_tests()
+    # For missing RGBColor import in test
+    from pptx.dml.color import RGBColor
 
-    # Run formatting function tests
-    test_formatting_functions()
-
-    print("\n✅ All tests completed!")
-    print("\nKey changes implemented:")
-    print("1. Brand table moved from top=1.2\" to top=2.8\" (1.6\" lower)")
-    print("2. Composite index now rounds to whole numbers (no decimals)")
-    print("3. Error handling for invalid composite index values")
+    main()

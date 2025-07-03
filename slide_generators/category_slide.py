@@ -15,9 +15,12 @@ from pptx.enum.dml import MSO_THEME_COLOR
 import pandas as pd
 import logging
 import re
+from PIL import Image, ImageDraw
+import io
 
 from .base_slide import BaseSlide
 from data_processors.category_analyzer import CategoryAnalyzer, CategoryMetrics
+from utils.logo_manager import LogoManager
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +120,8 @@ def remove_unnecessary_comparisons(text):
     text = re.sub(r'spend\s+(\$[\d,]+)\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1', text, flags=re.IGNORECASE)
 
     # Pattern: "spend $amount per year vs. the Local Gen Pop" -> "spend $amount per year"
-    text = re.sub(r'spend\s+(\$[\d,]+)\s+per\s+year\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1 per year', text,
-                  flags=re.IGNORECASE)
+    text = re.sub(r'spend\s+(\$[\d,]+)\s+per\s+year\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1 per year',
+                  text, flags=re.IGNORECASE)
 
     return text
 
@@ -180,6 +183,9 @@ class CategorySlide(BaseSlide):
             presentation: Existing presentation to add slide to
         """
         super().__init__(presentation)
+
+        # Initialize LogoManager
+        self.logo_manager = LogoManager()
 
         # Colors for the slide - UPDATED with EQUAL color
         self.colors = {
@@ -490,8 +496,76 @@ class CategorySlide(BaseSlide):
             for col in range(4):
                 self._format_data_cell(table.cell(row_idx, col))
 
+    def _has_colored_background(self, image: Image.Image, threshold: int = 240) -> bool:
+        """
+        Check if an image has a colored (non-white) background
+
+        Args:
+            image: PIL Image to check
+            threshold: RGB value threshold below which we consider it colored (default 240)
+
+        Returns:
+            True if image has colored background, False if white/transparent
+        """
+        # Convert to RGBA if not already
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+
+        width, height = image.size
+
+        # Sample more points around the edges to better detect background
+        sample_points = []
+
+        # Add corners
+        sample_points.extend([
+            (0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)
+        ])
+
+        # Add edge midpoints
+        sample_points.extend([
+            (width // 2, 0), (width // 2, height - 1),  # top and bottom middle
+            (0, height // 2), (width - 1, height // 2)  # left and right middle
+        ])
+
+        # Add points slightly inward from edges (to avoid anti-aliasing artifacts)
+        edge_offset = min(5, width // 10, height // 10)
+        sample_points.extend([
+            (edge_offset, edge_offset),
+            (width - edge_offset - 1, edge_offset),
+            (edge_offset, height - edge_offset - 1),
+            (width - edge_offset - 1, height - edge_offset - 1)
+        ])
+
+        colored_pixels = 0
+        total_opaque_pixels = 0
+
+        for x, y in sample_points:
+            try:
+                r, g, b, a = image.getpixel((x, y))
+
+                # Skip transparent pixels
+                if a < 128:
+                    continue
+
+                total_opaque_pixels += 1
+
+                # Check if this pixel is colored (not white/gray)
+                # A colored pixel has significant variation in RGB values or low values
+                if (r < threshold or g < threshold or b < threshold) or \
+                        (max(r, g, b) - min(r, g, b) > 30):
+                    colored_pixels += 1
+
+            except:
+                continue
+
+        # If more than 50% of opaque edge pixels are colored, consider it a colored background
+        if total_opaque_pixels > 0:
+            return colored_pixels / total_opaque_pixels > 0.5
+
+        return False
+
     def _add_brand_logos(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add brand logo placeholders (numbered circles) - adjusted for 16:9"""
+        """Add brand logos from local files with fallback to generated logos"""
         merchant_df, top_merchants = merchant_stats
 
         if merchant_df.empty:
@@ -501,33 +575,138 @@ class CategorySlide(BaseSlide):
         start_x = Inches(0.5)
         y = Inches(1.2)
         spacing = Inches(2.4)  # Wider spacing for 16:9
+        logo_size = (120, 120)  # Size in pixels for logo processing
+        display_size = Inches(1.2)  # Size on slide
 
-        # Add numbered circles for top 5 brands
+        # Add logos for top 5 brands
         for i in range(min(5, len(merchant_df))):
             x = start_x + (i * spacing)
+            merchant_name = merchant_df.iloc[i]['Brand']
 
-            # Circle
-            circle = slide.shapes.add_shape(
-                MSO_SHAPE.OVAL,
-                x, y,
-                Inches(1.2), Inches(1.2)
-            )
-            circle.fill.solid()
-            circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
-            circle.line.color.rgb = RGBColor(200, 200, 200)
-            circle.line.width = Pt(2)
+            # Try to get logo from LogoManager
+            logo_image = self.logo_manager.get_logo(merchant_name, size=logo_size)
 
-            # Number
+            # If no logo found, create fallback with initials
+            if logo_image is None:
+                logger.info(f"No logo found for {merchant_name}, creating fallback")
+                logo_image = self.logo_manager.create_fallback_logo(
+                    merchant_name,
+                    size=logo_size,
+                    bg_color='white',
+                    text_color='#888888'
+                )
+
+            # Check if logo has colored background
+            has_colored_bg = self._has_colored_background(logo_image)
+
+            # Log the detection result for debugging
+            logger.debug(f"{merchant_name} - Colored background detected: {has_colored_bg}")
+
+            if has_colored_bg:
+                # For colored background logos, create a circular mask to ensure clean edges
+                # Create a new image with transparent background
+                masked_logo = Image.new('RGBA', logo_size, (0, 0, 0, 0))
+
+                # Create circular mask
+                mask = Image.new('L', logo_size, 0)
+                draw = ImageDraw.Draw(mask)
+                draw.ellipse([0, 0, logo_size[0] - 1, logo_size[1] - 1], fill=255)
+
+                # Apply mask to logo
+                masked_logo.paste(logo_image, (0, 0))
+                masked_logo.putalpha(mask)
+
+                # Convert masked logo to bytes
+                image_stream = io.BytesIO()
+                masked_logo.save(image_stream, format='PNG')
+                image_stream.seek(0)
+
+                # Add the logo directly without circle background
+                try:
+                    pic = slide.shapes.add_picture(
+                        image_stream,
+                        x, y,
+                        display_size, display_size
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to add logo for {merchant_name}: {e}")
+                    self._add_numbered_circle_fallback(slide, i + 1, x, y, display_size)
+
+            else:
+                # For white/transparent background logos, add circle border
+                # First, add a circular background/border
+                circle = slide.shapes.add_shape(
+                    MSO_SHAPE.OVAL,
+                    x, y,
+                    display_size, display_size
+                )
+                circle.fill.solid()
+                circle.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+                circle.line.color.rgb = RGBColor(200, 200, 200)  # Light gray border
+                circle.line.width = Pt(1)
+
+                # Make the logo slightly smaller to fit within the circle border
+                logo_display_size = Inches(1.1)  # Slightly smaller than the circle
+                offset = (display_size - logo_display_size) / 2  # Center the logo
+
+                # Convert PIL Image to bytes for PowerPoint
+                image_stream = io.BytesIO()
+                logo_image.save(image_stream, format='PNG')
+                image_stream.seek(0)
+
+                # Add the logo centered within the circle
+                try:
+                    pic = slide.shapes.add_picture(
+                        image_stream,
+                        x + offset,  # Offset to center horizontally
+                        y + offset,  # Offset to center vertically
+                        logo_display_size, logo_display_size
+                    )
+
+                    # Ensure the logo is on top of the circle
+                    slide.shapes._spTree.remove(pic._element)
+                    slide.shapes._spTree.append(pic._element)
+
+                except Exception as e:
+                    logger.error(f"Failed to add logo for {merchant_name}: {e}")
+                    self._add_numbered_circle_fallback(slide, i + 1, x, y, display_size)
+
+            # Add brand name below logo
             text_box = slide.shapes.add_textbox(
-                x, y + Inches(0.4),
-                Inches(1.2), Inches(0.4)
+                x - Inches(0.3), y + display_size + Inches(0.1),
+                display_size + Inches(0.6), Inches(0.4)
             )
-            text_box.text_frame.text = str(i + 1)
+            text_box.text_frame.text = merchant_name
             p = text_box.text_frame.paragraphs[0]
-            p.font.name = self.default_font  # Red Hat Display
+            p.font.name = self.default_font
             p.alignment = PP_ALIGN.CENTER
-            p.font.size = Pt(48)
-            p.font.color.rgb = RGBColor(150, 150, 150)
+            p.font.size = Pt(10)
+            p.font.color.rgb = RGBColor(100, 100, 100)
+
+    def _add_numbered_circle_fallback(self, slide, number: int, x: float, y: float, size: float):
+        """Add numbered circle as ultimate fallback if logo processing fails"""
+        # Circle
+        circle = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            x, y,
+            size, size
+        )
+        circle.fill.solid()
+        circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        circle.line.color.rgb = RGBColor(200, 200, 200)
+        circle.line.width = Pt(2)
+
+        # Number
+        text_box = slide.shapes.add_textbox(
+            x, y + (size - Inches(0.4)) / 2,
+            size, Inches(0.4)
+        )
+        text_box.text_frame.text = str(number)
+        p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font
+        p.alignment = PP_ALIGN.CENTER
+        p.font.size = Pt(48)
+        p.font.color.rgb = RGBColor(150, 150, 150)
 
     def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str, team_short: str, category_name: str):
         """Add brand-specific insights with updated formatting"""
@@ -750,6 +929,34 @@ class CategorySlide(BaseSlide):
 
         # Fallback to original insight with general formatting
         return process_insight_text(insight)
+
+    def check_missing_logos(self, categories_data: Dict[str, Any]) -> Dict[str, List[str]]:
+        """
+        Check which logos are missing for all categories
+
+        Args:
+            categories_data: Dictionary of category analysis results
+
+        Returns:
+            Dictionary mapping category to list of missing logos
+        """
+        missing_logos = {}
+
+        for category_name, analysis_results in categories_data.items():
+            merchant_df, _ = analysis_results.get('merchant_stats', (pd.DataFrame(), []))
+            if not merchant_df.empty:
+                # Get top 5 merchants
+                top_merchants = merchant_df.head(5)['Brand'].tolist()
+
+                # Check which logos are missing
+                report = self.logo_manager.add_missing_logos_report(top_merchants)
+                missing = [merchant for merchant, has_logo in report.items() if not has_logo]
+
+                if missing:
+                    missing_logos[category_name] = missing
+                    logger.warning(f"Missing logos for {category_name}: {missing}")
+
+        return missing_logos
 
 
 # Convenience functions
