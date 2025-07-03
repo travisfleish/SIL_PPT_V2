@@ -67,33 +67,6 @@ ehthumbs_vista.db
 logs/
 *.log.*
 
-# Output files
-output/
-outputs/
-results/
-*.pptx
-!templates/sil_combined_template.pptx
-*.png
-*.jpg
-*.jpeg
-*.gif
-
-# Data files (be careful with this section - adjust based on your needs)
-data/
-*.csv
-*.xlsx
-*.xls
-*.json
-!config/*.json  # Exception: keep config JSON files
-
-# Credentials and secrets
-*.pem
-*.key
-*.cert
-private_key.pem
-credentials/
-secrets/
-
 # Temporary files
 *.tmp
 *.temp
@@ -131,7 +104,31 @@ site/
 *.sqlite
 *.sqlite3
 
+# Credentials and secrets
+*.pem
+*.key
+*.cert
+private_key.pem
+credentials/
+secrets/
+
 # Custom project-specific (adjust as needed)
-logos/          # If you want to exclude downloaded logos
-cache/          # If you have a cache directory
-temp/           # Temporary files directory
+# Previously ignored but now tracked:
+# output/ — needed for final assets
+# *.pptx — needed for slides
+# *.png, *.jpg — needed for logos/charts
+# *.xlsx, *.json — needed for data
+
+# Uncomment these if you want to re-ignore them later:
+# output/
+# *.pptx
+# *.png
+# *.jpg
+# *.jpeg
+# *.xlsx
+# *.json
+
+# Still ignoring these (optional):
+temp/
+cache/
+logos/  # Comment this out if you want to track downloaded logos
