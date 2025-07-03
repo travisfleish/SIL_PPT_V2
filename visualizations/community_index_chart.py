@@ -61,7 +61,7 @@ class CommunityIndexChart:
         y_positions = np.arange(len(data))
         max_value = 700  # Fixed scale as shown in reference
 
-        # Draw gray bars representing the % Audience (PERC_AUDIENCE)
+        # Draw gray bars representing the % Team Fans (PERC_AUDIENCE)
         # Check if values are in decimal format (0-1) or percentage format (0-100)
         if data['Audience_Pct'].max() <= 1.0:
             # Convert from decimal to percentage
@@ -76,14 +76,14 @@ class CommunityIndexChart:
                             color=self.background_color,
                             height=0.6,
                             alpha=0.8,
-                            label='% Audience')
+                            label='% Team Fans')  # Changed from '% Audience'
 
-        # Draw blue bars representing the Composite Index - as thin lines
+        # Draw blue bars representing the Team Fan Index - as thin lines
         blue_bars = ax.barh(y_positions,
                             data['Composite_Index'],
                             color=self.bar_color,
                             height=0.08,  # Very thin height for line effect
-                            label='% Audience Index')
+                            label='Team Fan Index')  # Changed from '% Audience Index'
 
         # Add percentage labels in yellow boxes at the end of gray bars
         for i, (idx, row) in enumerate(data.iterrows()):
@@ -93,7 +93,7 @@ class CommunityIndexChart:
             else:
                 pct_value = row['Audience_Pct']
 
-            # Position for the yellow box - at the end of the gray bar (% Audience)
+            # Position for the yellow box - at the end of the gray bar (% Team Fans)
             x_pos = pct_value * (max_value / 100)  # Scale to match x-axis
             y_pos = y_positions[i]
 
@@ -118,12 +118,15 @@ class CommunityIndexChart:
 
         # Customize the plot
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(data['Community'], fontsize=11)
-        ax.set_xlabel('% Audience Index', fontsize=12, fontweight='bold')
+        ax.set_yticklabels(data['Community'], fontsize=13)  # Increased from 11 to 13
+        ax.set_xlabel('Percent Fan Audience', fontsize=13, fontweight='bold')  # Changed from '% Audience Index', matched fontsize
         ax.set_xlim(0, max_value)
 
-        # Add x-axis labels at specific intervals
+        # Add x-axis labels at specific intervals with bold font
         ax.set_xticks([0, 100, 200, 300, 400, 500, 600, 700])
+        ax.tick_params(axis='x', labelsize=12, labelbottom=True)
+        for label in ax.get_xticklabels():
+            label.set_fontweight('bold')
 
         # Remove top and right spines
         ax.spines['top'].set_visible(False)
@@ -139,19 +142,20 @@ class CommunityIndexChart:
         if title:
             ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
 
-        # Add legend at bottom
+        # Add legend at bottom with more space and matched font size
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor=self.background_color, alpha=0.8, label='% Audience'),
-            Patch(facecolor=self.bar_color, label='% Audience Index')
+            Patch(facecolor=self.background_color, alpha=0.8, label='% Team Fans'),  # Changed from '% Audience'
+            Patch(facecolor=self.bar_color, label='Team Fan Index')  # Changed from '% Audience Index'
         ]
         ax.legend(handles=legend_elements,
                   loc='lower center',
-                  bbox_to_anchor=(0.5, -0.15),
+                  bbox_to_anchor=(0.5, -0.25),  # Changed from -0.15 to -0.20 for more space
                   ncol=2,
                   frameon=True,
                   fancybox=True,
-                  shadow=False)
+                  shadow=False,
+                  fontsize=13)  # Added fontsize to match
 
         # Adjust layout
         plt.tight_layout()
