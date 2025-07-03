@@ -148,7 +148,7 @@ class DemographicsSlide1(BaseSlide):
         """Add insight text below logo"""
         text_box = slide.shapes.add_textbox(
             Inches(0.3), Inches(3.8),
-            Inches(2.2), Inches(2.0)
+            Inches(4.0), Inches(2.0)
         )
 
         # Default insight if none provided
@@ -210,7 +210,7 @@ class DemographicsSlide1(BaseSlide):
     def _add_legend_box(self, slide, team_name: str, team_short: str, league: str):
         """Add KEY legend box"""
         # Box position
-        left = Inches(0.3)
+        left = Inches(3.3)
         top = Inches(5.8)
         width = Inches(4.5)
         height = Inches(1.2)
@@ -221,8 +221,8 @@ class DemographicsSlide1(BaseSlide):
             left, top, width, height
         )
         box.fill.solid()
-        box.fill.fore_color.rgb = RGBColor(255, 255, 255)
-        box.line.color.rgb = RGBColor(0, 0, 0)
+        box.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+        box.line.color.rgb = RGBColor(0, 0, 0)  # Black border
         box.line.width = Pt(1)
 
         # Add KEY text
@@ -237,6 +237,7 @@ class DemographicsSlide1(BaseSlide):
         p.font.name = self.default_font
         p.font.size = Pt(12)
         p.font.bold = True
+        p.font.color.rgb = RGBColor(0, 0, 0)  # ← Explicitly set to black
 
         # Legend items
         items = [
@@ -250,4 +251,5 @@ class DemographicsSlide1(BaseSlide):
             p.text = item
             p.font.name = self.default_font
             p.font.size = Pt(10)
+            p.font.color.rgb = RGBColor(0, 0, 0)  # ← Explicitly set to black
             p.level = 0
