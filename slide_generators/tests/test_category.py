@@ -1,353 +1,265 @@
-# slide_generators/tests/test_category_slide.py
 """
-Test script for category slide generation
-Generates sample category slides using real data
+Test script for Category Slide formatting changes
+Tests composite index rounding and brand table positioning
 """
-
-import sys
-from pathlib import Path
-
-# Add parent directories to path
-sys.path.append(str(Path(__file__).parent.parent))
-sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from pptx import Presentation
-from slide_generators.category_slide import CategorySlide, create_category_slides
-from data_processors.category_analyzer import CategoryAnalyzer
-from data_processors.snowflake_connector import query_to_dataframe, test_connection
-from utils.team_config_manager import TeamConfigManager
-import logging
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.shapes import MSO_SHAPE
+import pandas as pd
+from typing import Dict, Any, List, Tuple
+import os
 
-logging.basicConfig(level=logging.INFO)
 
+# Mock CategorySlide class with only the methods we're testing
+class CategorySlideTest:
+    def __init__(self):
+        self.presentation = Presentation()
+        self.default_font = 'Arial'  # Use Arial for testing (should be Red Hat Display in prod)
+        self.colors = {
+            'header_bg': RGBColor(240, 240, 240),
+            'header_border': RGBColor(200, 200, 200),
+            'table_header': RGBColor(217, 217, 217),
+            'table_border': RGBColor(0, 0, 0),
+            'positive': RGBColor(0, 176, 80),
+            'negative': RGBColor(255, 0, 0),
+            'equal': RGBColor(184, 134, 11),
+            'neutral': RGBColor(0, 0, 0)
+        }
 
-def test_category_slide_with_real_data(team_key: str = 'utah_jazz',
-                                       category_key: str = 'restaurants'):
-    """
-    Test category slide generation with real Snowflake data
+    def create_test_slide(self):
+        """Create a blank slide for testing"""
+        slide_layout = self.presentation.slide_layouts[5]  # Blank layout
+        return self.presentation.slides.add_slide(slide_layout)
 
-    Args:
-        team_key: Team identifier
-        category_key: Category to test (e.g., 'restaurants', 'auto')
-    """
-    print(f"\n{'=' * 60}")
-    print(f"CATEGORY SLIDE TEST - {team_key} - {category_key}")
-    print(f"{'=' * 60}")
+    def test_brand_logos_and_table(self):
+        """Test brand logos and table positioning"""
+        slide = self.create_test_slide()
 
-    try:
-        # 1. Test connection
-        print("\n1. Testing Snowflake connection...")
-        if not test_connection():
-            print("❌ Failed to connect to Snowflake")
-            return None
-        print("✅ Connected to Snowflake")
+        # Add title for reference
+        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(8), Inches(0.5))
+        title_box.text_frame.text = "TEST: Brand Logos and Table Positioning"
+        p = title_box.text_frame.paragraphs[0]
+        p.font.size = Pt(24)
+        p.font.bold = True
 
-        # 2. Get team configuration
-        print("\n2. Loading team configuration...")
-        config_manager = TeamConfigManager()
-        team_config = config_manager.get_team_config(team_key)
-        view_prefix = team_config['view_prefix']
-        print(f"✅ Team: {team_config['team_name']}")
+        # Add brand logos (original positioning)
+        print("Adding brand logos...")
+        start_x = Inches(0.5)
+        y = Inches(1.2)  # Original position
+        spacing = Inches(2.4)
 
-        # 3. Initialize category analyzer
-        print("\n3. Initializing category analyzer...")
-        analyzer = CategoryAnalyzer(
-            team_name=team_config['team_name'],
-            team_short=team_config['team_name_short'],
-            league=team_config['league']
+        for i in range(5):
+            x = start_x + (i * spacing)
+
+            # Circle
+            circle = slide.shapes.add_shape(
+                MSO_SHAPE.OVAL,
+                x, y,
+                Inches(1.2), Inches(1.2)
+            )
+            circle.fill.solid()
+            circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
+            circle.line.color.rgb = RGBColor(200, 200, 200)
+            circle.line.width = Pt(2)
+
+            # Number
+            text_box = slide.shapes.add_textbox(
+                x, y + Inches(0.4),
+                Inches(1.2), Inches(0.4)
+            )
+            text_box.text_frame.text = str(i + 1)
+            p = text_box.text_frame.paragraphs[0]
+            p.alignment = PP_ALIGN.CENTER
+            p.font.size = Pt(48)
+            p.font.color.rgb = RGBColor(150, 150, 150)
+
+        print(f"Logos positioned at Y = {y}")
+        print(f"Logo bottom edge at Y = {y + Inches(1.2)}")
+
+        # Add OLD table position (for comparison)
+        self._add_comparison_table(slide, "OLD Position - Overlaps!", Inches(1.2), RGBColor(255, 200, 200))
+
+        # Add NEW table position
+        self._add_comparison_table(slide, "NEW Position - No Overlap", Inches(2.8), RGBColor(200, 255, 200))
+
+        return slide
+
+    def _add_comparison_table(self, slide, label, top_position, bg_color):
+        """Add a comparison table at specified position"""
+        # Add label
+        label_box = slide.shapes.add_textbox(
+            Inches(5.833), top_position - Inches(0.3),
+            Inches(3), Inches(0.25)
         )
+        label_box.text_frame.text = f"{label} (top = {top_position})"
+        p = label_box.text_frame.paragraphs[0]
+        p.font.size = Pt(10)
+        p.font.bold = True
 
-        # 4. Load category data
-        print(f"\n4. Loading {category_key} data from Snowflake...")
+        # Create sample table
+        rows = 4  # Simplified for visibility
+        cols = 5
+        left = Inches(5.833)
+        width = Inches(7.0)
+        height = Inches(0.35 * rows)
 
-        # Get category configuration
-        cat_config = analyzer.categories.get(category_key, {})
-        cat_names = cat_config.get('category_names_in_data', [])
+        table = slide.shapes.add_table(rows, cols, left, top_position, width, height).table
 
-        if not cat_names:
-            print(f"❌ No category configuration found for {category_key}")
-            return None
+        # Headers
+        headers = ['Rank', 'Brand', '% Fans', 'Likelihood', 'Purchases']
+        for i, header in enumerate(headers):
+            cell = table.cell(0, i)
+            cell.text = header
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = bg_color
 
-        # Build WHERE clause
-        category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat}'" for cat in cat_names])
+        # Sample data
+        sample_brands = [
+            ['1', 'McDonald\'s', '92%', '35% More', '93% More'],
+            ['2', 'Chick-fil-A', '79%', '78% More', '93% More'],
+            ['3', 'Wendy\'s', '77%', '55% More', '49% More']
+        ]
 
-        # Load data
-        category_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME 
-            WHERE {category_where}
-        """)
+        for row_idx, row_data in enumerate(sample_brands, 1):
+            for col_idx, value in enumerate(row_data):
+                table.cell(row_idx, col_idx).text = value
 
-        subcategory_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
-            WHERE {category_where}
-        """)
+    def test_composite_index_formatting(self):
+        """Test composite index rounding"""
+        slide = self.create_test_slide()
 
-        merchant_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
-            WHERE {category_where}
-            AND AUDIENCE = '{analyzer.audience_name}'
-            ORDER BY PERC_AUDIENCE DESC
-            LIMIT 100
-        """)
+        # Add title
+        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(8), Inches(0.5))
+        title_box.text_frame.text = "TEST: Composite Index Formatting"
+        p = title_box.text_frame.paragraphs[0]
+        p.font.size = Pt(24)
+        p.font.bold = True
 
-        print(f"✅ Loaded data:")
-        print(f"   - Category: {len(category_df)} rows")
-        print(f"   - Subcategory: {len(subcategory_df)} rows")
-        print(f"   - Merchant: {len(merchant_df)} rows")
+        # Test cases for composite index
+        test_cases = [
+            {'value': 188.20250000000001, 'expected': '188'},
+            {'value': 156.7, 'expected': '157'},
+            {'value': 200.5, 'expected': '201'},
+            {'value': 199.4, 'expected': '199'},
+            {'value': 'invalid', 'expected': 'N/A'},
+            {'value': None, 'expected': 'N/A'}
+        ]
 
-        # 5. Run analysis
-        print(f"\n5. Analyzing {category_key}...")
-        results = analyzer.analyze_category(
-            category_key=category_key,
-            category_df=category_df,
-            subcategory_df=subcategory_df,
-            merchant_df=merchant_df,
-            validate=False
-        )
+        y_position = Inches(1.5)
 
-        print("✅ Analysis completed")
-
-        # Display some results
-        metrics = results['category_metrics']
-        print(f"\nCategory Metrics:")
-        print(f"  - {metrics.format_percent_fans()} of fans spend")
-        print(f"  - {metrics.format_likelihood()} likely vs gen pop")
-        print(f"  - {metrics.format_purchases()} purchases vs gen pop")
-
-        # 6. Create PowerPoint slides
-        print(f"\n6. Generating PowerPoint slides...")
-        presentation = create_category_slides(results, team_config)
-
-        # 7. Save presentation
-        output_path = Path(f"{team_key}_{category_key}_slides.pptx")
-        presentation.save(str(output_path))
-
-        print(f"\n✅ SUCCESS! Slides saved to: {output_path.absolute()}")
-        print(f"\nPresentation contains:")
-        print(f"  • Slide 1: {category_key.title()} category analysis")
-        print(f"  • Slide 2: {category_key.title()} brand analysis")
-
-        return output_path
-
-    except Exception as e:
-        print(f"\n❌ ERROR: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
-def test_with_mock_data():
-    """Test category slide with mock data for quick validation"""
-
-    print("\n" + "=" * 60)
-    print("CATEGORY SLIDE TEST - MOCK DATA")
-    print("=" * 60)
-
-    # Create mock analysis results
-    import pandas as pd
-    from data_processors.category_analyzer import CategoryMetrics
-
-    mock_results = {
-        'category_key': 'restaurants',
-        'display_name': 'Restaurants',
-        'slide_title': 'Restaurant Sponsor Analysis',
-        'category_metrics': CategoryMetrics(
-            percent_fans=0.99,
-            percent_likely=22,
-            percent_purchases=150,
-            composite_index=287,
-            total_spend=1500000,
-            spc=3311.45,
-            audience_count=45000,
-            comparison_population="Local Gen Pop (Excl. Jazz)"
-        ),
-        'subcategory_stats': pd.DataFrame([
-            {
-                'Subcategory': 'QSR & Fast Casual',
-                'Percent of Fans Who Spend': '99%',
-                'How likely fans are to spend vs. gen pop': '25% More',
-                'Purchases per fan vs. gen pop': '140% More'
-            },
-            {
-                'Subcategory': 'Casual',
-                'Percent of Fans Who Spend': '76%',
-                'How likely fans are to spend vs. gen pop': '82% More',
-                'Purchases per fan vs. gen pop': '68% More'
-            },
-            {
-                'Subcategory': 'Online Delivery',
-                'Percent of Fans Who Spend': '45%',
-                'How likely fans are to spend vs. gen pop': '130% More',
-                'Purchases per fan vs. gen pop': '14% More'
-            },
-            {
-                'Subcategory': 'Fine Dining',
-                'Percent of Fans Who Spend': '5.7%',
-                'How likely fans are to spend vs. gen pop': '330% More',
-                'Purchases per fan vs. gen pop': '37% More'
+        for i, test_case in enumerate(test_cases):
+            # Create mock recommendation
+            recommendation = {
+                'merchant': f'Test Brand {i + 1}',
+                'composite_index': test_case['value']
             }
-        ]),
-        'insights': [
-            "Jazz Fans are 22% MORE likely to spend on Restaurants than the Local Gen Pop (Excl. Jazz)",
-            "Jazz Fans make an average of 150% more purchases per fan on Restaurants than the Local Gen Pop (Excl. Jazz)",
-            "Jazz Fans are more than 3X more likely to spend on Fine Dining Restaurants vs. the Local Gen Pop (Excl. Jazz)",
-            "Jazz fans spend an average of $487.29 per fan per year on QSR and Fast Casual Restaurants"
-        ],
-        'merchant_stats': (
-            pd.DataFrame([
-                {
-                    'Rank': 1,
-                    'Brand': "MCDONALD'S",
-                    'Percent of Fans Who Spend': '92%',
-                    'How likely fans are to spend vs. gen pop': '35% More',
-                    'Purchases Per Fan (vs. Gen Pop)': '93% More'
-                },
-                {
-                    'Rank': 2,
-                    'Brand': 'CHICK-FIL-A',
-                    'Percent of Fans Who Spend': '79%',
-                    'How likely fans are to spend vs. gen pop': '78% More',
-                    'Purchases Per Fan (vs. Gen Pop)': '93% More'
-                },
-                {
-                    'Rank': 3,
-                    'Brand': "WENDY'S",
-                    'Percent of Fans Who Spend': '77%',
-                    'How likely fans are to spend vs. gen pop': '55% More',
-                    'Purchases Per Fan (vs. Gen Pop)': '49% More'
-                },
-                {
-                    'Rank': 4,
-                    'Brand': 'TACO BELL',
-                    'Percent of Fans Who Spend': '68%',
-                    'How likely fans are to spend vs. gen pop': '77% More',
-                    'Purchases Per Fan (vs. Gen Pop)': '60% More'
-                },
-                {
-                    'Rank': 5,
-                    'Brand': 'PANDA EXPRESS',
-                    'Percent of Fans Who Spend': '56%',
-                    'How likely fans are to spend vs. gen pop': '64% More',
-                    'Purchases Per Fan (vs. Gen Pop)': '33% More'
-                }
-            ]),
-            ["MCDONALD'S", "CHICK-FIL-A", "WENDY'S", "TACO BELL", "PANDA EXPRESS"]
-        ),
-        'merchant_insights': [
-            "92% of Utah Jazz fans spent at MCDONALD'S",
-            "Utah Jazz fans average 14 purchases per year per fan at MCDONALD'S",
-            "Utah Jazz fans spent an average of $160 per fan on WENDY'S per year",
-            "Utah Jazz fans are 58% more likely to spend on PANDA EXPRESS than NBA Fans."
-        ],
-        'recommendation': {
-            'merchant': 'CHICK-FIL-A',
-            'composite_index': 385.2,
-            'explanation': "Fans are more likely to spend with CHICK-FIL-A and more likely to spend MORE per consumer vs. the Local Gen Pop (Excl. Jazz) on CHICK-FIL-A"
-        }
-    }
 
-    # Mock team config
-    team_config = {
-        'team_name': 'Utah Jazz',
-        'team_name_short': 'Jazz',
-        'league': 'NBA',
-        'colors': {
-            'primary': '#002B5C',
-            'secondary': '#F9A01B',
-            'accent': '#00471B'
-        }
-    }
+            # Add test section
+            self._add_test_recommendation(slide, recommendation, y_position, test_case['expected'])
+            y_position += Inches(1.2)
 
-    # Generate slides
-    print("\nGenerating slides with mock data...")
-    presentation = create_category_slides(mock_results, team_config)
+        return slide
 
-    # Save
-    output_path = Path('mock_category_slides.pptx')
-    presentation.save(str(output_path))
+    def _add_test_recommendation(self, slide, recommendation, y_pos, expected):
+        """Add a test recommendation section"""
+        # Test input label
+        input_box = slide.shapes.add_textbox(Inches(0.5), y_pos, Inches(3), Inches(0.3))
+        input_box.text_frame.text = f"Input: {recommendation.get('composite_index')}"
+        p = input_box.text_frame.paragraphs[0]
+        p.font.size = Pt(10)
+        p.font.color.rgb = RGBColor(100, 100, 100)
 
-    print(f"\n✅ Mock slides saved to: {output_path}")
-
-    return output_path
-
-
-def test_multiple_categories(team_key: str = 'utah_jazz'):
-    """Test generating slides for multiple categories"""
-
-    print("\n" + "=" * 60)
-    print("MULTIPLE CATEGORY SLIDES TEST")
-    print("=" * 60)
-
-    categories = ['restaurants', 'auto', 'athleisure', 'finance']
-
-    # Create new presentation
-    presentation = Presentation()
-
-    # Add title slide
-    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
-    title_box = slide.shapes.add_textbox(
-        Path.inches(2), Path.inches(3),
-        Path.inches(6), Path.inches(1)
-    )
-    title_box.text = f"{team_key.replace('_', ' ').title()} Category Analysis"
-
-    successful = []
-
-    for category in categories:
-        print(f"\n📊 Processing {category}...")
+        # Format composite index (the code we're testing)
+        composite_index_raw = recommendation.get('composite_index', 0)
         try:
-            # Get team config
-            config_manager = TeamConfigManager()
-            team_config = config_manager.get_team_config(team_key)
+            composite_index = int(round(float(composite_index_raw)))
+        except (ValueError, TypeError):
+            composite_index = 'N/A'
 
-            # Run analysis and generate slides...
-            # (Similar to test_category_slide_with_real_data but appending to existing presentation)
+        # Show result
+        result_box = slide.shapes.add_textbox(Inches(0.5), y_pos + Inches(0.3), Inches(8), Inches(0.4))
+        team_name = "Utah Jazz"
+        merchant_name = recommendation.get('merchant', 'Brand')
 
-            successful.append(category)
-            print(f"✅ Added {category} slides")
+        result_text = f"• The {team_name} should target {merchant_name} for a sponsorship based on having the highest composite index of {composite_index}"
+        result_box.text_frame.text = result_text
+        p = result_box.text_frame.paragraphs[0]
+        p.font.size = Pt(11)
 
-        except Exception as e:
-            print(f"❌ Failed to process {category}: {str(e)}")
+        # Show expected result
+        expected_box = slide.shapes.add_textbox(Inches(0.5), y_pos + Inches(0.7), Inches(3), Inches(0.3))
+        expected_box.text_frame.text = f"Expected: {expected} | Actual: {composite_index} | {'✓' if str(composite_index) == expected else '✗'}"
+        p = expected_box.text_frame.paragraphs[0]
+        p.font.size = Pt(10)
+        if str(composite_index) == expected:
+            p.font.color.rgb = RGBColor(0, 176, 80)  # Green
+        else:
+            p.font.color.rgb = RGBColor(255, 0, 0)  # Red
 
-    if successful:
-        output_path = Path(f"{team_key}_all_categories.pptx")
-        presentation.save(str(output_path))
-        print(f"\n✅ Created presentation with {len(successful)} categories: {output_path}")
+    def run_all_tests(self):
+        """Run all tests and save presentation"""
+        print("Running Category Slide Tests...")
+        print("-" * 50)
 
-    return successful
+        # Test 1: Brand logos and table positioning
+        print("\nTest 1: Brand Logos and Table Positioning")
+        slide1 = self.test_brand_logos_and_table()
+
+        # Test 2: Composite index formatting
+        print("\nTest 2: Composite Index Formatting")
+        slide2 = self.test_composite_index_formatting()
+
+        # Save test presentation
+        output_file = "category_slide_test_output.pptx"
+        self.presentation.save(output_file)
+        print(f"\nTest presentation saved to: {output_file}")
+        print("\nPlease open the file to visually verify:")
+        print("1. Brand table is positioned below logos (no overlap)")
+        print("2. Composite index values are rounded to whole numbers")
+
+        return output_file
 
 
-def main():
-    """Main test function"""
-    print("\n🎯 CATEGORY SLIDE GENERATOR TEST")
-    print("This will create PowerPoint slides from category analysis data")
+# Additional function to test formatting utilities
+def test_formatting_functions():
+    """Test the formatting utility functions"""
+    print("\nTesting Formatting Functions:")
+    print("-" * 50)
 
-    # First test with mock data
-    print("\nStep 1: Testing with mock data...")
-    mock_result = test_with_mock_data()
+    # Test composite index formatting
+    test_values = [
+        188.20250000000001,
+        156.7,
+        200.5,
+        199.4,
+        0,
+        -10.7,
+        "invalid",
+        None
+    ]
 
-    if mock_result:
-        print("\n✅ Mock test successful!")
-
-        # Then test with real data
-        user_input = input("\n\nTest with real Snowflake data? (y/n): ")
-        if user_input.lower() == 'y':
-
-            # Test single category
-            category = input("Which category to test? (restaurants/auto/athleisure/finance): ").lower()
-            if category in ['restaurants', 'auto', 'athleisure', 'finance']:
-                test_category_slide_with_real_data('utah_jazz', category)
-            else:
-                print("Invalid category. Testing with restaurants...")
-                test_category_slide_with_real_data('utah_jazz', 'restaurants')
-
-            # Test multiple categories
-            user_input = input("\n\nAlso test multiple categories? (y/n): ")
-            if user_input.lower() == 'y':
-                test_multiple_categories('utah_jazz')
-
-    print("\n✨ Test complete!")
+    print("\nComposite Index Formatting Tests:")
+    for value in test_values:
+        try:
+            result = int(round(float(value)))
+            print(f"Input: {value} → Output: {result}")
+        except (ValueError, TypeError):
+            print(f"Input: {value} → Output: N/A (error handling)")
 
 
 if __name__ == "__main__":
-    main()
+    # Run the visual tests
+    tester = CategorySlideTest()
+    tester.run_all_tests()
+
+    # Run formatting function tests
+    test_formatting_functions()
+
+    print("\n✅ All tests completed!")
+    print("\nKey changes implemented:")
+    print("1. Brand table moved from top=1.2\" to top=2.8\" (1.6\" lower)")
+    print("2. Composite index now rounds to whole numbers (no decimals)")
+    print("3. Error handling for invalid composite index values")

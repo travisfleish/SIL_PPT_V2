@@ -71,6 +71,9 @@ class BehaviorsSlide(BaseSlide):
         title = f"Fan Behaviors: How Are {team_name} Fans Unique"
         self._add_title(slide, title)
 
+        # Add chart titles
+        self._add_chart_titles(slide, team_name)
+
         # Add visualizations (adjusted positions for 16:9)
         self._add_fan_wheel(slide, fan_wheel_path)
         self._add_community_chart(slide, chart_path)
@@ -78,6 +81,9 @@ class BehaviorsSlide(BaseSlide):
         # Add insight text
         insight = self._generate_insight_text(merchant_ranker, team_short)
         self._add_insight_text(slide, insight)
+
+        # Add explanation text below community chart
+        self._add_chart_explanation(slide)
 
         # Add footer/logo
         self._add_team_logo(slide, team_config)
@@ -176,29 +182,75 @@ class BehaviorsSlide(BaseSlide):
         # Don't add title here since it's already in the header
         pass
 
+    def _add_chart_titles(self, slide, team_name: str):
+        """Add titles above both visualizations"""
+        # Fan wheel title
+        fan_wheel_title = slide.shapes.add_textbox(
+            Inches(0.5), Inches(1.1),
+            Inches(4.5), Inches(0.3)
+        )
+        fan_wheel_title.text_frame.text = "Top Community Fan Purchases"
+        p = fan_wheel_title.text_frame.paragraphs[0]
+        p.font.name = self.default_font
+        p.font.size = Pt(14)
+        p.font.bold = True
+        p.alignment = PP_ALIGN.CENTER
+
+        # Bar chart title
+        bar_chart_title = slide.shapes.add_textbox(
+            Inches(6.8), Inches(1.1),
+            Inches(5.5), Inches(0.3)
+        )
+        bar_chart_title.text_frame.text = f"Top Ten {team_name} Fan Communities"
+        p = bar_chart_title.text_frame.paragraphs[0]
+        p.font.name = self.default_font
+        p.font.size = Pt(14)
+        p.font.bold = True
+        p.alignment = PP_ALIGN.CENTER
+
     def _add_fan_wheel(self, slide, image_path: Path):
         """Add fan wheel image to slide (adjusted for 16:9)"""
-        # Position on left side
-        left = Inches(0.3)
-        top = Inches(1.5)
-        width = Inches(4.8)  # Slightly wider for 16:9
+        # Position on left side - vertically centered
+        left = Inches(0.5)
+        top = Inches(1.8)  # Adjusted for vertical centering
+        width = Inches(4.5)  # Fan wheel width
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
 
     def _add_community_chart(self, slide, image_path: Path):
         """Add community index chart to slide (adjusted for 16:9)"""
-        # Position on right side
-        left = Inches(5.3)  # Moved right for 16:9
-        top = Inches(1.5)
-        width = Inches(5.0)  # Wider for 16:9
+        # Position on right side - vertically centered with fan wheel
+        left = Inches(6.5)  # Right side positioning
+        top = Inches(1.8)  # Same top as fan wheel for vertical alignment
+        width = Inches(6.0)  # Chart width
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
+
+    def _add_chart_explanation(self, slide):
+        """Add explanation text below the community index chart"""
+        explanation_box = slide.shapes.add_textbox(
+            Inches(6.5), Inches(5.8),
+            Inches(6.0), Inches(0.9)
+        )
+        explanation_text = (
+            "The top ten fan communities are ranked according to a composite index score "
+            "of likelihood to purchase, likelihood to make more purchases per fan versus "
+            "the local general population, and likelihood to spend more per fan."
+        )
+        explanation_box.text_frame.text = explanation_text
+        explanation_box.text_frame.word_wrap = True
+
+        p = explanation_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font
+        p.font.size = Pt(10)
+        p.alignment = PP_ALIGN.LEFT
+        p.line_spacing = 1.2
 
     def _add_insight_text(self, slide, insight: str):
         """Add insight text below fan wheel"""
         text_box = slide.shapes.add_textbox(
-            Inches(0.3), Inches(6.0),
-            Inches(4.8), Inches(1.0)  # Adjusted for 16:9
+            Inches(0.5), Inches(6.3),  # Aligned with fan wheel
+            Inches(4.5), Inches(0.8)
         )
         text_box.text_frame.text = insight
         text_box.text_frame.word_wrap = True

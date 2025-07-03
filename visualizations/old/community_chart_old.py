@@ -11,26 +11,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
-import matplotlib.font_manager as fm
-import os
-
-
-# Add Red Hat Display fonts to matplotlib when this module is imported
-def _setup_fonts():
-    """Add Red Hat Display fonts to matplotlib"""
-    font_dir = os.path.expanduser('~/Library/Fonts')
-    if os.path.exists(font_dir):
-        for font_file in os.listdir(font_dir):
-            if 'RedHatDisplay' in font_file and font_file.endswith('.ttf'):
-                try:
-                    font_path = os.path.join(font_dir, font_file)
-                    fm.fontManager.addfont(font_path)
-                except:
-                    pass
-
-
-# Run font setup on import
-_setup_fonts()
 
 
 class CommunityIndexChart:
@@ -51,9 +31,6 @@ class CommunityIndexChart:
             self.highlight_color = '#FFC000'  # Default yellow
 
         self.background_color = '#C5C5C5'  # Gray for background bars
-
-        # Font settings
-        self.font_family = 'Red Hat Display'
 
     def create(self, data: pd.DataFrame,
                output_path: Optional[Path] = None,
@@ -132,26 +109,24 @@ class CommunityIndexChart:
                              zorder=10)
             ax.add_patch(rect)
 
-            # Add percentage text - show PERC_AUDIENCE with font
+            # Add percentage text - show PERC_AUDIENCE
             ax.text(x_pos + box_width / 2 - 5, y_pos,
                     f"{pct_value:.1f}%",
                     ha='center', va='center',
                     fontweight='bold', fontsize=11,
-                    fontfamily=self.font_family,
                     zorder=11)
 
-        # Customize the plot with Red Hat Display font
+        # Customize the plot
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(data['Community'], fontsize=13, fontfamily=self.font_family)
-        ax.set_xlabel('Percent Fan Audience', fontsize=13, fontweight='bold', fontfamily=self.font_family)
+        ax.set_yticklabels(data['Community'], fontsize=13)  # Increased from 11 to 13
+        ax.set_xlabel('Percent Fan Audience', fontsize=13, fontweight='bold')  # Changed from '% Audience Index', matched fontsize
         ax.set_xlim(0, max_value)
 
-        # Add x-axis labels at specific intervals with bold font and Red Hat Display
+        # Add x-axis labels at specific intervals with bold font
         ax.set_xticks([0, 100, 200, 300, 400, 500, 600, 700])
         ax.tick_params(axis='x', labelsize=12, labelbottom=True)
         for label in ax.get_xticklabels():
             label.set_fontweight('bold')
-            label.set_fontfamily(self.font_family)
 
         # Remove top and right spines
         ax.spines['top'].set_visible(False)
@@ -163,9 +138,9 @@ class CommunityIndexChart:
         ax.grid(True, axis='x', alpha=0.3, linestyle='-', linewidth=0.5)
         ax.set_axisbelow(True)
 
-        # Add title if provided with font
+        # Add title if provided
         if title:
-            ax.set_title(title, fontsize=14, fontweight='bold', pad=20, fontfamily=self.font_family)
+            ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
 
         # Add legend at bottom with more space and matched font size
         from matplotlib.patches import Patch
@@ -173,15 +148,14 @@ class CommunityIndexChart:
             Patch(facecolor=self.background_color, alpha=0.8, label='% Team Fans'),  # Changed from '% Audience'
             Patch(facecolor=self.bar_color, label='Team Fan Index')  # Changed from '% Audience Index'
         ]
-        legend = ax.legend(handles=legend_elements,
-                           loc='lower center',
-                           bbox_to_anchor=(0.5, -0.20),  # Changed from -0.15 to -0.20 for more space
-                           ncol=2,
-                           frameon=True,
-                           fancybox=True,
-                           shadow=False,
-                           fontsize=13,
-                           prop={'family': self.font_family})
+        ax.legend(handles=legend_elements,
+                  loc='lower center',
+                  bbox_to_anchor=(0.5, -0.25),  # Changed from -0.15 to -0.20 for more space
+                  ncol=2,
+                  frameon=True,
+                  fancybox=True,
+                  shadow=False,
+                  fontsize=13)  # Added fontsize to match
 
         # Adjust layout
         plt.tight_layout()

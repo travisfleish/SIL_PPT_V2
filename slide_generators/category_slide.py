@@ -582,7 +582,7 @@ class CategorySlide(BaseSlide):
         rows = min(len(merchant_df) + 1, 6)  # Header + max 5 brands
         cols = 5
         left = Inches(5.833)  # Moved right for 16:9
-        top = Inches(1.2)
+        top = Inches(3.0)
         width = Inches(7.0)  # Wider for 16:9
         height = Inches(0.35 * rows)
 
@@ -635,7 +635,7 @@ class CategorySlide(BaseSlide):
         # Recommendation content
         rec_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(5.4),
-            Inches(6), Inches(1.2)
+            Inches(4.5), Inches(1.2)
         )
 
         text_frame = rec_box.text_frame
@@ -644,7 +644,11 @@ class CategorySlide(BaseSlide):
         # UPDATED: Standardized recommendation format with composite index
         team_name = team_config.get('team_name', 'Team')
         merchant_name = recommendation.get('merchant', 'Brand')
-        composite_index = recommendation.get('composite_index', 'N/A')
+        composite_index_raw = recommendation.get('composite_index', 0)
+        try:
+            composite_index = int(round(float(composite_index_raw)))
+        except (ValueError, TypeError):
+            composite_index = 'N/A'
 
         # First bullet - main recommendation with composite index
         p1 = text_frame.paragraphs[0]

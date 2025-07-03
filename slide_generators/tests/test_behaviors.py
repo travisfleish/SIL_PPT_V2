@@ -1,72 +1,94 @@
-# test_behaviors_slide.py
+# test_behaviors_slide_updated.py
 """
-Test script for generating the Fan Behaviors PowerPoint slide
+Test script for the updated behaviors slide with titles and explanation
 """
 
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent))
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
 
-from slide_generators.behaviors_slide import create_behaviors_slide
+from pptx import Presentation
 from data_processors.merchant_ranker import MerchantRanker
 from utils.team_config_manager import TeamConfigManager
+from slide_generators.behaviors_slide import BehaviorsSlide
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
 
-def test_behaviors_slide(team_key: str = 'utah_jazz'):
+def test_behaviors_slide(team_key: str = 'utah_jazz', save_intermediate: bool = True):
     """
-    Test behaviors slide generation
+    Test the updated behaviors slide
 
     Args:
-        team_key: Team identifier (utah_jazz or dallas_cowboys)
+        team_key: Team to test with
+        save_intermediate: Whether to save the chart images separately
     """
     print(f"\n{'=' * 60}")
-    print(f"BEHAVIORS SLIDE TEST - {team_key.replace('_', ' ').title()}")
-    print(f"{'=' * 60}")
+    print(f"TESTING UPDATED BEHAVIORS SLIDE - {team_key.upper()}")
+    print(f"{'=' * 60}\n")
 
     try:
-        # 1. Get team configuration
-        print("\n1. Loading team configuration...")
+        # 1. Setup
+        print("1. Loading configuration...")
         config_manager = TeamConfigManager()
         team_config = config_manager.get_team_config(team_key)
         print(f"   ✅ Team: {team_config['team_name']}")
-        print(f"   ✅ Colors: {team_config['colors']}")
 
-        # 2. Initialize data source
-        print("\n2. Initializing data source...")
+        # 2. Initialize data
+        print("\n2. Connecting to data source...")
         ranker = MerchantRanker(team_view_prefix=team_config['view_prefix'])
-        print(f"   ✅ Connected to Snowflake views")
 
-        # 3. Test data availability
-        print("\n3. Checking data availability...")
+        # Quick data check
         communities = ranker.get_top_communities(min_audience_pct=0.20, top_n=3)
         if communities.empty:
             print("   ❌ No community data found!")
-            return
-        print(f"   ✅ Found {len(communities)} top communities")
-        print(f"      Top 3: {', '.join(communities['COMMUNITY'].tolist())}")
+            return None
+        print(f"   ✅ Found {len(communities)} communities")
 
-        # 4. Generate slide
+        # 3. Create presentation
+        print("\n3. Creating presentation...")
+        presentation = Presentation()
+
+        # 4. Generate behaviors slide
         print("\n4. Generating behaviors slide...")
-        print("   - Creating fan wheel visualization...")
-        print("   - Creating community index chart...")
-        print("   - Building PowerPoint slide...")
+        print("   • Creating fan wheel visualization")
+        print("   • Creating community index chart")
+        print("   • Adding chart titles:")
+        print("     - 'Top Community Fan Purchases'")
+        print("     - 'Top Ten [Team] Fan Communities'")
+        print("   • Adding explanation text")
+        print("   • Adding insight text")
 
-        presentation = create_behaviors_slide(ranker, team_config)
+        behaviors_generator = BehaviorsSlide(presentation)
+        presentation = behaviors_generator.generate(ranker, team_config)
 
         # 5. Save presentation
-        output_path = Path(f"{team_key}_behaviors_slide.pptx")
+        output_path = Path(f"{team_key}_behaviors_updated.pptx")
         presentation.save(str(output_path))
 
-        print(f"\n✅ SUCCESS! Slide saved to: {output_path.absolute()}")
+        print(f"\n✅ SUCCESS! Presentation saved to: {output_path.absolute()}")
 
-        # Also save the intermediate images for inspection
-        print("\n📁 Check these temporary files:")
-        print("   - temp_fan_wheel.png")
-        print("   - temp_community_chart.png")
+        # 6. Verify what was added
+        print("\n📋 Slide should contain:")
+        print("   • Header: Team name + 'Fan Behaviors: How Are [Team] Fans Unique'")
+        print("   • Fan wheel (left) with title 'Top Community Fan Purchases'")
+        print("   • Bar chart (right) with title 'Top Ten [Team] Fan Communities'")
+        print("   • Legend showing '% Team Fans' and 'Team Fan Index'")
+        print("   • X-axis labeled 'Percent Fan Audience'")
+        print("   • Explanation text below bar chart")
+        print("   • Insight text below fan wheel")
+
+        # Check if intermediate files exist
+        if save_intermediate:
+            print("\n📁 Intermediate files:")
+            for file in ['temp_fan_wheel.png', 'temp_community_chart.png']:
+                if Path(file).exists():
+                    print(f"   ✅ {file}")
+                else:
+                    print(f"   ❌ {file} (missing)")
 
         return output_path
 
@@ -77,24 +99,64 @@ def test_behaviors_slide(team_key: str = 'utah_jazz'):
         return None
 
 
+def compare_slides(team_key: str = 'utah_jazz'):
+    """
+    Generate before/after comparison if you have the old version
+    """
+    print("\n🔄 COMPARISON TEST")
+    print("This will generate two versions to compare the changes\n")
+
+    # Test with updated version
+    result = test_behaviors_slide(team_key)
+
+    if result:
+        print("\n💡 TIP: Open the PowerPoint and verify:")
+        print("   1. Both charts have titles above them")
+        print("   2. Bar chart shows '% Team Fans' and 'Team Fan Index' in legend")
+        print("   3. X-axis says 'Percent Fan Audience'")
+        print("   4. Explanation text appears below the bar chart")
+
+
+def test_multiple_teams():
+    """Test with multiple teams to ensure consistency"""
+    teams = ['utah_jazz', 'dallas_cowboys']
+    results = []
+
+    for team in teams:
+        print(f"\n{'=' * 40}")
+        print(f"Testing {team}")
+        print(f"{'=' * 40}")
+
+        result = test_behaviors_slide(team, save_intermediate=False)
+        if result:
+            results.append((team, result))
+
+    print("\n📊 SUMMARY")
+    print(f"Successfully generated {len(results)} presentations:")
+    for team, path in results:
+        print(f"   • {team}: {path}")
+
+
 def main():
     """Main test function"""
-    print("\n🎯 FAN BEHAVIORS SLIDE GENERATOR TEST")
-    print("This will create a PowerPoint slide with:")
-    print("  • Fan wheel visualization (left)")
-    print("  • Community index chart (right)")
-    print("  • Insight text below the fan wheel")
+    print("\n🎯 BEHAVIORS SLIDE UPDATE TEST")
+    print("This will test the updated behaviors slide with:")
+    print("  • Chart titles")
+    print("  • Updated legend labels")
+    print("  • Explanation text")
+    print("  • Correct x-axis label")
 
-    # Test with Utah Jazz
-    jazz_result = test_behaviors_slide('utah_jazz')
+    # Single team test
+    test_behaviors_slide('utah_jazz')
 
-    if jazz_result:
-        # Ask if user wants to test Dallas Cowboys too
-        user_input = input("\n\nAlso test Dallas Cowboys? (y/n): ")
-        if user_input.lower() == 'y':
-            cowboys_result = test_behaviors_slide('dallas_cowboys')
+    # Ask if user wants to test more
+    user_input = input("\n\nTest Dallas Cowboys too? (y/n): ")
+    if user_input.lower() == 'y':
+        test_behaviors_slide('dallas_cowboys')
 
-    print("\n✨ Test complete!")
+    user_input = input("\nRun comparison test? (y/n): ")
+    if user_input.lower() == 'y':
+        compare_slides()
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ import logging
 
 from .base_slide import BaseSlide
 from data_processors.merchant_ranker import MerchantRanker
-from visualizations.test_wheel import FanWheelStandalone
+from visualizations.fan_wheel import FanWheel  # Updated to use enhanced fan wheel
 from visualizations.community_index_chart import CommunityIndexChart
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class BehaviorsSlide(BaseSlide):
         colors = team_config.get('colors', {})
 
         # Create visualizations
-        logger.info("Generating fan wheel visualization...")
+        logger.info("Generating fan wheel visualization with logo support...")
         fan_wheel_path = self._create_fan_wheel(merchant_ranker, team_config)
 
         logger.info("Generating community index chart...")
@@ -87,24 +87,29 @@ class BehaviorsSlide(BaseSlide):
 
     def _create_fan_wheel(self, merchant_ranker: MerchantRanker,
                           team_config: Dict[str, Any]) -> Path:
-        """Create fan wheel visualization"""
+        """Create fan wheel visualization with logo support"""
         # Get data
         wheel_data = merchant_ranker.get_fan_wheel_data(
             min_audience_pct=0.20,
             top_n_communities=10
         )
 
-        # Create visualization
-        colors = team_config['colors']
-        fan_wheel = FanWheelStandalone(
-            team_name=team_config['team_name_short'],
-            primary_color=colors['primary'],
-            secondary_color=colors['secondary'],
-            accent_color=colors.get('accent', '#4169E1')
-        )
+        if wheel_data.empty:
+            raise ValueError("No fan wheel data available")
+
+        # Create visualization with logo support enabled
+        fan_wheel = FanWheel(team_config, enable_logos=True)
+
+        # Generate logo report for debugging
+        logo_report = fan_wheel.generate_logo_report(wheel_data)
+        logger.info(f"Logo coverage: {logo_report['with_logos']}/{logo_report['total_merchants']} "
+                    f"({logo_report['coverage_percentage']:.1f}%)")
+
+        if logo_report['missing_list']:
+            logger.debug(f"Missing logos for: {', '.join(logo_report['missing_list'])}")
 
         output_path = Path('temp_fan_wheel.png')
-        fan_wheel.create(wheel_data, str(output_path))
+        fan_wheel.create(wheel_data, output_path)
 
         return output_path
 
@@ -208,40 +213,57 @@ class BehaviorsSlide(BaseSlide):
     def _generate_insight_text(self, merchant_ranker: MerchantRanker,
                                team_short: str) -> str:
         """Generate insight text based on top communities"""
-        # Get top communities
-        communities_df = merchant_ranker.get_top_communities(
-            min_audience_pct=0.20, top_n=5
-        )
+        try:
+            # Get top communities
+            communities = merchant_ranker.get_top_communities(
+                min_audience_pct=0.20,
+                top_n=3
+            )
 
-        if not communities_df.empty:
-            top_communities = communities_df['COMMUNITY'].tolist()
+            if communities.empty:
+                return f"{team_short} fans have unique behaviors that set them apart!"
 
-            # Create more natural phrases based on communities
+            # Extract community names and convert to insights
+            community_names = communities['COMMUNITY'].tolist()
             insights = []
 
-            # Check for specific communities and build phrase
-            if 'Live Entertainment Seekers' in top_communities[:3]:
-                insights.append('values-driven live entertainment seekers')
+            for community in community_names[:2]:  # Use top 2
+                if 'entertainment' in community.lower() or 'live' in community.lower():
+                    insights.append("values-driven live entertainment seekers")
+                elif 'cost' in community.lower() or 'conscious' in community.lower():
+                    insights.append("on the lookout for a deal")
+                elif 'travel' in community.lower():
+                    insights.append("adventure-seeking travelers")
+                elif 'beauty' in community.lower():
+                    insights.append("beauty enthusiasts")
+                elif 'brand' in community.lower():
+                    insights.append("brand-conscious shoppers")
+                elif 'movie' in community.lower() or 'film' in community.lower():
+                    insights.append("movie buffs")
+                elif 'game' in community.lower():
+                    insights.append("gaming enthusiasts")
+                elif 'sports' in community.lower():
+                    insights.append("sports fans")
+                elif 'pet' in community.lower():
+                    insights.append("pet lovers")
+                elif 'streaming' in community.lower():
+                    insights.append("streaming content consumers")
 
-            if 'Sports Merchandise Shopper' in top_communities[:3]:
-                insights.append('sports merchandise shopper')
+            # Create insight text
+            if len(insights) >= 2:
+                # Add movie reference for entertainment seekers
+                if "entertainment" in insights[0]:
+                    return f"{team_short} fans are {insights[0]} who are {insights[1]} and a good movie!"
+                else:
+                    return f"{team_short} fans are {insights[0]} who are {insights[1]}!"
+            elif len(insights) == 1:
+                if "entertainment" in insights[0]:
+                    return f"{team_short} fans are {insights[0]} who love a good movie!"
+                else:
+                    return f"{team_short} fans are {insights[0]}!"
 
-            if 'Youth Sports' in top_communities[:3]:
-                insights.append('youth sports')
-
-            if 'Cost Conscious' in top_communities[:5]:
-                insights.append('on the lookout for a deal')
-
-            if 'Movie Buffs' in top_communities[:5]:
-                insights.append('a good movie')
-
-            # Build the sentence
-            if len(insights) >= 3:
-                return f"{team_short} fans are {insights[0]} who are {insights[1]} and {insights[2]}!"
-            elif len(insights) == 2:
-                return f"{team_short} fans are {insights[0]} and {insights[1]}!"
-            elif insights:
-                return f"{team_short} fans are {insights[0]}!"
+        except Exception as e:
+            logger.warning(f"Error generating insight text: {e}")
 
         # Fallback
         return f"{team_short} fans have unique behaviors that set them apart from the general population!"
