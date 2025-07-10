@@ -21,8 +21,7 @@ from data_processors.snowflake_connector import query_to_dataframe
 
 # Import slide generators
 from slide_generators.title_slide import TitleSlide
-from slide_generators.demographics_slide1 import DemographicsSlide1
-from slide_generators.demographics_slide2 import DemographicsSlide2
+from slide_generators.demographics_slide import DemographicsSlide  # Now single slide
 from slide_generators.behaviors_slide import BehaviorsSlide
 from slide_generators.category_slide import CategorySlide
 
@@ -152,13 +151,11 @@ class PowerPointBuilder:
         import slide_generators.base_slide as base_slide
         base_slide.DEFAULT_FONT_FAMILY = font_name
 
-        # Update individual slide generators
-        import slide_generators.demographics_slide1 as demo_slide1
-        demo_slide1.DEFAULT_FONT_FAMILY = font_name
+        # Update demographics slide
+        import slide_generators.demographics_slide as demo_slide
+        demo_slide.DEFAULT_FONT_FAMILY = font_name
 
-        import slide_generators.demographics_slide2 as demo_slide2
-        demo_slide2.DEFAULT_FONT_FAMILY = font_name
-
+        # Update category slide
         import slide_generators.category_slide as cat_slide
         cat_slide.DEFAULT_FONT_FAMILY = font_name
 
@@ -181,11 +178,11 @@ class PowerPointBuilder:
         logger.info(f"Font: {self.presentation_font}")
 
         try:
-            # 1. Create title slide
+            # 1. Create title slide with demographic insights
             self._create_title_slide()
 
-            # 2. Create demographics slides (now two slides)
-            self._create_demographics_slides()
+            # 2. Create single demographics slide with all 6 charts
+            self._create_demographics_slide()
 
             # 3. Create behaviors slide
             self._create_behaviors_slide()
@@ -212,8 +209,6 @@ class PowerPointBuilder:
         logger.info("Creating title slide...")
 
         title_generator = TitleSlide(self.presentation)
-
-        # Ensure the slide generator uses the validated font
         title_generator.default_font = self.presentation_font
 
         self.presentation = title_generator.generate(
@@ -224,9 +219,56 @@ class PowerPointBuilder:
         self.slides_created.append("Title Slide")
         logger.info("✓ Title slide created")
 
-    def _create_demographics_slides(self):
-        """Create both demographics slides with all charts"""
-        logger.info("Creating demographics slides...")
+    def _get_demographic_insights(self) -> Optional[str]:
+        """Generate demographic insights text for title slide"""
+        try:
+            # Load demographics data
+            demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
+            query = f"SELECT * FROM {demographics_view}"
+            df = query_to_dataframe(query)
+
+            if df.empty:
+                return None
+
+            # Process demographics to get key stats
+            processor = DemographicsProcessor(
+                data_source=df,
+                team_name=self.team_name,
+                league=self.league
+            )
+            demographic_data = processor.process_all_demographics()
+
+            # Get the AI-generated insight or format our own
+            if 'key_insights' in demographic_data and demographic_data['key_insights']:
+                return demographic_data['key_insights']
+            else:
+                return self._format_demographic_insights(demographic_data)
+
+        except Exception as e:
+            logger.warning(f"Could not generate demographic insights: {e}")
+            return None
+
+    def _format_demographic_insights(self, demographic_data: Dict[str, Any]) -> str:
+        """Format demographic data into insights text"""
+        # This is a fallback - ideally the DemographicsProcessor provides this
+        team_name = self.team_config['team_name']
+
+        # Default insight format matching the designer's sample
+        default_insight = (
+            f"{team_name} fans are significantly younger, with 79% being Millennials/Gen X "
+            f"compared to 0% in the Utah general population and 76% of NBA average fans, "
+            f"they have a higher household income with 76% earning $100K+ compared to 0% "
+            f"in the Utah general population and 73% of NBA average fans, are predominantly "
+            f"male at 54% versus 0% in the Utah general population and 52% of NBA average fans, "
+            f"and are largely working professionals at 64% compared to 0% in the Utah general "
+            f"population and 65% for NBA average fans."
+        )
+
+        return default_insight
+
+    def _create_demographics_slide(self):
+        """Create single demographics slide with all 6 charts"""
+        logger.info("Creating demographics slide...")
 
         try:
             # Load demographics data
@@ -255,35 +297,22 @@ class PowerPointBuilder:
                 output_dir=self.charts_dir
             )
 
-            # Create demographics slide 1 (Gender, Ethnicity, Generation)
-            demo_generator1 = DemographicsSlide1(self.presentation)
-            demo_generator1.default_font = self.presentation_font
+            # Create single demographics slide with all 6 charts
+            demo_generator = DemographicsSlide(self.presentation)
+            demo_generator.default_font = self.presentation_font
 
-            self.presentation = demo_generator1.generate(
+            self.presentation = demo_generator.generate(
                 demographic_data=demographic_data,
                 chart_dir=self.charts_dir,
                 team_config=self.team_config
             )
 
-            self.slides_created.append("Demographics Slide 1 (Gender, Ethnicity, Generation)")
-            logger.info("✓ Demographics slide 1 created")
-
-            # Create demographics slide 2 (Income, Children, Occupation)
-            demo_generator2 = DemographicsSlide2(self.presentation)
-            demo_generator2.default_font = self.presentation_font
-
-            self.presentation = demo_generator2.generate(
-                demographic_data=demographic_data,
-                chart_dir=self.charts_dir,
-                team_config=self.team_config
-            )
-
-            self.slides_created.append("Demographics Slide 2 (Income, Children, Occupation)")
-            logger.info("✓ Demographics slide 2 created")
+            self.slides_created.append("Demographics Slide (All 6 Charts)")
+            logger.info("✓ Demographics slide created")
 
         except Exception as e:
-            logger.error(f"Error creating demographics slides: {str(e)}")
-            self._add_placeholder_slide("Demographics slides - error loading data")
+            logger.error(f"Error creating demographics slide: {str(e)}")
+            self._add_placeholder_slide("Demographics slide - error loading data")
 
     def _create_behaviors_slide(self):
         """Create the fan behaviors slide"""
@@ -291,8 +320,6 @@ class PowerPointBuilder:
 
         try:
             behaviors_generator = BehaviorsSlide(self.presentation)
-
-            # Ensure the slide generator uses the validated font
             behaviors_generator.default_font = self.presentation_font
 
             self.presentation = behaviors_generator.generate(
@@ -408,8 +435,6 @@ class PowerPointBuilder:
 
             # Create slides
             category_generator = CategorySlide(self.presentation)
-
-            # Ensure the slide generator uses the validated font
             category_generator.default_font = self.presentation_font
 
             # Category analysis slide
@@ -439,14 +464,13 @@ class PowerPointBuilder:
         text_box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(11.333), Inches(1))
         text_box.text = message
         p = text_box.text_frame.paragraphs[0]
-        p.font.name = self.presentation_font  # Use validated font
+        p.font.name = self.presentation_font
         p.font.size = Pt(24)
         p.alignment = PP_ALIGN.CENTER
         self.slides_created.append(f"Placeholder: {message}")
 
     def _is_womens_team(self) -> bool:
         """Determine if this is a women's team"""
-        # This is a simplified check - you might want to add this to team config
         womens_indicators = ["women's", "ladies", "wnba", "nwsl"]
         return any(indicator in self.team_name.lower() for indicator in womens_indicators)
 

@@ -12,20 +12,25 @@ import pandas as pd
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 import matplotlib.font_manager as fm
-import warnings
+import os
 
-# Try to use Red Hat Display font
-CHART_FONT = 'Red Hat Display'
-FALLBACK_FONT = 'Arial'
 
-# Check if Red Hat Display is available
-available_fonts = [f.name for f in fm.fontManager.ttflist]
-if CHART_FONT in available_fonts:
-    plt.rcParams['font.family'] = CHART_FONT
-    print(f"Using {CHART_FONT} for charts")
-else:
-    plt.rcParams['font.family'] = FALLBACK_FONT
-    warnings.warn(f"{CHART_FONT} not found. Using {FALLBACK_FONT} for charts.")
+# Add Red Hat Display fonts to matplotlib when this module is imported
+def _setup_fonts():
+    """Add Red Hat Display fonts to matplotlib"""
+    font_dir = os.path.expanduser('~/Library/Fonts')
+    if os.path.exists(font_dir):
+        for font_file in os.listdir(font_dir):
+            if 'RedHatDisplay' in font_file and font_file.endswith('.ttf'):
+                try:
+                    font_path = os.path.join(font_dir, font_file)
+                    fm.fontManager.addfont(font_path)
+                except:
+                    pass
+
+
+# Run font setup on import
+_setup_fonts()
 
 # Set style for professional appearance
 plt.style.use('default')  # Use default style
@@ -35,8 +40,9 @@ plt.rcParams['axes.edgecolor'] = 'black'
 plt.rcParams['grid.alpha'] = 0.3
 plt.rcParams['font.size'] = 10
 
-# Force matplotlib to use the font for all text elements
-plt.rcParams['font.sans-serif'] = [CHART_FONT, FALLBACK_FONT, 'DejaVu Sans']
+# Force matplotlib to use Red Hat Display
+plt.rcParams['font.family'] = 'Red Hat Display'
+plt.rcParams['font.sans-serif'] = ['Red Hat Display', 'Arial', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False  # Proper minus sign rendering
 
 
@@ -55,35 +61,14 @@ class DemographicCharts:
         self.title_size = 12
         self.label_size = 9
 
-        # Set font family for this instance
-        self.font_family = CHART_FONT if CHART_FONT in available_fonts else FALLBACK_FONT
+        # Set font family
+        self.font_family = 'Red Hat Display'
 
         self.community_colors = [
             self.colors['primary'],
             self.colors['secondary'],
             self.colors['accent']
         ]
-
-    def _set_font_properties(self, ax):
-        """Apply font properties to an axes object"""
-        # Set font for title
-        ax.title.set_fontfamily(self.font_family)
-
-        # Set font for axis labels
-        ax.xaxis.label.set_fontfamily(self.font_family)
-        ax.yaxis.label.set_fontfamily(self.font_family)
-
-        # Set font for tick labels
-        for label in ax.get_xticklabels():
-            label.set_fontfamily(self.font_family)
-        for label in ax.get_yticklabels():
-            label.set_fontfamily(self.font_family)
-
-        # Set font for legend if exists
-        legend = ax.get_legend()
-        if legend:
-            for text in legend.get_texts():
-                text.set_fontfamily(self.font_family)
 
     def create_grouped_bar_chart(self, data: pd.DataFrame, title: str,
                                  ylabel: str = '% of Total Customer Count',
@@ -109,12 +94,12 @@ class DemographicCharts:
         ax.set_ylabel(ylabel, fontsize=self.font_size, fontfamily=self.font_family)
         ax.set_title(title, fontsize=self.title_size, fontweight='bold', pad=20, fontfamily=self.font_family)
         ax.set_xticks(indices)
-        ax.set_xticklabels(data.index, rotation=rotation, ha='right' if rotation else 'center')
+        ax.set_xticklabels(data.index, rotation=rotation, ha='right' if rotation else 'center',
+                           fontfamily=self.font_family)
 
         # Add legend with font
-        legend = ax.legend(loc='upper right', frameon=True, fontsize=self.font_size)
-        for text in legend.get_texts():
-            text.set_fontfamily(self.font_family)
+        legend = ax.legend(loc='upper right', frameon=True, fontsize=self.font_size,
+                           prop={'family': self.font_family})
 
         max_value = data.max().max()
         ax.set_ylim(0, (max_value if pd.notna(max_value) and max_value > 0 else 100) * 1.15)
@@ -125,8 +110,9 @@ class DemographicCharts:
         # Format y-axis as percentages without decimals
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
 
-        # Apply font properties to all text elements
-        self._set_font_properties(ax)
+        # Set font for y-axis tick labels
+        for label in ax.get_yticklabels():
+            label.set_fontfamily(self.font_family)
 
         plt.tight_layout()
         return fig
@@ -218,12 +204,15 @@ class DemographicCharts:
                       fontfamily=self.font_family)
         ax.set_title('Ethnicity', fontsize=self.title_size, fontweight='bold', pad=20, fontfamily=self.font_family)
         ax.set_xticks(x)
-        ax.set_xticklabels(data.index, fontsize=self.font_size)
+        ax.set_xticklabels(data.index, fontsize=self.font_size, fontfamily=self.font_family)
+
+        # Set font for y-axis tick labels
+        for label in ax.get_yticklabels():
+            label.set_fontfamily(self.font_family)
 
         # Legend with font
-        legend = ax.legend(loc='upper right', frameon=True, fontsize=self.font_size)
-        for text in legend.get_texts():
-            text.set_fontfamily(self.font_family)
+        legend = ax.legend(loc='upper right', frameon=True, fontsize=self.font_size,
+                           prop={'family': self.font_family})
 
         # Remove top and right spines
         ax.spines['top'].set_visible(False)
@@ -239,9 +228,6 @@ class DemographicCharts:
         # Add gridlines
         ax.grid(True, axis='y', alpha=0.3, linestyle='--')
         ax.set_axisbelow(True)
-
-        # Apply font properties
-        self._set_font_properties(ax)
 
         plt.tight_layout()
         return fig

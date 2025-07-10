@@ -9,26 +9,197 @@ import matplotlib.patches as patches
 from matplotlib.patches import Wedge, Circle, Polygon
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 import logging
 from typing import Dict, Optional, List, Tuple
 import pandas as pd
+import re
 
 from .base_chart import BaseChart
 
 logger = logging.getLogger(__name__)
 
 
+class LogoManager:
+    """Manage local logo files with intelligent fallbacks"""
+
+    def __init__(self, logo_dir: Optional[Path] = None):
+        """Initialize logo manager"""
+        if logo_dir is None:
+            # Find project root (look for PPT_Generator_SIL directory)
+            current_path = Path(__file__).resolve()
+            project_root = None
+
+            # Walk up the directory tree to find the project root
+            for parent in current_path.parents:
+                if parent.name == 'PPT_Generator_SIL':
+                    project_root = parent
+                    break
+
+            if project_root is None:
+                # Fallback: assume we're somewhere in the project
+                project_root = current_path.parent
+                while project_root.parent != project_root and not (project_root / 'assets').exists():
+                    project_root = project_root.parent
+
+            logo_dir = project_root / 'assets' / 'logos' / 'merchants'
+
+        self.logo_dir = Path(logo_dir)
+        self.logo_dir.mkdir(parents=True, exist_ok=True)
+
+        # Cache for loaded logos
+        self._logo_cache: Dict[str, Optional[Image.Image]] = {}
+
+        # Supported image formats
+        self.supported_formats = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'}
+
+        logger.debug(f"LogoManager initialized with directory: {self.logo_dir}")
+
+    def get_logo(self, merchant_name: str, size: Tuple[int, int] = (120, 120)) -> Optional[Image.Image]:
+        """Get logo for merchant with intelligent fallback"""
+        cache_key = f"{merchant_name}_{size[0]}x{size[1]}"
+        if cache_key in self._logo_cache:
+            return self._logo_cache[cache_key]
+
+        # Try to find logo file
+        logo_path = self._find_logo_file(merchant_name)
+
+        if logo_path:
+            try:
+                logo = Image.open(logo_path)
+                logo = self._prepare_logo(logo, size)
+                self._logo_cache[cache_key] = logo
+                logger.debug(f"Loaded logo for {merchant_name} from {logo_path}")
+                return logo
+            except Exception as e:
+                logger.warning(f"Failed to load logo for {merchant_name}: {e}")
+
+        self._logo_cache[cache_key] = None
+        return None
+
+    def _find_logo_file(self, merchant_name: str) -> Optional[Path]:
+        """Find logo file using various naming strategies"""
+        search_names = self._generate_search_names(merchant_name)
+
+        for search_name in search_names:
+            for ext in self.supported_formats:
+                logo_path = self.logo_dir / f"{search_name}{ext}"
+                if logo_path.exists():
+                    return logo_path
+        return None
+
+    def _generate_search_names(self, merchant_name: str) -> list[str]:
+        """Generate possible filename variations for merchant"""
+        variations = []
+
+        # Original name
+        variations.append(merchant_name)
+
+        # Lowercase
+        variations.append(merchant_name.lower())
+
+        # Replace spaces with underscores
+        variations.append(merchant_name.lower().replace(' ', '_'))
+
+        # Replace spaces with hyphens
+        variations.append(merchant_name.lower().replace(' ', '-'))
+
+        # Remove special characters and spaces
+        clean_name = re.sub(r'[^a-zA-Z0-9]', '', merchant_name.lower())
+        variations.append(clean_name)
+
+        # Common abbreviations/variations
+        name_mapping = {
+            'mcdonalds': ['mcdonalds', 'mcd', 'mcdonald'],
+            'taco bell': ['tacobell', 'taco_bell'],
+            'kwik trip': ['kwiktrip', 'kwik_trip'],
+            'auto zone': ['autozone', 'auto_zone'],
+            'krispy kreme': ['krispykreme', 'krispy_kreme', 'kk'],
+            'jewel osco': ['jewelosco', 'jewel_osco', 'jewel'],
+            'binny\'s': ['binnys', 'binny', 'binnys_beverage'],
+            'ulta': ['ulta', 'ulta_beauty'],
+            'grubhub': ['grubhub', 'grub_hub'],
+            'wayfair': ['wayfair'],
+            'lululemon': ['lululemon', 'lulu']
+        }
+
+        merchant_lower = merchant_name.lower()
+        for key, aliases in name_mapping.items():
+            if key in merchant_lower:
+                variations.extend(aliases)
+
+        return list(dict.fromkeys(variations))  # Remove duplicates
+
+    def _prepare_logo(self, logo: Image.Image, size: Tuple[int, int]) -> Image.Image:
+        """Prepare logo for use in fan wheel (resize, ensure RGBA)"""
+        if logo.mode != 'RGBA':
+            logo = logo.convert('RGBA')
+
+        logo.thumbnail(size, Image.Resampling.LANCZOS)
+
+        final_logo = Image.new('RGBA', size, (255, 255, 255, 0))
+
+        x = (size[0] - logo.width) // 2
+        y = (size[1] - logo.height) // 2
+        final_logo.paste(logo, (x, y), logo if logo.mode == 'RGBA' else None)
+
+        return final_logo
+
+    def create_fallback_logo(self, merchant_name: str, size: Tuple[int, int] = (120, 120),
+                             bg_color: str = 'white', text_color: str = '#888888') -> Image.Image:
+        """Create a fallback logo with merchant initials"""
+        logo = Image.new('RGBA', size, bg_color)
+        draw = ImageDraw.Draw(logo)
+
+        # Add border
+        border_width = 2
+        draw.ellipse([border_width, border_width,
+                      size[0] - border_width, size[1] - border_width],
+                     outline='#E0E0E0', width=border_width)
+
+        # Generate initials
+        initials = ''.join([word[0].upper() for word in merchant_name.split()[:2]])
+
+        # Calculate font size
+        font_size = min(size) // 3
+        try:
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+
+        # Center text
+        bbox = draw.textbbox((0, 0), initials, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        x = (size[0] - text_width) // 2
+        y = (size[1] - text_height) // 2
+
+        draw.text((x, y), initials, fill=text_color, font=font)
+
+        return logo
+
+    def list_available_logos(self) -> list[str]:
+        """List all available logo files"""
+        logos = []
+        for ext in self.supported_formats:
+            for logo_file in self.logo_dir.glob(f"*{ext}"):
+                logos.append(logo_file.stem)
+        return sorted(set(logos))
+
+
 class FanWheel(BaseChart):
     """Generate fan wheel visualization showing top communities and their merchants"""
 
-    def __init__(self, team_config: Dict[str, any]):
+    def __init__(self, team_config: Dict[str, any], enable_logos: bool = True, logo_dir: Optional[Path] = None):
         """
         Initialize fan wheel generator
 
         Args:
             team_config: Team configuration with colors and names
+            enable_logos: Whether to enable logo loading (default: True)
+            logo_dir: Optional custom logo directory path
         """
         super().__init__()
         self.team_config = team_config
@@ -45,6 +216,13 @@ class FanWheel(BaseChart):
         self.outer_radius = 5.0
         self.logo_radius = 2.8
         self.inner_radius = 1.6
+
+        # Logo settings
+        self.enable_logos = enable_logos
+        self.logo_size = (110, 110)  # Size for logos in pixels
+
+        # Initialize logo manager if enabled
+        self.logo_manager = LogoManager(logo_dir) if enable_logos else None
 
     def create(self, wheel_data: pd.DataFrame,
                output_path: Optional[Path] = None,
@@ -63,8 +241,9 @@ class FanWheel(BaseChart):
         if output_path is None:
             output_path = Path(f'{self.team_short.lower()}_fan_wheel.png')
 
-        # Create figure
-        fig = plt.figure(figsize=(12, 12), facecolor='white')
+        # Create figure with higher DPI if logos are enabled
+        dpi = 150 if self.enable_logos else 100
+        fig = plt.figure(figsize=(12, 12), facecolor='white', dpi=dpi)
         ax = fig.add_subplot(111, aspect='equal')
         ax.set_xlim(-6, 6)
         ax.set_ylim(-6, 6)
@@ -187,7 +366,7 @@ class FanWheel(BaseChart):
                                zorder=20)
         ax.add_patch(center_circle)
 
-        # For now, just show team text (no logo)
+        # For now, just show team text (could be enhanced with actual logo later)
         fan_text = f"THE {self.team_short.upper()} FAN"
         ax.text(0, 0, fan_text,
                 ha='center', va='center',
@@ -196,6 +375,8 @@ class FanWheel(BaseChart):
 
     def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float):
         """Add logos and behavior text to each segment"""
+        missing_logos = []
+
         for i, (_, row) in enumerate(wheel_data.iterrows()):
             center_angle = i * angle_step + angle_step / 2 - 90
             angle_rad = np.deg2rad(center_angle)
@@ -204,8 +385,12 @@ class FanWheel(BaseChart):
             logo_x = self.logo_radius * np.cos(angle_rad)
             logo_y = self.logo_radius * np.sin(angle_rad)
 
-            # Add logo
-            self._add_merchant_logo(ax, row['MERCHANT'], logo_x, logo_y)
+            # Add logo (enhanced with logo loading)
+            merchant_name = row['MERCHANT']
+            logo_added = self._add_merchant_logo(ax, merchant_name, logo_x, logo_y)
+
+            if not logo_added:
+                missing_logos.append(merchant_name)
 
             # Add behavior text
             text_radius = (self.logo_radius + self.outer_radius) / 2
@@ -220,8 +405,68 @@ class FanWheel(BaseChart):
                     linespacing=0.8,
                     zorder=7)
 
-    def _add_merchant_logo(self, ax, merchant: str, x: float, y: float):
-        """Add merchant logo placeholder - simple white circle"""
+        # Log missing logos for debugging
+        if missing_logos and self.enable_logos:
+            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
+
+    def _add_merchant_logo(self, ax, merchant: str, x: float, y: float) -> bool:
+        """
+        Add merchant logo with enhanced loading capabilities
+
+        Args:
+            ax: Matplotlib axis
+            merchant: Merchant name
+            x, y: Position coordinates
+
+        Returns:
+            True if logo was added (real or fallback), False if using old placeholder
+        """
+        # Try to load actual logo if logo manager is available
+        if self.logo_manager:
+            logo_img = self.logo_manager.get_logo(merchant, self.logo_size)
+
+            if logo_img is not None:
+                # Add actual logo
+                self._add_logo_to_plot(ax, logo_img, x, y)
+                return True
+            else:
+                # Create and add enhanced fallback logo
+                fallback_logo = self.logo_manager.create_fallback_logo(
+                    merchant, self.logo_size, 'white', '#888888'
+                )
+                self._add_logo_to_plot(ax, fallback_logo, x, y)
+                return True
+
+        # Fallback to original placeholder method
+        self._add_placeholder_logo(ax, merchant, x, y)
+        return False
+
+    def _add_logo_to_plot(self, ax, logo_img: Image.Image, x: float, y: float):
+        """
+        Add PIL Image logo to matplotlib plot
+
+        Args:
+            ax: Matplotlib axis
+            logo_img: PIL Image
+            x, y: Position coordinates
+        """
+        # Convert PIL to numpy array for matplotlib
+        logo_array = np.array(logo_img)
+
+        # Create OffsetImage
+        imagebox = OffsetImage(logo_array, zoom=0.5)  # Adjust zoom as needed
+
+        # Create AnnotationBbox
+        ab = AnnotationBbox(imagebox, (x, y),
+                            frameon=False,  # No frame around logo
+                            pad=0,  # No padding
+                            zorder=15)  # High z-order to appear on top
+
+        # Add to plot
+        ax.add_artist(ab)
+
+    def _add_placeholder_logo(self, ax, merchant: str, x: float, y: float):
+        """Add merchant logo placeholder - simple white circle (original method)"""
         # White circle placeholder
         logo_bg = Circle((x, y), 0.55,
                          facecolor='white',
@@ -237,9 +482,49 @@ class FanWheel(BaseChart):
                 fontsize=12, fontweight='bold',
                 color='#888888', zorder=6)
 
+    def generate_logo_report(self, wheel_data: pd.DataFrame) -> Dict[str, any]:
+        """
+        Generate report on logo availability for merchants in wheel data
+
+        Args:
+            wheel_data: DataFrame with MERCHANT column
+
+        Returns:
+            Dictionary with logo availability statistics
+        """
+        if not self.logo_manager:
+            return {
+                'total_merchants': 0,
+                'with_logos': 0,
+                'missing_logos': 0,
+                'coverage_percentage': 0,
+                'message': 'Logo functionality disabled'
+            }
+
+        merchants = wheel_data['MERCHANT'].unique().tolist()
+        logo_report = {}
+
+        for merchant in merchants:
+            logo = self.logo_manager.get_logo(merchant)
+            logo_report[merchant] = logo is not None
+
+        total_merchants = len(merchants)
+        with_logos = sum(logo_report.values())
+        missing_logos = total_merchants - with_logos
+
+        return {
+            'total_merchants': total_merchants,
+            'with_logos': with_logos,
+            'missing_logos': missing_logos,
+            'coverage_percentage': (with_logos / total_merchants) * 100 if total_merchants > 0 else 0,
+            'detailed_report': logo_report,
+            'missing_list': [merchant for merchant, has_logo in logo_report.items() if not has_logo]
+        }
+
 
 def create_fan_wheel_from_data(merchant_ranker, team_config: Dict[str, any],
-                               output_path: Optional[Path] = None) -> Path:
+                               output_path: Optional[Path] = None,
+                               enable_logos: bool = True) -> Path:
     """
     Convenience function to create fan wheel using MerchantRanker
 
@@ -247,6 +532,7 @@ def create_fan_wheel_from_data(merchant_ranker, team_config: Dict[str, any],
         merchant_ranker: Instance of MerchantRanker with data
         team_config: Team configuration dictionary
         output_path: Optional output path
+        enable_logos: Whether to enable logo loading (default: True)
 
     Returns:
         Path to generated fan wheel
@@ -260,8 +546,8 @@ def create_fan_wheel_from_data(merchant_ranker, team_config: Dict[str, any],
     if wheel_data.empty:
         raise ValueError("No fan wheel data available")
 
-    # Create fan wheel
-    fan_wheel = FanWheel(team_config)
+    # Create fan wheel with logo support
+    fan_wheel = FanWheel(team_config, enable_logos=enable_logos)
 
     # No team logo for now
     return fan_wheel.create(wheel_data, output_path, team_logo=None)

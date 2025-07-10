@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_FONT_FAMILY = "Red Hat Display"
 
 
-class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
+class DemographicsSlide(BaseSlide):
     """Generate the complete demographics slide with all charts"""
 
     def __init__(self, presentation: Presentation = None):
@@ -31,7 +31,7 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
         Args:
             presentation: Existing presentation to add slide to
         """
-        super().__init__(presentation)  # Call parent constructor
+        super().__init__(presentation)
 
     def generate(self,
                  demographic_data: Dict[str, Any],
@@ -62,20 +62,14 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
         # Add header
         self._add_header(slide, team_name)
 
-        # Add team logo/circle
-        self._add_team_logo(slide, team_short, colors)
+        # Add chart section headers with black backgrounds
+        self._add_chart_headers(slide)
 
-        # Add insight text
-        self._add_insight_text(slide, demographic_data.get('key_insights', ''))
-
-        # Add demographic charts
+        # Add demographic charts in 2x3 grid
         self._add_charts(slide, chart_dir)
 
-        # Add KEY/legend box
+        # Add KEY/legend box at bottom left
         self._add_legend_box(slide, team_name, team_short, team_config.get('league', 'League'))
-
-        # Remove ethnicity placeholder since we now have the actual chart
-        # self._add_ethnicity_section(slide)
 
         logger.info(f"Generated demographics slide for {team_name}")
         return self.presentation
@@ -86,7 +80,7 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
         header_rect = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
-            Inches(13.333), Inches(0.5)  # Adjusted for 16:9 width
+            Inches(13.333), Inches(0.5)
         )
         header_rect.fill.solid()
         header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)
@@ -100,96 +94,74 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
         )
         team_text.text_frame.text = team_name
         p = team_text.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
+        p.font.name = self.default_font
         p.font.size = Pt(14)
         p.font.bold = True
 
         # Slide title (right)
         title_text = slide.shapes.add_textbox(
-            Inches(6), Inches(0.1),  # Adjusted for 16:9
-            Inches(7.133), Inches(0.3)  # Adjusted for 16:9 width
+            Inches(6), Inches(0.1),
+            Inches(7.133), Inches(0.3)
         )
-        title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
+        title_text.text_frame.text = f"FAN DEMOGRAPHICS: HOW ARE {team_name.upper()} FANS UNIQUE"
         p = title_text.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
+        p.font.name = self.default_font
         p.alignment = PP_ALIGN.RIGHT
         p.font.size = Pt(14)
 
-    def _add_team_logo(self, slide, team_short: str, colors: Dict[str, str]):
-        """Add team logo circle"""
-        # Create circle shape
-        left = Inches(0.5)
-        top = Inches(1.5)
-        size = Inches(1.8)
+    def _add_chart_headers(self, slide):
+        """Add black header bars for each chart section"""
+        headers = [
+            # Top row - adjusted for new layout
+            ('GENDER', 0.5, 0.9, 3.5),  # Narrower for stacked gender
+            ('HOUSEHOLD INCOME', 4.2, 0.9, 5.0),  # Wider
+            ('OCCUPATION CATEGORY', 9.4, 0.9, 3.8),
 
-        # Outer circle (orange/secondary color)
-        outer_circle = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            left - Inches(0.05), top - Inches(0.05),
-            size + Inches(0.1), size + Inches(0.1)
-        )
-        outer_circle.fill.solid()
-        outer_circle.fill.fore_color.rgb = self._hex_to_rgb(colors.get('secondary', '#FFB612'))
-        outer_circle.line.fill.background()
+            # Bottom row
+            ('ETHNICITY', 0.5, 3.6, 3.5),
+            ('GENERATION', 4.2, 3.6, 5.0),  # Wider
+            ('CHILDREN IN HOUSEHOLD', 9.4, 3.6, 3.8)
+        ]
 
-        # Inner circle (blue/primary color)
-        inner_circle = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            left, top,
-            size, size
-        )
-        inner_circle.fill.solid()
-        inner_circle.fill.fore_color.rgb = self._hex_to_rgb(colors.get('primary', '#002244'))
-        inner_circle.line.fill.background()
+        for text, left, top, width in headers:
+            # Black background bar
+            header_rect = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(left), Inches(top),
+                Inches(width), Inches(0.25)
+            )
+            header_rect.fill.solid()
+            header_rect.fill.fore_color.rgb = RGBColor(0, 0, 0)
+            header_rect.line.fill.background()
 
-        # Team name text
-        text_box = slide.shapes.add_textbox(
-            left, top + Inches(0.6),
-            size, Inches(0.6)
-        )
-        text_box.text_frame.text = team_short
-        p = text_box.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(36)
-        p.font.bold = True
-        p.font.color.rgb = RGBColor(255, 255, 255)
-        p.alignment = PP_ALIGN.CENTER
-
-    def _add_insight_text(self, slide, insight: str):
-        """Add insight text below logo"""
-        text_box = slide.shapes.add_textbox(
-            Inches(0.3), Inches(3.8),
-            Inches(2.2), Inches(2.0)
-        )
-
-        # Default insight if none provided
-        if not insight:
-            insight = "Jazz fans are younger, and more likely to be parents who are working professionals versus the Utah gen pop."
-
-        text_box.text_frame.text = insight
-        text_box.text_frame.word_wrap = True
-
-        p = text_box.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(14)
-        p.font.bold = True
-        p.alignment = PP_ALIGN.LEFT
+            # White text
+            text_box = slide.shapes.add_textbox(
+                Inches(left + 0.1), Inches(top + 0.02),
+                Inches(width - 0.2), Inches(0.2)
+            )
+            text_box.text_frame.text = text
+            p = text_box.text_frame.paragraphs[0]
+            p.font.name = self.default_font
+            p.font.size = Pt(11)
+            p.font.bold = True
+            p.font.color.rgb = RGBColor(255, 255, 255)
+            p.alignment = PP_ALIGN.CENTER
 
     def _add_charts(self, slide, chart_dir: Path):
         """Add all demographic charts in the correct positions"""
         chart_dir = Path(chart_dir)
 
-        # Chart positions adjusted for 16:9: (chart_name, left, top, width, height)
+        # Chart positions matching designer layout with stacked gender charts
         chart_positions = [
-            # Top row
-            ('generation_chart', 2.8, 0.8, 2.5, 1.8),  # Slightly wider
-            ('income_chart', 5.5, 0.8, 2.5, 1.8),  # Moved right, wider
-            ('gender_chart', 8.2, 0.8, 2.3, 1.8),  # Moved right for 16:9
+            # Top row - Gender takes left column with stacked pie charts, more room for other charts
+            ('gender_chart', 0.5, 1.2, 3.5, 2.2),  # Left column (narrower for stacked pies)
+            ('income_chart', 4.2, 1.2, 5.0, 2.2),  # Middle column (wider)
+            ('occupation_chart', 9.4, 1.2, 3.8, 2.2),  # Right column
 
             # Bottom row
-            ('occupation_chart', 2.8, 2.8, 3.8, 1.8),  # Wider for 16:9
-            ('children_chart', 6.8, 2.8, 2.8, 1.8),   # Moved right, wider
-            ('ethnicity_chart', 9.8, 2.8, 2.8, 1.8)   # ADD THIS LINE - ethnicity chart
+            ('ethnicity_chart', 0.5, 3.9, 3.5, 2.2),  # Left column
+            ('generation_chart', 4.2, 3.9, 5.0, 2.2),  # Middle column (wider)
+            ('children_chart', 9.4, 3.9, 3.8, 2.2)  # Right column
         ]
 
         for chart_name, left, top, width, height in chart_positions:
@@ -200,11 +172,21 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
 
             if chart_path.exists():
                 try:
-                    slide.shapes.add_picture(
-                        str(chart_path),
-                        Inches(left), Inches(top),
-                        width=Inches(width), height=Inches(height)
-                    )
+                    # For gender chart, we need special handling if it's stacked
+                    if chart_name == 'gender_chart':
+                        # The gender chart should be generated as a taller image with stacked pies
+                        # Adjust height to accommodate stacked layout
+                        slide.shapes.add_picture(
+                            str(chart_path),
+                            Inches(left), Inches(top),
+                            width=Inches(width), height=Inches(height)
+                        )
+                    else:
+                        slide.shapes.add_picture(
+                            str(chart_path),
+                            Inches(left), Inches(top),
+                            width=Inches(width), height=Inches(height)
+                        )
                     logger.info(f"Added {chart_name} to slide")
                 except Exception as e:
                     logger.warning(f"Could not add {chart_name}: {e}")
@@ -219,13 +201,24 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
                 placeholder.fill.solid()
                 placeholder.fill.fore_color.rgb = RGBColor(245, 245, 245)
 
+                # Add placeholder text
+                text_box = slide.shapes.add_textbox(
+                    Inches(left + 0.5), Inches(top + height / 2 - 0.2),
+                    Inches(width - 1), Inches(0.4)
+                )
+                text_box.text_frame.text = f"{chart_name.replace('_', ' ').title()}"
+                p = text_box.text_frame.paragraphs[0]
+                p.font.name = self.default_font
+                p.font.size = Pt(12)
+                p.alignment = PP_ALIGN.CENTER
+
     def _add_legend_box(self, slide, team_name: str, team_short: str, league: str):
-        """Add KEY legend box"""
-        # Box position
-        left = Inches(0.3)
-        top = Inches(5.0)
-        width = Inches(4.5)  # Slightly wider for 16:9
-        height = Inches(1.2)
+        """Add KEY legend box at bottom left"""
+        # Box position - bottom left as in designer's version
+        left = Inches(0.5)
+        top = Inches(6.3)
+        width = Inches(5.5)
+        height = Inches(0.85)
 
         # Create box
         box = slide.shapes.add_shape(
@@ -241,37 +234,39 @@ class DemographicsSlide(BaseSlide):  # INHERIT FROM BaseSlide
         text_frame = box.text_frame
         text_frame.clear()
         text_frame.margin_left = Inches(0.1)
-        text_frame.margin_top = Inches(0.1)
+        text_frame.margin_top = Inches(0.08)
+        text_frame.margin_bottom = Inches(0.08)
 
         # KEY title
         p = text_frame.add_paragraph()
         p.text = "KEY"
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(12)
+        p.font.name = self.default_font
+        p.font.size = Pt(11)
         p.font.bold = True
+        p.space_after = Pt(6)
 
         # Legend items
         items = [
-            f"-{team_name} Fans",
+            f"- {team_name} Fans",
             f"- {team_short} Gen Pop (state level, excluding {team_short} Fans)",
             f"- {league} Fans Total (excluding {team_short} fans)"
         ]
 
-        for item in items:
-            p = text_frame.add_paragraph()
+        for i, item in enumerate(items):
+            if i > 0:
+                p = text_frame.add_paragraph()
+            else:
+                p = text_frame.add_paragraph()
             p.text = item
-            p.font.name = self.default_font  # Red Hat Display
+            p.font.name = self.default_font
             p.font.size = Pt(10)
             p.level = 0
-
-    def _add_ethnicity_section(self, slide):
-        """Add ethnicity placeholder - NO LONGER NEEDED since we have the actual chart"""
-        # This method is kept for backwards compatibility but not called
-        pass
+            p.space_before = Pt(2)
+            p.space_after = Pt(2)
 
     def _hex_to_rgb(self, hex_color: str) -> RGBColor:
         """Convert hex color to RGBColor"""
-        return self.hex_to_rgb(hex_color)  # Use parent method
+        return self.hex_to_rgb(hex_color)
 
     def save(self, output_path: Path) -> Path:
         """Save presentation"""

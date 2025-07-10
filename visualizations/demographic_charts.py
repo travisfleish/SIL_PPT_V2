@@ -3,6 +3,7 @@
 Create demographic visualizations for PowerPoint slides
 Generates charts matching the style from the sample PPT
 Now includes ethnicity chart support and Red Hat Display font
+Updated with vertically stacked gender pie charts
 """
 
 import matplotlib.pyplot as plt
@@ -119,31 +120,59 @@ class DemographicCharts:
 
     def create_pie_charts(self, data: Dict[str, Dict[str, float]],
                           title: str = 'Gender',
-                          figsize: Tuple[float, float] = (12, 4)) -> plt.Figure:
+                          figsize: Tuple[float, float] = (6, 8)) -> plt.Figure:
+        """Create vertically stacked pie charts for gender"""
         n_communities = len(data)
-        fig, axes = plt.subplots(1, n_communities, figsize=figsize, dpi=self.fig_dpi)
-        if n_communities == 1:
-            axes = [axes]
+        # Changed to vertical layout with better spacing
+        fig = plt.figure(figsize=figsize, dpi=self.fig_dpi)
+
+        # Create GridSpec for better control over spacing
+        import matplotlib.gridspec as gridspec
+        gs = gridspec.GridSpec(n_communities, 1, figure=fig, hspace=0.6)  # Increased vertical spacing
+
+        axes = []
+        for i in range(n_communities):
+            ax = fig.add_subplot(gs[i, 0])
+            axes.append(ax)
 
         for idx, (community, values) in enumerate(data.items()):
             ax = axes[idx]
             percentages = list(values.values())
-            colors = ['#4472C4', '#FFC000']
+            colors = ['#4472C4', '#FFC000']  # Blue for male, yellow for female
+
+            # Create pie chart
             wedges, texts, autotexts = ax.pie(percentages, labels=None, colors=colors,
                                               autopct='%1.0f%%', startangle=90,
-                                              textprops={'fontsize': self.font_size,
+                                              textprops={'fontsize': 14,  # Larger font for percentages
                                                          'fontfamily': self.font_family})
+
+            # Style the percentage text
             for autotext in autotexts:
                 autotext.set_color('white')
                 autotext.set_fontweight('bold')
                 autotext.set_fontfamily(self.font_family)
+                autotext.set_fontsize(16)  # Even larger for visibility
 
-            # Set title with font
-            ax.set_title(community, fontsize=self.font_size, pad=20, fontfamily=self.font_family)
+            # Set title for each pie chart
+            ax.set_title(community, fontsize=self.font_size, pad=10, fontfamily=self.font_family)
 
-        # Set main title with font
-        fig.suptitle(title, fontsize=self.title_size, fontweight='bold', fontfamily=self.font_family)
-        plt.tight_layout()
+            # Make the pie charts equal aspect ratio
+            ax.axis('equal')
+
+        # Remove the main title to save space
+        # fig.suptitle(title, fontsize=self.title_size, fontweight='bold', y=0.98, fontfamily=self.font_family)
+
+        # Add labels below the bottom chart
+        if n_communities > 0:
+            # Get the last axis
+            last_ax = axes[-1]
+            # Add text labels below with more spacing
+            last_ax.text(0, -1.8, 'Male    Female', ha='center', va='top',
+                         fontsize=self.font_size, fontfamily=self.font_family,
+                         transform=last_ax.transAxes)
+
+        # Use tight_layout with padding
+        plt.tight_layout(pad=1.0)
         return fig
 
     def create_generation_chart(self, data: pd.DataFrame) -> plt.Figure:
@@ -312,6 +341,14 @@ if __name__ == "__main__":
     mock_data = {
         'team_name': 'Utah Jazz',
         'demographics': {
+            'gender': {
+                'chart_type': 'pie',
+                'title': 'Gender',
+                'data': {
+                    'Utah Jazz Fans': {'Male': 54, 'Female': 46},
+                    'NBA Fans': {'Male': 52, 'Female': 48}
+                }
+            },
             'ethnicity': {
                 'chart_type': 'grouped_bar',
                 'title': 'Ethnicity',
