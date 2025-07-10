@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
+import pandas as pd  # Add this import for the hotfix
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -60,13 +61,97 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
         df = query_to_dataframe(query)
         print(f"   ✅ Loaded {len(df):,} rows from {demographics_view}")
 
-        # 4. Process demographics
+        # HOTFIX: Check communities and data types
+        print("\n   🔧 HOTFIX: Diagnosing community and data type issues...")
+
+        # Check what communities are actually in the data
+        actual_communities = df['COMMUNITY'].unique().tolist()
+        print(f"   Actual communities in data: {actual_communities}")
+        print(f"   Number of communities: {len(actual_communities)}")
+
+        # Check data types
+        if 'CUSTOMER_COUNT' in df.columns:
+            original_dtype = df['CUSTOMER_COUNT'].dtype
+            print(f"   CUSTOMER_COUNT dtype: {original_dtype}")
+
+            # Show sample values for debugging
+            sample_values = df['CUSTOMER_COUNT'].head(5).tolist()
+            print(f"   Sample CUSTOMER_COUNT values: {sample_values}")
+
+            # Ensure it's numeric if needed
+            if df['CUSTOMER_COUNT'].dtype == 'object':
+                print("   Converting CUSTOMER_COUNT to numeric...")
+                df['CUSTOMER_COUNT'] = pd.to_numeric(
+                    df['CUSTOMER_COUNT'].astype(str).str.replace(',', '').str.replace('$', '').str.strip(),
+                    errors='coerce'
+                ).fillna(0).astype('int64')
+                print(f"   ✅ Converted to: {df['CUSTOMER_COUNT'].dtype}")
+
+            # Final verification
+            total_customers = df['CUSTOMER_COUNT'].sum()
+            print(f"   Total customers: {total_customers:,}")
+
+        # Check for ethnicity data specifically
+        if 'ETHNIC_GROUP' in df.columns:
+            unique_groups = df['ETHNIC_GROUP'].dropna().unique()
+            print(f"   Ethnic groups found: {list(unique_groups)}")
+            print(f"   Number of ethnic groups: {len(unique_groups)}")
+
+            # Test a simple groupby to see if it works
+            try:
+                test_group = df.groupby(['COMMUNITY', 'ETHNIC_GROUP'])['CUSTOMER_COUNT'].sum()
+                print(f"   ✅ Test groupby successful, result type: {type(test_group)}")
+                print(f"   Test groupby dtype: {test_group.dtype}")
+
+                # Show a few sample grouped results
+                sample_results = test_group.head(3)
+                print(f"   Sample grouped results: {sample_results.tolist()}")
+
+            except Exception as e:
+                print(f"   ❌ Test groupby failed: {e}")
+        else:
+            print("   ⚠️  No ETHNIC_GROUP column found")
+
+        # 4. Process demographics (this should now work)
         print("\n3. Processing demographics...")
+
+        # Debug: Check what communities the processor will expect
+        expected_communities = [
+            f'{team_name} Fans',
+            f'Local Gen Pop (Excl. {team_name.split()[-1]})',
+            f'{team_config["league"]} Fans'
+        ]
+        print(f"   Expected communities by processor: {expected_communities}")
+        print(f"   Actual communities in data: {actual_communities}")
+
+        # Check for mismatches
+        missing_expected = set(expected_communities) - set(actual_communities)
+        unexpected_actual = set(actual_communities) - set(expected_communities)
+
+        if missing_expected:
+            print(f"   ⚠️  Missing expected communities: {missing_expected}")
+        if unexpected_actual:
+            print(f"   ⚠️  Unexpected communities in data: {unexpected_actual}")
+        if not missing_expected and not unexpected_actual:
+            print("   ✅ Community names match perfectly")
+
+        # Create processor and immediately check its internal data types
         processor = DemographicsProcessor(
             data_source=df,
             team_name=team_name,
             league=team_config['league']
         )
+
+        # DIAGNOSTIC: Check processor's internal data types
+        print(f"   🔍 Processor's internal CUSTOMER_COUNT dtype: {processor.data['CUSTOMER_COUNT'].dtype}")
+        print(f"   🔍 Processor's internal data shape: {processor.data.shape}")
+
+        # Test processor's internal groupby
+        try:
+            internal_test = processor.data.groupby(['COMMUNITY', 'ETHNIC_GROUP'])['CUSTOMER_COUNT'].sum()
+            print(f"   🔍 Processor internal groupby dtype: {internal_test.dtype}")
+        except Exception as e:
+            print(f"   ❌ Processor internal groupby failed: {e}")
 
         demographic_data = processor.process_all_demographics()
 
@@ -75,6 +160,14 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
         for demo_type, demo_info in demographic_data['demographics'].items():
             chart_type = demo_info.get('chart_type', 'unknown')
             print(f"   - {demo_type}: {chart_type}")
+
+        # Specifically check if ethnicity was processed
+        if 'ethnicity' in demographic_data['demographics']:
+            print("   ✅ Ethnicity data successfully processed!")
+            ethnicity_data = demographic_data['demographics']['ethnicity']
+            print(f"   Ethnicity categories: {ethnicity_data.get('categories', [])}")
+        else:
+            print("   ⚠️  No ethnicity data found")
 
         # 5. Generate charts with fixed settings
         print("\n4. Generating FIXED charts...")
@@ -139,6 +232,8 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
         print(f"Team: {team_name}")
         print(f"Charts generated: {len(charts)}")
         print(f"Output directory: {output_dir}")
+        print(
+            f"Ethnicity processing: {'✅ SUCCESS' if 'ethnicity' in demographic_data['demographics'] else '❌ NO DATA'}")
 
         if not save_charts_only:
             print(f"PowerPoint file: {output_file}")
@@ -147,6 +242,7 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
             print("2. Verify charts have clean appearance (no titles/legends)")
             print("3. Check that KEY box text is visible (black on white)")
             print("4. Confirm black header bars provide chart context")
+            print("5. Look for ethnicity chart (if data was available)")
 
         print("\nFiles created:")
         for file in sorted(output_dir.glob('*')):
@@ -188,98 +284,9 @@ def verify_chart_fixes(charts: Dict[str, Any]) -> Dict[str, list]:
     return verification_results
 
 
-def test_comparison(team_key: str = 'utah_jazz'):
-    """
-    Test to compare old vs new approach
-    """
-    print("\n" + "=" * 70)
-    print("COMPARISON TEST: OLD vs NEW CHARTS")
-    print("=" * 70)
-
-    # Test new approach
-    print("\n🔧 Testing NEW approach (no titles/legends):")
-    new_result = test_fixed_demographics_slide(team_key, save_charts_only=True)
-
-    if new_result:
-        print(f"✅ NEW charts saved to: {new_result}")
-
-        # Show what the differences should be
-        print("\n📊 Expected differences:")
-        print("  OLD charts had:")
-        print("    - Matplotlib titles above each chart")
-        print("    - Individual legends on each chart")
-        print("    - White text in KEY box (invisible)")
-        print("  NEW charts have:")
-        print("    - NO titles (black slide headers provide context)")
-        print("    - NO legends (KEY box provides centralized legend)")
-        print("    - BLACK text in KEY box (visible)")
-
-
-def test_multiple_teams():
-    """Test with multiple teams to ensure consistency"""
-    teams = ['utah_jazz', 'dallas_cowboys']
-    results = []
-
-    print("\n" + "=" * 70)
-    print("MULTI-TEAM TEST")
-    print("=" * 70)
-
-    for team in teams:
-        print(f"\n{'🏀' if 'jazz' in team else '🏈'} Testing {team.replace('_', ' ').title()}:")
-        print("-" * 40)
-
-        result = test_fixed_demographics_slide(team, save_charts_only=True)
-        if result:
-            results.append((team, result))
-            print(f"✅ Success: {result}")
-        else:
-            print(f"❌ Failed for {team}")
-
-    print(f"\n📊 SUMMARY: {len(results)}/{len(teams)} teams successful")
-    for team, path in results:
-        print(f"  • {team}: {path}")
-
-
-def quick_test():
-    """Quick test with minimal output"""
-    print("\n🚀 QUICK TEST - Fixed Demographics")
-    print("-" * 40)
-
-    result = test_fixed_demographics_slide('utah_jazz')
-
-    if result:
-        print(f"\n✅ Test completed! Check: {result}")
-        print("💡 Open the PowerPoint to verify the fixes")
-    else:
-        print("\n❌ Test failed")
-
-
-def main():
-    """Main test function with options"""
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Test fixed demographics slide')
-    parser.add_argument('--team', default='utah_jazz', help='Team to test')
-    parser.add_argument('--charts-only', action='store_true', help='Only generate charts')
-    parser.add_argument('--comparison', action='store_true', help='Run comparison test')
-    parser.add_argument('--multi-team', action='store_true', help='Test multiple teams')
-    parser.add_argument('--quick', action='store_true', help='Quick test')
-
-    args = parser.parse_args()
-
-    if args.quick:
-        quick_test()
-    elif args.comparison:
-        test_comparison(args.team)
-    elif args.multi_team:
-        test_multiple_teams()
-    else:
-        test_fixed_demographics_slide(args.team, args.charts_only)
-
-
 if __name__ == "__main__":
     # Default behavior - run full test
-    print("🎯 DEMOGRAPHICS FIXES TEST")
+    print("🎯 DEMOGRAPHICS FIXES TEST WITH HOTFIX")
     print("Run with --help for options")
 
     # Run default test

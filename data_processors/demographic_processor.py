@@ -3,6 +3,7 @@
 Process demographic data from Snowflake exports to generate insights
 for PowerPoint presentations. Handles large datasets (400K+ rows) efficiently.
 Now includes AI-powered insights generation and ethnicity processing.
+FIXED VERSION: Handles null values in ETHNIC_GROUP column.
 """
 
 import pandas as pd
@@ -163,6 +164,7 @@ class DemographicsProcessor:
                                categories: Optional[List[str]] = None) -> Dict[str, Dict[str, float]]:
         """
         Calculate percentage distribution for a demographic attribute
+        Enhanced version with better null handling
 
         Args:
             attribute: Column name to analyze
@@ -183,19 +185,45 @@ class DemographicsProcessor:
             if community not in community_totals.index:
                 continue
 
-            community_data = grouped[community] if community in grouped else pd.Series()
             total = community_totals[community]
 
-            # Calculate percentages
-            percentages = (community_data / total * 100).round(1)
+            # Enhanced null handling: check if community exists in grouped data
+            if community in grouped.index:
+                community_data = grouped[community]
+
+                # Ensure we have numeric data - handle object dtype that can occur with nulls
+                if community_data.dtype == 'object':
+                    logger.debug(f"Converting object dtype to numeric for {community}/{attribute}")
+                    community_data = pd.to_numeric(community_data, errors='coerce').fillna(0)
+            else:
+                # Create empty numeric series instead of default object series
+                community_data = pd.Series(dtype='float64')
+
+            # Calculate percentages - handle empty data
+            if len(community_data) > 0 and total > 0:
+                try:
+                    percentages = (community_data / total * 100).round(1)
+                except Exception as e:
+                    logger.warning(f"Error calculating percentages for {community}: {e}")
+                    percentages = pd.Series(dtype='float64')
+            else:
+                percentages = pd.Series(dtype='float64')
 
             # If categories provided, ensure all are present
             if categories:
                 category_dict = {cat: 0.0 for cat in categories}
-                category_dict.update(percentages.to_dict())
+                # Only update with valid (non-null) data
+                for cat, val in percentages.to_dict().items():
+                    if pd.notna(cat) and pd.notna(val) and cat in category_dict:
+                        category_dict[cat] = float(val)
                 results[community] = category_dict
             else:
-                results[community] = percentages.to_dict()
+                # Filter out any NaN keys and ensure numeric values
+                percentage_dict = {}
+                for k, v in percentages.to_dict().items():
+                    if pd.notna(k) and pd.notna(v):
+                        percentage_dict[k] = float(v)
+                results[community] = percentage_dict
 
         return results
 
@@ -308,48 +336,145 @@ class DemographicsProcessor:
         }
 
     def process_ethnicity(self) -> Dict[str, Any]:
-        """Process ethnicity distribution using ETHNIC_GROUP column"""
+        """Process ethnicity distribution using ETHNIC_GROUP column - NULL-AWARE VERSION"""
 
         # Check if ETHNIC_GROUP column exists
         if 'ETHNIC_GROUP' not in self.data.columns:
             logger.warning("ETHNIC_GROUP column not found in data")
             return None
 
+        # MINIMAL NULL FIX: Handle nulls before processing
+        logger.info("Processing ethnicity data...")
+        null_count = self.data['ETHNIC_GROUP'].isnull().sum()
+
+        if null_count > 0:
+            logger.info(f"Found {null_count:,} null values in ETHNIC_GROUP, replacing with 'Unknown'")
+            # Create a copy to avoid modifying original data
+            clean_data = self.data.copy()
+            clean_data['ETHNIC_GROUP'] = clean_data['ETHNIC_GROUP'].fillna('Unknown')
+
+            # Temporarily replace self.data for this calculation
+            original_data = self.data
+            self.data = clean_data
+        else:
+            logger.info("No null values found in ETHNIC_GROUP")
+
         # Get unique ethnic groups from data
         unique_groups = self.data['ETHNIC_GROUP'].dropna().unique()
         logger.info(f"Found ethnic groups: {unique_groups}")
 
-        # Calculate raw percentages for all groups
-        raw_percentages = self._calculate_percentages('ETHNIC_GROUP')
+        try:
+            # Calculate raw percentages for all groups
+            raw_percentages = self._calculate_percentages('ETHNIC_GROUP')
 
-        # Aggregate data into standard categories
-        aggregated = {}
-        for community, data in raw_percentages.items():
-            aggregated[community] = {cat: 0.0 for cat in self.ETHNICITY_ORDER}
+            # Restore original data if we modified it
+            if null_count > 0:
+                self.data = original_data
 
-            for group, percentage in data.items():
-                # Map groups to standard categories
-                if pd.isna(group) or group == '':
-                    continue
-                elif 'White' in group or 'Caucasian' in group:
-                    aggregated[community]['White'] += percentage
-                elif 'Hispanic' in group or 'Latino' in group:
-                    aggregated[community]['Hispanic'] += percentage
-                elif 'African' in group or 'Black' in group:
-                    aggregated[community]['African American'] += percentage
-                elif 'Asian' in group:
-                    aggregated[community]['Asian'] += percentage
-                else:
-                    aggregated[community]['Other'] += percentage
+            # Aggregate data into standard categories
+            aggregated = {}
+            for community, data in raw_percentages.items():
+                aggregated[community] = {cat: 0.0 for cat in self.ETHNICITY_ORDER}
 
-        return {
-            'chart_type': 'grouped_bar',
-            'title': 'Ethnicity',
-            'categories': self.ETHNICITY_ORDER,
-            'communities': self.communities,
-            'data': aggregated,
-            'insights': self._generate_ethnicity_insights(aggregated)
+                for group, percentage in data.items():
+                    # Map groups to standard categories
+                    if group == 'Unknown':
+                        # Skip unknown ethnicity in final aggregation to avoid skewing results
+                        logger.debug(f"Skipping 'Unknown' ethnicity for {community}: {percentage}%")
+                        continue
+                    elif pd.isna(group) or group == '':
+                        continue
+                    elif 'White' in group or 'Caucasian' in group:
+                        aggregated[community]['White'] += percentage
+                    elif 'Hispanic' in group or 'Latino' in group:
+                        aggregated[community]['Hispanic'] += percentage
+                    elif 'African' in group or 'Black' in group:
+                        aggregated[community]['African American'] += percentage
+                    elif 'Asian' in group:
+                        aggregated[community]['Asian'] += percentage
+                    else:
+                        aggregated[community]['Other'] += percentage
+
+            return {
+                'chart_type': 'grouped_bar',
+                'title': 'Ethnicity',
+                'categories': self.ETHNICITY_ORDER,
+                'communities': self.communities,
+                'data': aggregated,
+                'insights': self._generate_ethnicity_insights(aggregated)
+            }
+
+        except Exception as e:
+            # Restore original data if we modified it and an error occurred
+            if null_count > 0:
+                self.data = original_data
+            logger.error(f"Error processing ethnicity data: {e}")
+            raise
+
+    def process_all_demographics(self) -> Dict[str, Any]:
+        """Process all demographic data and generate insights"""
+        # Process individual demographics
+        demographic_results = {
+            'generation': self.process_generation(),
+            'income': self.process_income(),
+            'occupation': self.process_occupation(),
+            'gender': self.process_gender(),
+            'children': self.process_children()
         }
+
+        # Add ethnicity if available
+        ethnicity_result = self.process_ethnicity()
+        if ethnicity_result:
+            demographic_results['ethnicity'] = ethnicity_result
+            logger.info("Processed ethnicity demographics")
+
+        # Generate insights
+        if self.use_ai_insights:
+            key_insights = self._generate_ai_insights(demographic_results)
+        else:
+            key_insights = self._generate_summary_insights()
+
+        results = {
+            'team_name': self.team_name,
+            'league': self.league,
+            'communities': self.communities,
+            'total_sample_size': self.data['CUSTOMER_COUNT'].sum(),
+            'demographics': demographic_results,
+            'key_insights': key_insights
+        }
+
+        return results
+
+    def _generate_summary_insights(self) -> str:
+        """Generate the main summary text for the demographics slide (fallback) - UPDATED"""
+        # Updated to match client expectations
+        all_insights = []
+
+        # Collect insights from each demographic
+        demo_results = {
+            'generation': self.process_generation(),
+            'income': self.process_income(),
+            'occupation': self.process_occupation(),
+            'children': self.process_children()
+        }
+
+        for demo, result in demo_results.items():
+            all_insights.extend(result.get('insights', []))
+
+        # Combine insights into a summary
+        if all_insights:
+            summary_parts = []
+            if any('younger' in i for i in all_insights):
+                summary_parts.append('younger')
+            if any('parent' in i for i in all_insights):
+                summary_parts.append('more likely to be parents')
+            if any('Professional' in i or 'professional' in i.lower() for i in all_insights):
+                summary_parts.append('who are working professionals')
+
+            if summary_parts:
+                return f"{self.team_name} fans are {', and '.join(summary_parts)} versus the Utah gen pop."
+
+        return f"{self.team_name} fans have unique demographic characteristics compared to the general population and NBA average fans."
 
     def _generate_generation_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for generation distribution"""
@@ -376,13 +501,14 @@ class DemographicsProcessor:
         gen_pop = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
 
         if fan_community in percentages and gen_pop in percentages:
-            # Check high income brackets
+            # Check higher income brackets
             high_income = ['$100,000 to $149,999', '$150,000 to $199,999', '$200,000 or more']
             fan_high = sum(percentages[fan_community].get(bracket, 0) for bracket in high_income)
             pop_high = sum(percentages[gen_pop].get(bracket, 0) for bracket in high_income)
 
             if fan_high > pop_high + 5:
-                insights.append(f"Higher income households ({fan_high:.0f}% earn $100K+ vs {pop_high:.0f}%)")
+                insights.append(
+                    f"{self.team_name} fans have higher household incomes ({fan_high:.0f}% vs {pop_high:.0f}% earning $100K+)")
 
         return insights
 
@@ -394,18 +520,18 @@ class DemographicsProcessor:
 
         if fan_community in percentages and gen_pop in percentages:
             # Check professional categories
-            prof_categories = ['Professional', 'Upper Management', 'White Collar Worker']
-            fan_prof = sum(percentages[fan_community].get(cat, 0) for cat in prof_categories)
-            pop_prof = sum(percentages[gen_pop].get(cat, 0) for cat in prof_categories)
+            professional_cats = ['Professional', 'Upper Management']
+            fan_prof = sum(percentages[fan_community].get(cat, 0) for cat in professional_cats)
+            pop_prof = sum(percentages[gen_pop].get(cat, 0) for cat in professional_cats)
 
-            if fan_prof > pop_prof + 5:
+            if fan_prof > pop_prof + 3:
                 insights.append(
-                    f"More working professionals ({fan_prof:.0f}% in professional/management vs {pop_prof:.0f}%)")
+                    f"{self.team_name} fans are more likely to work in professional roles ({fan_prof:.0f}% vs {pop_prof:.0f}%)")
 
         return insights
 
     def _generate_children_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
-        """Generate insights for children in household"""
+        """Generate insights for children distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
         gen_pop = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
@@ -472,239 +598,62 @@ class DemographicsProcessor:
             # Build comprehensive data summary
             data_summary = []
 
-            # Generation/Age data
-            if 'generation' in demographic_results:
-                gen_data = demographic_results['generation']['data']
-                if team_fans in gen_data:
-                    # Calculate younger percentage (Millennials + Gen X)
-                    young_gens = ['1. Millennials and Gen Z (1982 and after)', '2. Generation X (1961-1981)']
-                    team_young = sum(gen_data[team_fans].get(g, 0) for g in young_gens)
-                    pop_young = sum(gen_data[gen_pop].get(g, 0) for g in young_gens) if gen_pop in gen_data else 0
-                    league_young = sum(
-                        gen_data[league_fans].get(g, 0) for g in young_gens) if league_fans in gen_data else 0
+            for demo_type, demo_data in demographic_results.items():
+                if demo_data and 'data' in demo_data:
+                    categories = demo_data.get('categories', [])
+                    for category in categories:
+                        team_val = demo_data['data'].get(team_fans, {}).get(category, 0)
+                        pop_val = demo_data['data'].get(gen_pop, {}).get(category, 0)
+                        league_val = demo_data['data'].get(league_fans, {}).get(category, 0)
 
-                    data_summary.append(
-                        f"Age: {team_fans} are {team_young:.0f}% Millennials/Gen X, vs {pop_young:.0f}% for Utah gen pop and {league_young:.0f}% for NBA fans")
+                        if team_val > 0:  # Only include non-zero data
+                            data_summary.append(
+                                f"{demo_type.title()} - {category}: {team_fans} {team_val}%, {gen_pop} {pop_val}%, {league_fans} {league_val}%"
+                            )
 
-            # Income data
-            if 'income' in demographic_results:
-                income_data = demographic_results['income']['data']
-                if team_fans in income_data:
-                    # High income brackets
-                    high_income = ['$100,000 to $149,999', '$150,000 to $199,999', '$200,000 or more']
-                    team_high = sum(income_data[team_fans].get(b, 0) for b in high_income)
-                    pop_high = sum(income_data[gen_pop].get(b, 0) for b in high_income) if gen_pop in income_data else 0
-                    league_high = sum(
-                        income_data[league_fans].get(b, 0) for b in high_income) if league_fans in income_data else 0
+            # Create prompt for AI
+            prompt = f"""Analyze demographic data for {team_fans} and create a single, compelling sentence that summarizes their key characteristics compared to the general population.
 
-                    data_summary.append(
-                        f"Income: {team_fans} have {team_high:.0f}% earning $100K+, vs {pop_high:.0f}% for Utah gen pop and {league_high:.0f}% for NBA fans")
+Data:
+{chr(10).join(data_summary[:20])}  # Limit to prevent token overflow
 
-            # Gender data
-            if 'gender' in demographic_results:
-                gender_data = demographic_results['gender']['data']
-                if team_fans in gender_data:
-                    team_male = gender_data[team_fans].get('Male', 0)
-                    pop_male = gender_data[gen_pop].get('Male', 0) if gen_pop in gender_data else 0
-                    league_male = gender_data[league_fans].get('Male', 0) if league_fans in gender_data else 0
+Requirements:
+- Write exactly ONE sentence (not a paragraph)
+- Focus on the most distinctive characteristics
+- Use natural, marketing-friendly language
+- Compare primarily to general population, mention {self.league} fans if relevant
+- Avoid jargon or overly technical terms
+- Make it actionable for sponsors
 
-                    data_summary.append(
-                        f"Gender: {team_fans} are {team_male:.0f}% male, vs {pop_male:.0f}% for Utah gen pop and {league_male:.0f}% for NBA fans")
-
-            # Occupation data
-            if 'occupation' in demographic_results:
-                occ_data = demographic_results['occupation']['data']
-                if team_fans in occ_data:
-                    prof_cats = ['Professional', 'Upper Management', 'White Collar Worker']
-                    team_prof = sum(occ_data[team_fans].get(c, 0) for c in prof_cats)
-                    pop_prof = sum(occ_data[gen_pop].get(c, 0) for c in prof_cats) if gen_pop in occ_data else 0
-                    league_prof = sum(
-                        occ_data[league_fans].get(c, 0) for c in prof_cats) if league_fans in occ_data else 0
-
-                    data_summary.append(
-                        f"Occupation: {team_fans} are {team_prof:.0f}% working professionals, vs {pop_prof:.0f}% for Utah gen pop and {league_prof:.0f}% for NBA fans")
-
-            # Children data (only vs gen pop as NBA fans data might not be available)
-            if 'children' in demographic_results:
-                child_data = demographic_results['children']['data']
-                if team_fans in child_data:
-                    team_parents = child_data[team_fans].get('At least 1 Child in HH', 0)
-                    pop_parents = child_data[gen_pop].get('At least 1 Child in HH', 0) if gen_pop in child_data else 0
-
-                    data_summary.append(
-                        f"Household: {team_fans} have {team_parents:.0f}% with children, vs {pop_parents:.0f}% for Utah gen pop")
-
-            # Create prompt matching client's requirements
-            prompt = f"""You are a sponsorship sales representative writing a single summary sentence about {self.team_name} fans.
-
-Using ONLY this demographic data:
+Example style: "{self.team_name} fans are younger, higher-earning professionals who are more likely to be parents versus the local general population."
 """
-            for item in data_summary:
-                prompt += f"- {item}\n"
-
-            prompt += f"""
-Write ONE sentence that explains how {self.team_name} fans look different vs. the Utah gen pop and NBA average fans.
-
-Call out if they're:
-- More or less likely to be older or younger vs. Utah general population and vs. NBA average fans
-- Have higher or lower household income vs. Utah general population and NBA average fans  
-- More likely to be male or female vs. Utah general population and NBA average fans
-- Working professionals or not
-
-Use specific percentages. Focus on the most significant differences.
-
-Example format: "{self.team_name} fans are [age comparison], with [income comparison], are [gender comparison], and [occupation comparison] compared to both the Utah general population and NBA average fans."
-
-DO NOT add any information not in the data above. Use the exact percentages provided."""
 
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system",
-                     "content": "You are a sponsorship sales representative. Use ONLY the data provided to create insights that help sell sponsorships."},
+                     "content": "You are a marketing insights analyst who creates compelling, concise demographic summaries for sports sponsorship presentations."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.4,
-                max_tokens=150
+                max_tokens=100,
+                temperature=0.3
             )
 
-            insight = response.choices[0].message.content.strip()
-            logger.info(f"Generated insight: {insight}")
+            ai_insight = response.choices[0].message.content.strip()
 
-            # Basic validation - should mention team name and include numbers
-            if self.team_name in insight and any(char.isdigit() for char in insight):
-                return insight
+            # Validate and clean the response
+            if ai_insight and len(ai_insight) > 20:
+                # Remove any quotes and ensure it ends properly
+                ai_insight = ai_insight.strip('"').strip("'")
+                if not ai_insight.endswith('.'):
+                    ai_insight += '.'
+
+                logger.info("Generated AI demographic insight")
+                return ai_insight
             else:
-                logger.warning("Generated insight failed validation, using template")
+                logger.warning("AI insight too short, using fallback")
                 return self._generate_summary_insights()
 
         except Exception as e:
-            logger.error(f"AI insight generation failed: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error generating AI insights: {e}")
             return self._generate_summary_insights()
-
-    def process_all_demographics(self) -> Dict[str, Any]:
-        """Process all demographic attributes and return complete analysis"""
-        logger.info(f"Processing demographics for {self.team_name}")
-
-        # Process each demographic type
-        demographic_results = {
-            'generation': self.process_generation(),
-            'income': self.process_income(),
-            'occupation': self.process_occupation(),
-            'gender': self.process_gender(),
-            'children': self.process_children()
-        }
-
-        # Add ethnicity if available
-        ethnicity_result = self.process_ethnicity()
-        if ethnicity_result:
-            demographic_results['ethnicity'] = ethnicity_result
-            logger.info("Processed ethnicity demographics")
-
-        # Generate insights
-        if self.use_ai_insights:
-            key_insights = self._generate_ai_insights(demographic_results)
-        else:
-            key_insights = self._generate_summary_insights()
-
-        results = {
-            'team_name': self.team_name,
-            'league': self.league,
-            'communities': self.communities,
-            'total_sample_size': self.data['CUSTOMER_COUNT'].sum(),
-            'demographics': demographic_results,
-            'key_insights': key_insights
-        }
-
-        return results
-
-    def _generate_summary_insights(self) -> str:
-        """Generate the main summary text for the demographics slide (fallback) - UPDATED"""
-        # Updated to match client expectations
-        all_insights = []
-
-        # Collect insights from each demographic
-        demo_results = {
-            'generation': self.process_generation(),
-            'income': self.process_income(),
-            'occupation': self.process_occupation(),
-            'children': self.process_children()
-        }
-
-        for demo, result in demo_results.items():
-            all_insights.extend(result.get('insights', []))
-
-        # Combine insights into a summary
-        if all_insights:
-            summary_parts = []
-            if any('younger' in i for i in all_insights):
-                summary_parts.append('younger')
-            if any('parent' in i for i in all_insights):
-                summary_parts.append('more likely to be parents')
-            if any('Professional' in i or 'professional' in i.lower() for i in all_insights):
-                summary_parts.append('who are working professionals')
-
-            if summary_parts:
-                return f"{self.team_name} fans are {', and '.join(summary_parts)} versus the Utah gen pop."
-
-        return f"{self.team_name} fans have unique demographic characteristics compared to the general population and NBA average fans."
-
-    def export_for_visualization(self) -> Dict[str, pd.DataFrame]:
-        """Export data in format ready for chart generation"""
-        results = self.process_all_demographics()
-
-        # Create DataFrames for each chart
-        dataframes = {}
-
-        for demo_type, demo_data in results['demographics'].items():
-            if demo_data['chart_type'] == 'grouped_bar':
-                # Create DataFrame with communities as columns
-                df_data = {}
-                for community in self.communities:
-                    if community in demo_data['data']:
-                        df_data[community] = [
-                            demo_data['data'][community].get(cat, 0)
-                            for cat in demo_data['categories']
-                        ]
-
-                df = pd.DataFrame(df_data, index=demo_data['categories'])
-                dataframes[demo_type] = df
-
-            elif demo_data['chart_type'] == 'pie':
-                # Create separate DataFrames for each community's pie chart
-                for community in self.communities:
-                    if community in demo_data['data']:
-                        df = pd.DataFrame({
-                            'Category': demo_data['categories'],
-                            'Percentage': [
-                                demo_data['data'][community].get(cat, 0)
-                                for cat in demo_data['categories']
-                            ]
-                        })
-                        dataframes[f"{demo_type}_{community}"] = df
-
-        return dataframes
-
-
-# Example usage
-if __name__ == "__main__":
-    # Test with sample data
-    processor = DemographicsProcessor(
-        data_source="data/utah_jazz_demographics.csv",
-        team_name="Utah Jazz",
-        league="NBA",
-        use_ai_insights=True  # This will use AI if API key is available
-    )
-
-    # Process all demographics
-    results = processor.process_all_demographics()
-
-    # Print summary
-    print(f"Processed {results['total_sample_size']:,} customers")
-    print(f"Key insight: {results['key_insights']}")
-
-    # Export for visualization
-    chart_data = processor.export_for_visualization()
-    print(f"\nGenerated {len(chart_data)} chart datasets")

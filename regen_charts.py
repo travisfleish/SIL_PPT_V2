@@ -1,212 +1,345 @@
-# align_right_edges.py
+#!/usr/bin/env python3
 """
-Make occupation stretch so its right edge aligns with children's right edge
+Test script for the minimal null fix in demographics processing
+This script applies the minimal fix to handle null values in ETHNIC_GROUP
 """
 
+import sys
 from pathlib import Path
-import re
+from datetime import datetime
+from typing import Dict, Any
+import pandas as pd
+import logging
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+
+from pptx import Presentation
+from data_processors.demographic_processor import DemographicsProcessor
+from data_processors.snowflake_connector import query_to_dataframe
+from visualizations.demographic_charts import DemographicCharts
+from slide_generators.demographics_slide import DemographicsSlide
+from utils.team_config_manager import TeamConfigManager
+
+# Set up logging to see what's happening
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-def calculate_edge_aligned_layout():
-    """Calculate layout with right edges aligned"""
+class DemographicsProcessorNullFix(DemographicsProcessor):
+    """
+    Modified DemographicsProcessor with minimal null fix for testing
+    """
 
-    # From looking at the current layout, let's determine the positions
-    # Children appears to end around the right side of the slide
+    def process_ethnicity(self) -> Dict[str, Any]:
+        """Process ethnicity distribution using ETHNIC_GROUP column - WITH NULL FIX"""
 
-    # Standard slide dimensions
-    slide_width = 13.33  # Standard 16:9 slide width
-    left_margin = 0.5
-    right_margin = 0.5
-    space_between = 0.2
+        logger.info("🔧 STARTING ETHNICITY PROCESSING WITH NULL FIX")
 
-    # Fixed dimensions we want to keep
-    gender_width = 1.5  # Keep narrow
-    income_width = 4.8  # Keep current size
-    children_width = 3.0  # Keep compact
+        # Check if ETHNIC_GROUP column exists
+        if 'ETHNIC_GROUP' not in self.data.columns:
+            logger.warning("ETHNIC_GROUP column not found in data")
+            return None
 
-    # Calculate where children should end (near right edge)
-    children_right_edge = slide_width - right_margin
-    children_left = children_right_edge - children_width
+        # MINIMAL NULL FIX: Handle nulls before processing
+        logger.info("🧹 Cleaning ETHNIC_GROUP data...")
+        null_count = self.data['ETHNIC_GROUP'].isnull().sum()
+        logger.info(f"Found {null_count:,} null values in ETHNIC_GROUP")
 
-    # Now work backwards to place occupation
-    # Occupation should end at the same place as children
-    occupation_right_edge = children_right_edge
+        if null_count > 0:
+            logger.info(f"Replacing {null_count:,} null values with 'Unknown'")
+            # Create a copy to avoid modifying original data
+            clean_data = self.data.copy()
+            clean_data['ETHNIC_GROUP'] = clean_data['ETHNIC_GROUP'].fillna('Unknown')
 
-    # Calculate occupation left edge
-    gender_left = left_margin
-    income_left = gender_left + gender_width + space_between
-    occupation_left = income_left + income_width + space_between
+            # Show before/after
+            logger.info("Before cleaning:")
+            logger.info(f"  Unique values: {sorted(self.data['ETHNIC_GROUP'].dropna().unique())}")
+            logger.info("After cleaning:")
+            logger.info(f"  Unique values: {sorted(clean_data['ETHNIC_GROUP'].unique())}")
 
-    # Occupation width = right edge - left edge
-    occupation_width = occupation_right_edge - occupation_left
+            # Temporarily replace self.data for this calculation
+            original_data = self.data
+            self.data = clean_data
+            logger.info("✅ Temporarily using cleaned data for ethnicity calculation")
+        else:
+            logger.info("✅ No null values found, proceeding with original data")
 
-    # For bottom row: ethnicity and generation share space before children
-    available_bottom_width = children_left - left_margin - space_between
-    ethnicity_generation_width = (available_bottom_width - space_between) / 2
+        # Get unique ethnic groups from data
+        unique_groups = self.data['ETHNIC_GROUP'].dropna().unique()
+        logger.info(f"Found ethnic groups: {unique_groups}")
 
-    ethnicity_left = left_margin
-    generation_left = ethnicity_left + ethnicity_generation_width + space_between
+        try:
+            # Calculate raw percentages for all groups
+            logger.info("🔢 Calculating raw percentages...")
+            raw_percentages = self._calculate_percentages('ETHNIC_GROUP')
+            logger.info(f"✅ Raw percentages calculated for {len(raw_percentages)} communities")
 
-    layout = {
-        'top_row': {
-            'gender': (gender_left, gender_width),
-            'income': (income_left, income_width),
-            'occupation': (occupation_left, occupation_width)
-        },
-        'bottom_row': {
-            'ethnicity': (ethnicity_left, ethnicity_generation_width),
-            'generation': (generation_left, ethnicity_generation_width),
-            'children': (children_left, children_width)
+            # Show raw results for debugging
+            for community, data in raw_percentages.items():
+                logger.info(f"  {community}: {len(data)} ethnic groups")
+                for group, pct in data.items():
+                    logger.info(f"    {group}: {pct}%")
+
+        except Exception as e:
+            logger.error(f"❌ Error calculating raw percentages: {e}")
+            # Restore original data before re-raising
+            if null_count > 0:
+                self.data = original_data
+            raise
+
+        # Restore original data if we modified it
+        if null_count > 0:
+            self.data = original_data
+            logger.info("📁 Restored original data")
+
+        # Aggregate data into standard categories
+        logger.info("🏷️  Aggregating into standard ethnicity categories...")
+        aggregated = {}
+        for community, data in raw_percentages.items():
+            aggregated[community] = {cat: 0.0 for cat in self.ETHNICITY_ORDER}
+
+            for group, percentage in data.items():
+                # Map groups to standard categories
+                if group == 'Unknown':
+                    logger.info(f"  Skipping 'Unknown' group for {community} ({percentage}%)")
+                    continue  # Skip unknown ethnicity in final aggregation
+                elif 'White' in group or 'Caucasian' in group:
+                    aggregated[community]['White'] += percentage
+                elif 'Hispanic' in group or 'Latino' in group:
+                    aggregated[community]['Hispanic'] += percentage
+                elif 'African' in group or 'Black' in group:
+                    aggregated[community]['African American'] += percentage
+                elif 'Asian' in group:
+                    aggregated[community]['Asian'] += percentage
+                else:
+                    aggregated[community]['Other'] += percentage
+
+        logger.info("✅ Ethnicity aggregation complete")
+        for community, data in aggregated.items():
+            total_pct = sum(data.values())
+            logger.info(f"  {community}: {total_pct:.1f}% total")
+
+        return {
+            'chart_type': 'grouped_bar',
+            'title': 'Ethnicity',
+            'categories': self.ETHNICITY_ORDER,
+            'communities': self.communities,
+            'data': aggregated,
+            'insights': self._generate_ethnicity_insights(aggregated)
         }
-    }
-
-    print(f"Right-edge aligned layout:")
-    print(f"  Slide width: {slide_width:.1f}\"")
-    print(f"")
-    print(f"  Top row:")
-    print(f"    Gender: {gender_width:.1f}\" (x={gender_left:.1f} to {gender_left + gender_width:.1f})")
-    print(f"    Income: {income_width:.1f}\" (x={income_left:.1f} to {income_left + income_width:.1f})")
-    print(
-        f"    Occupation: {occupation_width:.1f}\" (x={occupation_left:.1f} to {occupation_left + occupation_width:.1f})")
-    print(f"")
-    print(f"  Bottom row:")
-    print(
-        f"    Ethnicity: {ethnicity_generation_width:.1f}\" (x={ethnicity_left:.1f} to {ethnicity_left + ethnicity_generation_width:.1f})")
-    print(
-        f"    Generation: {ethnicity_generation_width:.1f}\" (x={generation_left:.1f} to {generation_left + ethnicity_generation_width:.1f})")
-    print(f"    Children: {children_width:.1f}\" (x={children_left:.1f} to {children_left + children_width:.1f})")
-    print(f"")
-    print(f"  ✅ RIGHT EDGE ALIGNMENT CHECK:")
-    print(f"    Occupation ends at: {occupation_left + occupation_width:.1f}\"")
-    print(f"    Children ends at:   {children_left + children_width:.1f}\"")
-    print(f"    Difference: {abs((occupation_left + occupation_width) - (children_left + children_width)):.1f}\"")
-
-    return layout
 
 
-def update_slide_layout_aligned():
-    """Update slide layout with right-edge alignment"""
+def test_minimal_null_fix(team_key: str = 'utah_jazz', save_charts_only: bool = False):
+    """
+    Test the minimal null fix for ethnicity processing
 
-    slide_file = Path('slide_generators/demographics_slide.py')
+    Args:
+        team_key: Team to test with
+        save_charts_only: If True, only generate charts without PowerPoint
+    """
 
-    if not slide_file.exists():
-        print(f"❌ File not found: {slide_file}")
-        return False
+    print("\n" + "=" * 80)
+    print("🧪 TESTING MINIMAL NULL FIX FOR ETHNICITY PROCESSING")
+    print("=" * 80)
+    print("Testing:")
+    print("  ✓ Null value handling in ETHNIC_GROUP column")
+    print("  ✓ Dtype preservation during calculations")
+    print("  ✓ Successful ethnicity chart generation")
+    print("=" * 80)
 
-    print(f"📝 Updating slide layout for right-edge alignment...")
+    try:
+        # 1. Setup
+        print("\n1. 🔧 Setting up...")
+        config_manager = TeamConfigManager()
+        team_config = config_manager.get_team_config(team_key)
+        team_name = team_config['team_name']
+        print(f"   Team: {team_name}")
+        print(f"   Colors: {team_config.get('colors', {})}")
 
-    # Calculate aligned positions
-    layout = calculate_edge_aligned_layout()
+        # 2. Create output directory
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Path(f"test_null_fix_{team_key}_{timestamp}")
+        output_dir.mkdir(exist_ok=True)
+        print(f"   Output directory: {output_dir}")
 
-    # Read the file
-    with open(slide_file, 'r') as f:
-        content = f.read()
+        # 3. Fetch and analyze data
+        print("\n2. 📊 Fetching demographic data...")
+        demographics_view = config_manager.get_view_name(team_key, 'demographics')
+        query = f"SELECT * FROM {demographics_view}"
+        df = query_to_dataframe(query)
+        print(f"   ✅ Loaded {len(df):,} rows from {demographics_view}")
 
-    # Update chart positions
-    old_positions = r"chart_positions = \[(.*?)\]"
+        # Analyze null situation
+        print("\n   🔍 ANALYZING NULL VALUES:")
+        if 'ETHNIC_GROUP' in df.columns:
+            total_rows = len(df)
+            null_count = df['ETHNIC_GROUP'].isnull().sum()
+            null_percentage = (null_count / total_rows) * 100
+            print(f"   - Total rows: {total_rows:,}")
+            print(f"   - Null ETHNIC_GROUP values: {null_count:,} ({null_percentage:.1f}%)")
 
-    new_positions = f'''chart_positions = [
-            # Top row - RIGHT-EDGE ALIGNED: Occupation right edge = Children right edge
-            ('gender_chart', {layout['top_row']['gender'][0]:.1f}, 1.2, {layout['top_row']['gender'][1]:.1f}, 2.2),      # {layout['top_row']['gender'][1]:.1f}" wide
-            ('income_chart', {layout['top_row']['income'][0]:.1f}, 1.2, {layout['top_row']['income'][1]:.1f}, 2.2),       # {layout['top_row']['income'][1]:.1f}" wide
-            ('occupation_chart', {layout['top_row']['occupation'][0]:.1f}, 1.2, {layout['top_row']['occupation'][1]:.1f}, 2.2),  # {layout['top_row']['occupation'][1]:.1f}" wide (ALIGNED RIGHT)
+            # Show unique values
+            unique_values = df['ETHNIC_GROUP'].dropna().unique()
+            print(f"   - Non-null unique values: {len(unique_values)}")
+            print(f"   - Values: {sorted(unique_values)}")
 
-            # Bottom row - Ethnicity & Generation equal, Children right-aligned
-            ('ethnicity_chart', {layout['bottom_row']['ethnicity'][0]:.1f}, 3.9, {layout['bottom_row']['ethnicity'][1]:.1f}, 2.2),    # {layout['bottom_row']['ethnicity'][1]:.1f}" wide
-            ('generation_chart', {layout['bottom_row']['generation'][0]:.1f}, 3.9, {layout['bottom_row']['generation'][1]:.1f}, 2.2),   # {layout['bottom_row']['generation'][1]:.1f}" wide
-            ('children_chart', {layout['bottom_row']['children'][0]:.1f}, 3.9, {layout['bottom_row']['children'][1]:.1f}, 2.2)      # {layout['bottom_row']['children'][1]:.1f}" wide (RIGHT ALIGNED)
-        ]'''
+            # Show data types
+            print(f"   - ETHNIC_GROUP dtype: {df['ETHNIC_GROUP'].dtype}")
+            print(f"   - CUSTOMER_COUNT dtype: {df['CUSTOMER_COUNT'].dtype}")
+        else:
+            print("   ❌ ETHNIC_GROUP column not found!")
+            return None
 
-    if re.search(old_positions, content, re.DOTALL):
-        content = re.sub(old_positions, new_positions, content, flags=re.DOTALL)
-        print("✅ Updated chart positions - right edges now aligned")
-    else:
-        print("❌ Could not find chart_positions to update")
-        return False
+        # 4. Test with fixed processor
+        print("\n3. 🧪 Testing with minimal null fix...")
+        processor = DemographicsProcessorNullFix(
+            data_source=df,
+            team_name=team_name,
+            league=team_config['league']
+        )
 
-    # Update header positions to match
-    old_headers = r"headers = \[(.*?)\]"
+        print("   Processor initialized successfully")
+        print(f"   Communities: {processor.communities}")
 
-    new_headers = f'''headers = [
-            # Top row headers - matching right-edge aligned chart positions
-            ("GENDER", {layout['top_row']['gender'][0]:.1f}, 0.95, {layout['top_row']['gender'][1]:.1f}),             # {layout['top_row']['gender'][1]:.1f}" wide
-            ("HOUSEHOLD INCOME", {layout['top_row']['income'][0]:.1f}, 0.95, {layout['top_row']['income'][1]:.1f}),   # {layout['top_row']['income'][1]:.1f}" wide
-            ("OCCUPATION CATEGORY", {layout['top_row']['occupation'][0]:.1f}, 0.95, {layout['top_row']['occupation'][1]:.1f}), # {layout['top_row']['occupation'][1]:.1f}" wide (ALIGNED)
+        # Test ethnicity processing specifically
+        print("\n   🎯 Testing ethnicity processing...")
+        try:
+            ethnicity_result = processor.process_ethnicity()
+            if ethnicity_result:
+                print("   ✅ Ethnicity processing SUCCESS!")
+                print(f"   Chart type: {ethnicity_result.get('chart_type')}")
+                print(f"   Categories: {ethnicity_result.get('categories')}")
+                print(f"   Communities with data: {len(ethnicity_result.get('data', {}))}")
 
-            # Bottom row headers - matching alignment
-            ("ETHNICITY", {layout['bottom_row']['ethnicity'][0]:.1f}, 3.65, {layout['bottom_row']['ethnicity'][1]:.1f}),          # {layout['bottom_row']['ethnicity'][1]:.1f}" wide
-            ("GENERATION", {layout['bottom_row']['generation'][0]:.1f}, 3.65, {layout['bottom_row']['generation'][1]:.1f}),         # {layout['bottom_row']['generation'][1]:.1f}" wide
-            ("CHILDREN IN HOUSEHOLD", {layout['bottom_row']['children'][0]:.1f}, 3.65, {layout['bottom_row']['children'][1]:.1f})  # {layout['bottom_row']['children'][1]:.1f}" wide
-        ]'''
+                # Show results
+                for community, data in ethnicity_result.get('data', {}).items():
+                    total_pct = sum(data.values())
+                    print(f"   - {community}: {total_pct:.1f}% total ethnicity data")
+            else:
+                print("   ❌ Ethnicity processing returned None")
+                return None
 
-    if re.search(old_headers, content, re.DOTALL):
-        content = re.sub(old_headers, new_headers, content, flags=re.DOTALL)
-        print("✅ Updated header positions to match")
+        except Exception as e:
+            print(f"   ❌ Ethnicity processing FAILED: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
-    # Write back
-    with open(slide_file, 'w') as f:
-        f.write(content)
+        # 5. Test full demographics processing
+        print("\n4. 🏆 Testing full demographics processing...")
+        try:
+            demographic_data = processor.process_all_demographics()
+            print(f"   ✅ Full demographics processing SUCCESS!")
+            print("   Demographics processed:")
+            for demo_type, demo_info in demographic_data['demographics'].items():
+                chart_type = demo_info.get('chart_type', 'unknown')
+                print(f"   - {demo_type}: {chart_type}")
 
-    return True
+        except Exception as e:
+            print(f"   ❌ Full demographics processing FAILED: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
+        # 6. Generate charts to verify everything works
+        print("\n5. 📈 Generating charts...")
+        try:
+            charter = DemographicCharts(team_colors=team_config.get('colors'))
+            charts = charter.create_all_demographic_charts(
+                demographic_data,
+                output_dir=output_dir
+            )
+            print(f"   ✅ Generated {len(charts)} charts successfully")
 
-def clear_cache():
-    """Clear cache for fresh generation"""
-    print("\n🗑️  Clearing cache...")
+            # Check if ethnicity chart was created
+            if 'ethnicity' in charts:
+                print("   ✅ Ethnicity chart created successfully!")
+                ethnicity_path = output_dir / 'ethnicity_chart.png'
+                print(f"   Ethnicity chart saved: {ethnicity_path}")
+            else:
+                print("   ⚠️  No ethnicity chart found in generated charts")
 
-    import shutil
-    import sys
+        except Exception as e:
+            print(f"   ❌ Chart generation FAILED: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
-    # Clear directories
-    cache_dirs = [Path(p) for p in ['test_output', 'simple_test_output', 'final_test', 'test_regeneration']]
-    for cache_dir in cache_dirs:
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir)
+        # 7. Create PowerPoint if requested
+        if not save_charts_only:
+            print("\n6. 📄 Creating PowerPoint presentation...")
+            try:
+                presentation = Presentation()
 
-    # Clear timestamped directories
-    for path in Path('.').glob('test_output_*'):
-        if path.is_dir():
-            shutil.rmtree(path)
+                # Create demographics slide with fixed data
+                demo_generator = DemographicsSlide(presentation)
+                presentation = demo_generator.generate(
+                    demographic_data=demographic_data,
+                    chart_dir=output_dir,
+                    team_config=team_config
+                )
 
-    # Clear Python cache
-    modules_to_clear = [
-        'visualizations.demographic_charts',
-        'slide_generators.demographics_slide'
-    ]
+                # Save presentation
+                output_file = output_dir / f"{team_key}_demographics_null_fix_test.pptx"
+                presentation.save(str(output_file))
+                print(f"   ✅ PowerPoint saved: {output_file}")
 
-    for module in modules_to_clear:
-        if module in sys.modules:
-            del sys.modules[module]
+            except Exception as e:
+                print(f"   ❌ PowerPoint creation FAILED: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
 
-    print("✅ Cache cleared")
+        # 8. Summary
+        print("\n" + "=" * 80)
+        print("🎉 TEST SUMMARY - MINIMAL NULL FIX")
+        print("=" * 80)
+        print(f"Team: {team_name}")
+        print(f"Null values handled: {null_count:,} ({null_percentage:.1f}%)")
+        print(f"Charts generated: {len(charts)}")
+        print(f"Output directory: {output_dir}")
 
+        if ethnicity_result:
+            print("✅ Ethnicity processing: SUCCESS")
+            ethnicity_data = ethnicity_result.get('data', {})
+            for community in ethnicity_data:
+                total_pct = sum(ethnicity_data[community].values())
+                print(f"   - {community}: {total_pct:.1f}% ethnicity coverage")
+        else:
+            print("❌ Ethnicity processing: FAILED")
 
-def main():
-    """Main execution"""
-    print("🎯 ALIGNING RIGHT EDGES")
-    print("=" * 50)
-    print("Making occupation's right edge align with children's right edge")
-    print()
+        if not save_charts_only:
+            print(f"PowerPoint file: {output_file}")
 
-    # Show the alignment calculation
-    layout = calculate_edge_aligned_layout()
+        print("\n🔍 What to verify:")
+        print("1. Check that ethnicity chart was generated successfully")
+        print("2. Verify no 'Unknown' ethnicity appears in final chart")
+        print("3. Confirm percentages add up correctly for each community")
+        print("4. Open PowerPoint to see ethnicity section populated")
 
-    # Update slide layout
-    if not update_slide_layout_aligned():
-        return False
+        print("\nFiles created:")
+        for file in sorted(output_dir.glob('*')):
+            print(f"  - {file.name}")
 
-    # Clear cache
-    clear_cache()
+        return output_dir
 
-    print("\n✅ RIGHT EDGES ALIGNED!")
-    print("Now the layout should have:")
-    print(f"  • Occupation: {layout['top_row']['occupation'][1]:.1f}\" wide - stretches to right edge")
-    print(f"  • Children: {layout['bottom_row']['children'][1]:.1f}\" wide - aligned to right edge")
-    print("  • Perfect vertical alignment between top and bottom rows")
-    print("\nRun your demographics test to see the aligned layout!")
-
-    return True
+    except Exception as e:
+        print(f"\n❌ CRITICAL ERROR: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 if __name__ == "__main__":
-    main()
+    print("🚀 MINIMAL NULL FIX TEST")
+    print("This test applies a minimal fix to handle null values in ETHNIC_GROUP")
+
+    # Run test with Utah Jazz (you can change this)
+    result = test_minimal_null_fix('utah_jazz', save_charts_only=False)
+
+    if result:
+        print(f"\n✅ Test completed successfully!")
+        print(f"Check output directory: {result}")
+    else:
+        print(f"\n❌ Test failed - check error messages above")

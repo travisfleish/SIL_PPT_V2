@@ -2,7 +2,7 @@
 """
 Process demographic data from Snowflake exports to generate insights
 for PowerPoint presentations. Handles large datasets (400K+ rows) efficiently.
-Now includes AI-powered insights generation.
+Now includes AI-powered insights generation and ethnicity processing.
 """
 
 import pandas as pd
@@ -67,6 +67,9 @@ class DemographicsProcessor:
         'Retired',
         'Other'
     ]
+
+    # Ethnicity categories
+    ETHNICITY_ORDER = ['White', 'Hispanic', 'African American', 'Asian', 'Other']
 
     def __init__(self, data_source: Union[str, Path, pd.DataFrame],
                  team_name: str = "Utah Jazz",
@@ -304,6 +307,50 @@ class DemographicsProcessor:
             'insights': self._generate_children_insights(percentages)
         }
 
+    def process_ethnicity(self) -> Dict[str, Any]:
+        """Process ethnicity distribution using ETHNIC_GROUP column"""
+
+        # Check if ETHNIC_GROUP column exists
+        if 'ETHNIC_GROUP' not in self.data.columns:
+            logger.warning("ETHNIC_GROUP column not found in data")
+            return None
+
+        # Get unique ethnic groups from data
+        unique_groups = self.data['ETHNIC_GROUP'].dropna().unique()
+        logger.info(f"Found ethnic groups: {unique_groups}")
+
+        # Calculate raw percentages for all groups
+        raw_percentages = self._calculate_percentages('ETHNIC_GROUP')
+
+        # Aggregate data into standard categories
+        aggregated = {}
+        for community, data in raw_percentages.items():
+            aggregated[community] = {cat: 0.0 for cat in self.ETHNICITY_ORDER}
+
+            for group, percentage in data.items():
+                # Map groups to standard categories
+                if pd.isna(group) or group == '':
+                    continue
+                elif 'White' in group or 'Caucasian' in group:
+                    aggregated[community]['White'] += percentage
+                elif 'Hispanic' in group or 'Latino' in group:
+                    aggregated[community]['Hispanic'] += percentage
+                elif 'African' in group or 'Black' in group:
+                    aggregated[community]['African American'] += percentage
+                elif 'Asian' in group:
+                    aggregated[community]['Asian'] += percentage
+                else:
+                    aggregated[community]['Other'] += percentage
+
+        return {
+            'chart_type': 'grouped_bar',
+            'title': 'Ethnicity',
+            'categories': self.ETHNICITY_ORDER,
+            'communities': self.communities,
+            'data': aggregated,
+            'insights': self._generate_ethnicity_insights(aggregated)
+        }
+
     def _generate_generation_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for generation distribution"""
         insights = []
@@ -370,6 +417,44 @@ class DemographicsProcessor:
             if fan_with_children > pop_with_children + 5:
                 insights.append(
                     f"{self.team_name} fans are more likely to be parents ({fan_with_children:.0f}% vs {pop_with_children:.0f}%)")
+
+        return insights
+
+    def _generate_ethnicity_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
+        """Generate insights about ethnicity distribution"""
+        insights = []
+
+        team_fans = self.communities[0]
+        gen_pop = self.communities[1]
+
+        if team_fans in percentages and gen_pop in percentages:
+            team_data = percentages[team_fans]
+            pop_data = percentages[gen_pop]
+
+            # Find largest ethnic group for team fans
+            if team_data:
+                largest_group = max(team_data.items(), key=lambda x: x[1])
+                insights.append(f"{largest_group[1]:.0f}% of {team_fans} are {largest_group[0]}")
+
+            # Find biggest difference
+            max_diff = 0
+            max_diff_group = None
+            for group in team_data:
+                if group in pop_data:
+                    diff = abs(team_data[group] - pop_data[group])
+                    if diff > max_diff:
+                        max_diff = diff
+                        max_diff_group = group
+
+            if max_diff_group and max_diff > 5:
+                team_val = team_data.get(max_diff_group, 0)
+                pop_val = pop_data.get(max_diff_group, 0)
+                if team_val > pop_val:
+                    insights.append(
+                        f"{team_fans} have {team_val - pop_val:.0f}% more {max_diff_group} fans than general population")
+                else:
+                    insights.append(
+                        f"{team_fans} have {pop_val - team_val:.0f}% fewer {max_diff_group} fans than general population")
 
         return insights
 
@@ -511,6 +596,12 @@ DO NOT add any information not in the data above. Use the exact percentages prov
             'gender': self.process_gender(),
             'children': self.process_children()
         }
+
+        # Add ethnicity if available
+        ethnicity_result = self.process_ethnicity()
+        if ethnicity_result:
+            demographic_results['ethnicity'] = ethnicity_result
+            logger.info("Processed ethnicity demographics")
 
         # Generate insights
         if self.use_ai_insights:
