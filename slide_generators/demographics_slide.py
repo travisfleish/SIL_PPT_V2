@@ -1,7 +1,7 @@
 # slide_generators/demographics_slide.py
 """
 Generate complete demographics slide for PowerPoint presentations
-Includes all charts arranged according to the reference layout
+Clean version without circular imports
 """
 
 from pathlib import Path
@@ -13,15 +13,13 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 import logging
 
-from .base_slide import BaseSlide
-
 logger = logging.getLogger(__name__)
 
 # Default font
 DEFAULT_FONT_FAMILY = "Red Hat Display"
 
 
-class DemographicsSlide(BaseSlide):
+class DemographicsSlide:
     """Generate the complete demographics slide with all charts"""
 
     def __init__(self, presentation: Presentation = None):
@@ -31,7 +29,39 @@ class DemographicsSlide(BaseSlide):
         Args:
             presentation: Existing presentation to add slide to
         """
-        super().__init__(presentation)
+        if presentation is None:
+            self.presentation = Presentation()
+            # Set 16:9 widescreen aspect ratio
+            self.presentation.slide_width = Inches(13.333)
+            self.presentation.slide_height = Inches(7.5)
+        else:
+            self.presentation = presentation
+
+        self.default_font = DEFAULT_FONT_FAMILY
+        self.team_colors = {}
+
+        # Setup layouts
+        self._setup_layouts()
+
+    def _setup_layouts(self):
+        """Setup slide layout references"""
+        layout_count = len(self.presentation.slide_layouts)
+        logger.info(f"Available slide layouts: {layout_count}")
+
+        # Always keep reference to standard blank layout
+        self.blank_layout = self.presentation.slide_layouts[6]  # Blank layout
+
+        # Check if we have the SIL custom layouts (12 = white content layout)
+        if layout_count >= 13:
+            self.content_layout = self.presentation.slide_layouts[12]  # SIL white content
+            logger.info("Using SIL white content layout")
+        else:
+            self.content_layout = self.blank_layout  # Fallback to blank
+            logger.warning("SIL layouts not found, using blank layout")
+
+    def add_content_slide(self):
+        """Add a content slide using the appropriate layout"""
+        return self.presentation.slides.add_slide(self.content_layout)
 
     def generate(self,
                  demographic_data: Dict[str, Any],
@@ -55,9 +85,12 @@ class DemographicsSlide(BaseSlide):
         team_short = team_config.get('team_name_short', team_name.split()[-1])
         colors = team_config.get('colors', {})
 
-        # Use the content layout (SIL white layout #12)
+        # Store team colors for legend
+        self.team_colors = colors
+
+        # Use the content layout
         slide = self.add_content_slide()
-        logger.info("Added demographics slide using SIL white layout")
+        logger.info("Added demographics slide using content layout")
 
         # Add header
         self._add_header(slide, team_name)
@@ -68,7 +101,7 @@ class DemographicsSlide(BaseSlide):
         # Add demographic charts in 2x3 grid
         self._add_charts(slide, chart_dir)
 
-        # Add KEY/legend box at bottom left
+        # Add legend with colored squares (no box, no title)
         self._add_legend_box(slide, team_name, team_short, team_config.get('league', 'League'))
 
         logger.info(f"Generated demographics slide for {team_name}")
@@ -112,15 +145,15 @@ class DemographicsSlide(BaseSlide):
     def _add_chart_headers(self, slide):
         """Add black header bars for each chart section"""
         headers = [
-            # Top row - adjusted for new layout
-            ('GENDER', 0.5, 0.9, 3.5),  # Narrower for stacked gender
-            ('HOUSEHOLD INCOME', 4.2, 0.9, 5.0),  # Wider
-            ('OCCUPATION CATEGORY', 9.4, 0.9, 3.8),
+            # Top row headers - matching right-edge aligned chart positions
+            ("GENDER", 0.5, 0.95, 1.5),             # 1.5" wide
+            ("HOUSEHOLD INCOME", 2.2, 0.95, 4.8),   # 4.8" wide
+            ("OCCUPATION CATEGORY", 7.2, 0.95, 5.6), # 5.6" wide (ALIGNED)
 
-            # Bottom row
-            ('ETHNICITY', 0.5, 3.6, 3.5),
-            ('GENERATION', 4.2, 3.6, 5.0),  # Wider
-            ('CHILDREN IN HOUSEHOLD', 9.4, 3.6, 3.8)
+            # Bottom row headers - matching alignment
+            ("ETHNICITY", 0.5, 3.65, 4.5),          # 4.5" wide
+            ("GENERATION", 5.2, 3.65, 4.5),         # 4.5" wide
+            ("CHILDREN IN HOUSEHOLD", 9.8, 3.65, 3.0)  # 3.0" wide
         ]
 
         for text, left, top, width in headers:
@@ -151,17 +184,17 @@ class DemographicsSlide(BaseSlide):
         """Add all demographic charts in the correct positions"""
         chart_dir = Path(chart_dir)
 
-        # Chart positions matching designer layout with stacked gender charts
+        # Chart positions
         chart_positions = [
-            # Top row - Gender takes left column with stacked pie charts, more room for other charts
-            ('gender_chart', 0.5, 1.2, 3.5, 2.2),  # Left column (narrower for stacked pies)
-            ('income_chart', 4.2, 1.2, 5.0, 2.2),  # Middle column (wider)
-            ('occupation_chart', 9.4, 1.2, 3.8, 2.2),  # Right column
+            # Top row - RIGHT-EDGE ALIGNED: Occupation right edge = Children right edge
+            ('gender_chart', 0.5, 1.2, 1.5, 2.2),      # 1.5" wide
+            ('income_chart', 2.2, 1.2, 4.8, 2.2),       # 4.8" wide
+            ('occupation_chart', 7.2, 1.2, 5.6, 2.2),  # 5.6" wide (ALIGNED RIGHT)
 
-            # Bottom row
-            ('ethnicity_chart', 0.5, 3.9, 3.5, 2.2),  # Left column
-            ('generation_chart', 4.2, 3.9, 5.0, 2.2),  # Middle column (wider)
-            ('children_chart', 9.4, 3.9, 3.8, 2.2)  # Right column
+            # Bottom row - Ethnicity & Generation equal, Children right-aligned
+            ('ethnicity_chart', 0.5, 3.9, 4.5, 2.2),    # 4.5" wide
+            ('generation_chart', 5.2, 3.9, 4.5, 2.2),   # 4.5" wide
+            ('children_chart', 9.8, 3.9, 3.0, 2.2)      # 3.0" wide (RIGHT ALIGNED)
         ]
 
         for chart_name, left, top, width, height in chart_positions:
@@ -172,21 +205,11 @@ class DemographicsSlide(BaseSlide):
 
             if chart_path.exists():
                 try:
-                    # For gender chart, we need special handling if it's stacked
-                    if chart_name == 'gender_chart':
-                        # The gender chart should be generated as a taller image with stacked pies
-                        # Adjust height to accommodate stacked layout
-                        slide.shapes.add_picture(
-                            str(chart_path),
-                            Inches(left), Inches(top),
-                            width=Inches(width), height=Inches(height)
-                        )
-                    else:
-                        slide.shapes.add_picture(
-                            str(chart_path),
-                            Inches(left), Inches(top),
-                            width=Inches(width), height=Inches(height)
-                        )
+                    slide.shapes.add_picture(
+                        str(chart_path),
+                        Inches(left), Inches(top),
+                        width=Inches(width), height=Inches(height)
+                    )
                     logger.info(f"Added {chart_name} to slide")
                 except Exception as e:
                     logger.warning(f"Could not add {chart_name}: {e}")
@@ -200,6 +223,8 @@ class DemographicsSlide(BaseSlide):
                 )
                 placeholder.fill.solid()
                 placeholder.fill.fore_color.rgb = RGBColor(245, 245, 245)
+                placeholder.line.color.rgb = RGBColor(200, 200, 200)
+                placeholder.line.width = Pt(1)
 
                 # Add placeholder text
                 text_box = slide.shapes.add_textbox(
@@ -213,60 +238,77 @@ class DemographicsSlide(BaseSlide):
                 p.alignment = PP_ALIGN.CENTER
 
     def _add_legend_box(self, slide, team_name: str, team_short: str, league: str):
-        """Add KEY legend box at bottom left"""
-        # Box position - bottom left as in designer's version
-        left = Inches(0.5)
-        top = Inches(6.3)
-        width = Inches(5.5)
-        height = Inches(0.85)
+        """Add legend with colored squares in a single horizontal row, centered"""
+        # Positioning for horizontal centered layout
+        legend_top = Inches(6.3)  # Bottom of slide
+        square_size = Inches(0.12)  # Small square size
+        text_offset = Inches(0.2)  # Space between square and text
+        item_gap = Inches(0.8)  # Gap between legend items
 
-        # Create box
-        box = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            left, top, width, height
-        )
-        box.fill.solid()
-        box.fill.fore_color.rgb = RGBColor(255, 255, 255)
-        box.line.color.rgb = RGBColor(0, 0, 0)
-        box.line.width = Pt(1)
+        # Get colors from team config
+        team_colors = getattr(self, 'team_colors', {
+            'primary': '#1f77b4',
+            'secondary': '#ff7f0e',
+            'accent': '#2ca02c'
+        })
 
-        # Add KEY text
-        text_frame = box.text_frame
-        text_frame.clear()
-        text_frame.margin_left = Inches(0.1)
-        text_frame.margin_top = Inches(0.08)
-        text_frame.margin_bottom = Inches(0.08)
-
-        # KEY title
-        p = text_frame.add_paragraph()
-        p.text = "KEY"
-        p.font.name = self.default_font
-        p.font.size = Pt(11)
-        p.font.bold = True
-        p.space_after = Pt(6)
-
-        # Legend items
-        items = [
-            f"- {team_name} Fans",
-            f"- {team_short} Gen Pop (state level, excluding {team_short} Fans)",
-            f"- {league} Fans Total (excluding {team_short} fans)"
+        # Legend items with corresponding colors and estimated text widths
+        legend_items = [
+            (f"{team_name} Fans", team_colors.get('primary', '#1f77b4'), 1.5),
+            (
+            f"{team_short} Gen Pop (state level, excluding {team_short} Fans)", team_colors.get('secondary', '#ff7f0e'),
+            4.0),
+            (f"{league} Fans Total (excluding {team_short} fans)", team_colors.get('accent', '#2ca02c'), 2.8)
         ]
 
-        for i, item in enumerate(items):
-            if i > 0:
-                p = text_frame.add_paragraph()
-            else:
-                p = text_frame.add_paragraph()
-            p.text = item
+        # Calculate total width needed for all items
+        total_width = 0
+        for i, (label, color, text_width) in enumerate(legend_items):
+            total_width += square_size.inches + text_offset.inches + text_width
+            if i < len(legend_items) - 1:  # Add gap between items (not after last)
+                total_width += item_gap.inches
+
+        # Center horizontally on slide
+        slide_width = 13.333  # Standard slide width
+        start_left = (slide_width - total_width) / 2
+
+        current_left = start_left
+
+        for i, (label, color_hex, text_width) in enumerate(legend_items):
+            # Create colored square
+            square = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(current_left), legend_top,
+                square_size, square_size
+            )
+            square.fill.solid()
+            square.fill.fore_color.rgb = self._hex_to_rgb(color_hex)
+            square.line.fill.background()  # No border on square
+
+            # Add text label
+            text_left = current_left + square_size.inches + text_offset.inches
+            text_box = slide.shapes.add_textbox(
+                Inches(text_left), legend_top - Inches(0.02),
+                Inches(text_width), Inches(0.2)
+            )
+            text_box.text_frame.text = label
+            p = text_box.text_frame.paragraphs[0]
             p.font.name = self.default_font
             p.font.size = Pt(10)
-            p.level = 0
-            p.space_before = Pt(2)
-            p.space_after = Pt(2)
+            p.font.color.rgb = RGBColor(0, 0, 0)
+            p.alignment = PP_ALIGN.LEFT
+
+            # Move to next position
+            current_left = text_left + text_width + item_gap.inches
 
     def _hex_to_rgb(self, hex_color: str) -> RGBColor:
         """Convert hex color to RGBColor"""
-        return self.hex_to_rgb(hex_color)
+        hex_color = hex_color.lstrip('#')
+        return RGBColor(
+            int(hex_color[0:2], 16),
+            int(hex_color[2:4], 16),
+            int(hex_color[4:6], 16)
+        )
 
     def save(self, output_path: Path) -> Path:
         """Save presentation"""

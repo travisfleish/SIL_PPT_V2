@@ -1,198 +1,241 @@
-# test_demographics_two_slides.py
+# slide_generators/demographics_slide.py
 """
-Test script for the two-slide demographics implementation
+Generate complete demographics slide for PowerPoint presentations
+Includes all charts arranged according to the reference layout
+Updated with optimized gender pie chart spacing and wider bar charts
 """
 
-import sys
 from pathlib import Path
-from typing import Dict, Any
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
-
+from typing import Dict, Optional, Any
 from pptx import Presentation
-from data_processors.demographic_processor import DemographicsProcessor
-from data_processors.snowflake_connector import query_to_dataframe
-from visualizations.demographic_charts import DemographicCharts
-from slide_generators.demographics_slide1 import DemographicsSlide1
-from slide_generators.demographics_slide2 import DemographicsSlide2
-from utils.team_config_manager import TeamConfigManager
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.shapes import MSO_SHAPE
+import logging
+
+from .base_slide import BaseSlide
+
+logger = logging.getLogger(__name__)
+
+# Default font
+DEFAULT_FONT_FAMILY = "Red Hat Display"
 
 
-def test_two_slide_demographics(team_key: str = 'utah_jazz'):
-    """Test the two-slide demographics implementation"""
+class DemographicsSlide(BaseSlide):
+    """Generate the complete demographics slide with all charts"""
 
-    print("\n" + "=" * 60)
-    print("TWO-SLIDE DEMOGRAPHICS TEST")
-    print("=" * 60)
+    def __init__(self, presentation: Presentation = None):
+        """
+        Initialize demographics slide generator
 
-    try:
-        # 1. Setup
-        print("\n1. Setting up...")
-        config_manager = TeamConfigManager()
-        team_config = config_manager.get_team_config(team_key)
-        team_name = team_config['team_name']
-        print(f"   Team: {team_name}")
+        Args:
+            presentation: Existing presentation to add slide to
+        """
+        super().__init__(presentation)
 
-        # 2. Fetch and process data
-        print("\n2. Fetching demographic data...")
-        demographics_view = config_manager.get_view_name(team_key, 'demographics')
-        query = f"SELECT * FROM {demographics_view}"
-        df = query_to_dataframe(query)
-        print(f"   ✅ Loaded {len(df):,} rows")
+    def generate(self,
+                 demographic_data: Dict[str, Any],
+                 chart_dir: Path,
+                 team_config: Dict[str, Any],
+                 slide_index: Optional[int] = None) -> Presentation:
+        """
+        Generate the complete demographics slide
 
-        # 3. Process demographics
-        print("\n3. Processing demographics...")
-        processor = DemographicsProcessor(
-            data_source=df,
-            team_name=team_name,
-            league=team_config['league']
+        Args:
+            demographic_data: Processed demographic data
+            chart_dir: Directory containing chart images
+            team_config: Team configuration
+            slide_index: Where to insert slide (None = append)
+
+        Returns:
+            Updated presentation object
+        """
+        # Extract team info
+        team_name = team_config.get('team_name', 'Team')
+        team_short = team_config.get('team_name_short', team_name.split()[-1])
+        colors = team_config.get('colors', {})
+
+        # Use the content layout (SIL white layout #12)
+        slide = self.add_content_slide()
+        logger.info("Added demographics slide using SIL white layout")
+
+        # Add header
+        self._add_header(slide, team_name)
+
+        # Add chart section headers with black backgrounds
+        self._add_chart_headers(slide)
+
+        # Add demographic charts in 2x3 grid with optimized spacing
+        self._add_charts(slide, chart_dir)
+
+        # Add KEY/legend box at bottom-left
+        self._add_legend_box(slide, team_name, team_short,
+                             team_config.get('league', 'League'))
+
+        logger.info("Demographics slide generation complete")
+        return self.presentation
+
+    def _add_header(self, slide, team_name: str):
+        """Add team name and slide title header"""
+        # Team name (top-left)
+        team_text = slide.shapes.add_textbox(
+            Inches(0.5), Inches(0.2),
+            Inches(3), Inches(0.5)
+        )
+        team_text.text_frame.text = team_name
+        p = team_text.text_frame.paragraphs[0]
+        p.font.name = DEFAULT_FONT_FAMILY
+        p.font.size = Pt(18)
+        p.font.bold = True
+        p.alignment = PP_ALIGN.LEFT
+
+        # Slide title (top-right)
+        title_text = slide.shapes.add_textbox(
+            Inches(7), Inches(0.2),
+            Inches(6), Inches(0.5)
+        )
+        title_text.text_frame.text = "FAN DEMOGRAPHICS: HOW ARE UTAH JAZZ FANS UNIQUE"
+        p = title_text.text_frame.paragraphs[0]
+        p.font.name = DEFAULT_FONT_FAMILY
+        p.font.size = Pt(16)
+        p.font.bold = True
+        p.alignment = PP_ALIGN.RIGHT
+
+    def _add_chart_headers(self, slide):
+        """Add black header bars above each chart section"""
+        # Header configurations: (text, left, top, width)
+        headers = [
+            # Top row headers
+            ("GENDER", 0.5, 0.95, 2.5),  # NARROWER: 2.5 instead of 3.5
+            ("HOUSEHOLD INCOME", 3.2, 0.95, 5.5),  # WIDER: 5.5 instead of 5.0, starts earlier
+            ("OCCUPATION CATEGORY", 9.0, 0.95, 4.2),  # WIDER: 4.2 instead of 3.8, starts earlier
+
+            # Bottom row headers
+            ("ETHNICITY", 0.5, 3.65, 2.5),  # NARROWER to match
+            ("GENERATION", 3.2, 3.65, 5.5),  # WIDER to match
+            ("CHILDREN IN HOUSEHOLD", 9.0, 3.65, 4.2)  # WIDER to match
+        ]
+
+        for text, left, top, width in headers:
+            # Black background rectangle
+            header_rect = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(left), Inches(top),
+                Inches(width), Inches(0.25)
+            )
+            header_rect.fill.solid()
+            header_rect.fill.fore_color.rgb = RGBColor(0, 0, 0)
+            header_rect.line.fill.background()
+
+            # White text
+            text_box = slide.shapes.add_textbox(
+                Inches(left + 0.1), Inches(top + 0.02),
+                Inches(width - 0.2), Inches(0.2)
+            )
+            text_box.text_frame.text = text
+            p = text_box.text_frame.paragraphs[0]
+            p.font.name = DEFAULT_FONT_FAMILY
+            p.font.size = Pt(11)
+            p.font.bold = True
+            p.font.color.rgb = RGBColor(255, 255, 255)
+            p.alignment = PP_ALIGN.CENTER
+
+    def _add_charts(self, slide, chart_dir: Path):
+        """Add all demographic charts with optimized spacing"""
+        chart_dir = Path(chart_dir)
+
+        # UPDATED: Better space distribution
+        # Gender gets minimal space, Income/Occupation get more space
+        chart_positions = [
+            # Top row - Redistributed widths
+            ('gender_chart', 0.5, 1.2, 2.5, 2.2),  # NARROWER: 2.5 instead of 3.5
+            ('income_chart', 3.2, 1.2, 5.5, 2.2),  # WIDER: 5.5 instead of 5.0, starts earlier
+            ('occupation_chart', 9.0, 1.2, 4.2, 2.2),  # WIDER: 4.2 instead of 3.8, starts earlier
+
+            # Bottom row - Same redistribution
+            ('ethnicity_chart', 0.5, 3.9, 2.5, 2.2),  # NARROWER to match
+            ('generation_chart', 3.2, 3.9, 5.5, 2.2),  # WIDER to match
+            ('children_chart', 9.0, 3.9, 4.2, 2.2)  # WIDER to match
+        ]
+
+        for chart_name, left, top, width, height in chart_positions:
+            # Try both regular and hires versions
+            chart_path = chart_dir / f'{chart_name}_hires.png'
+            if not chart_path.exists():
+                chart_path = chart_dir / f'{chart_name}.png'
+
+            if chart_path.exists():
+                try:
+                    slide.shapes.add_picture(
+                        str(chart_path),
+                        Inches(left), Inches(top),
+                        width=Inches(width), height=Inches(height)
+                    )
+                    logger.info(f"Added {chart_name} to slide")
+                except Exception as e:
+                    logger.warning(f"Could not add {chart_name}: {e}")
+            else:
+                logger.warning(f"Chart not found: {chart_path}")
+                # Add placeholder
+                placeholder = slide.shapes.add_shape(
+                    MSO_SHAPE.RECTANGLE,
+                    Inches(left), Inches(top),
+                    Inches(width), Inches(height)
+                )
+                placeholder.fill.solid()
+                placeholder.fill.fore_color.rgb = RGBColor(245, 245, 245)
+                placeholder.line.color.rgb = RGBColor(100, 100, 100)
+                placeholder.line.width = Pt(1)
+
+    def _add_legend_box(self, slide, team_name: str, team_short: str, league: str):
+        """Add KEY legend box at bottom-left"""
+        # Box position - adjusted for new layout
+        left = Inches(0.8)
+        top = Inches(6.2)
+        width = Inches(5.5)  # Slightly wider to accommodate longer text
+        height = Inches(0.8)
+
+        # Create box with border
+        box = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            left, top, width, height
+        )
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        box.line.color.rgb = RGBColor(0, 0, 0)
+        box.line.width = Pt(1)
+
+        # Add legend text
+        text_box = slide.shapes.add_textbox(
+            left + Inches(0.1), top + Inches(0.05),
+            width - Inches(0.2), height - Inches(0.1)
         )
 
-        demographic_data = processor.process_all_demographics()
+        # Format legend text lines
+        legend_lines = [
+            "KEY",
+            f"- {team_name}",
+            f"- {team_short} Gen Pop (state level, excluding {team_short} Fans)",
+            f"- {league} Fans Total (excluding {team_short.lower()} fans)"
+        ]
 
-        # Show what demographics were processed
-        print("   Demographics processed:")
-        for demo_type in demographic_data['demographics'].keys():
-            print(f"   - {demo_type}")
+        text_frame = text_box.text_frame
+        text_frame.clear()
 
-        # 4. Generate charts
-        print("\n4. Generating charts...")
-        output_dir = Path(f"{team_key}_two_slide_test")
-        output_dir.mkdir(exist_ok=True)
+        for i, line in enumerate(legend_lines):
+            if i > 0:
+                text_frame.add_paragraph()
 
-        charter = DemographicCharts(team_colors=team_config.get('colors'))
-        charts = charter.create_all_demographic_charts(
-            demographic_data,
-            output_dir=output_dir
-        )
+            p = text_frame.paragraphs[i]
+            p.text = line
+            p.font.name = DEFAULT_FONT_FAMILY
 
-        print(f"   ✅ Generated {len(charts)} charts")
+            if i == 0:  # "KEY" header
+                p.font.size = Pt(12)
+                p.font.bold = True
+            else:  # Legend items
+                p.font.size = Pt(10)
+                p.font.bold = False
 
-        # 5. Create PowerPoint with two slides
-        print("\n5. Creating PowerPoint with two demographics slides...")
-        presentation = Presentation()
-
-        # Create demographics slide 1
-        print("   Creating slide 1 (Gender, Ethnicity, Generation)...")
-        demo_generator1 = DemographicsSlide1(presentation)
-        presentation = demo_generator1.generate(
-            demographic_data=demographic_data,
-            chart_dir=output_dir,
-            team_config=team_config
-        )
-
-        # Create demographics slide 2
-        print("   Creating slide 2 (Income, Children, Occupation)...")
-        demo_generator2 = DemographicsSlide2(presentation)
-        presentation = demo_generator2.generate(
-            demographic_data=demographic_data,
-            chart_dir=output_dir,
-            team_config=team_config
-        )
-
-        # Save presentation
-        output_file = f"{team_key}_demographics_two_slides_test.pptx"
-        presentation.save(output_file)
-        print(f"   ✅ Saved to: {output_file}")
-
-        print("\n✅ Test complete!")
-        print(f"\nGenerated files:")
-        print(f"  - PowerPoint: {output_file}")
-        print(f"  - Charts: {output_dir}/")
-        print(f"\nThe presentation contains 2 slides:")
-        print(f"  - Slide 1: Gender, Ethnicity, Generation")
-        print(f"  - Slide 2: Income, Children, Occupation")
-
-        return True
-
-    except Exception as e:
-        print(f"\n❌ ERROR: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def compare_single_vs_two_slides(team_key: str = 'utah_jazz'):
-    """Create both single-slide and two-slide versions for comparison"""
-
-    print("\n" + "=" * 60)
-    print("COMPARING SINGLE VS TWO-SLIDE DEMOGRAPHICS")
-    print("=" * 60)
-
-    # Import the original single slide version
-    from slide_generators.demographics_slide import DemographicsSlide
-
-    try:
-        # Setup (same for both)
-        config_manager = TeamConfigManager()
-        team_config = config_manager.get_team_config(team_key)
-
-        # Get data and process
-        demographics_view = config_manager.get_view_name(team_key, 'demographics')
-        df = query_to_dataframe(f"SELECT * FROM {demographics_view}")
-
-        processor = DemographicsProcessor(
-            data_source=df,
-            team_name=team_config['team_name'],
-            league=team_config['league']
-        )
-        demographic_data = processor.process_all_demographics()
-
-        # Generate charts
-        output_dir = Path(f"{team_key}_comparison_test")
-        output_dir.mkdir(exist_ok=True)
-
-        charter = DemographicCharts(team_colors=team_config.get('colors'))
-        charts = charter.create_all_demographic_charts(demographic_data, output_dir=output_dir)
-
-        # Create single-slide version
-        print("\n1. Creating single-slide version...")
-        pres1 = Presentation()
-        demo_gen = DemographicsSlide(pres1)
-        pres1 = demo_gen.generate(demographic_data, output_dir, team_config)
-        pres1.save(f"{team_key}_single_slide.pptx")
-        print("   ✅ Saved single-slide version")
-
-        # Create two-slide version
-        print("\n2. Creating two-slide version...")
-        pres2 = Presentation()
-
-        demo_gen1 = DemographicsSlide1(pres2)
-        pres2 = demo_gen1.generate(demographic_data, output_dir, team_config)
-
-        demo_gen2 = DemographicsSlide2(pres2)
-        pres2 = demo_gen2.generate(demographic_data, output_dir, team_config)
-
-        pres2.save(f"{team_key}_two_slides.pptx")
-        print("   ✅ Saved two-slide version")
-
-        print("\n✅ Comparison complete! Check both files to compare layouts.")
-
-    except Exception as e:
-        print(f"\n❌ ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-
-def main():
-    """Main test function"""
-    print("\n🎯 DEMOGRAPHICS TWO-SLIDE TEST")
-
-    # Test two-slide implementation
-    success = test_two_slide_demographics('utah_jazz')
-
-    if success:
-        # Compare with single slide
-        user_input = input("\n\nCreate comparison with single-slide version? (y/n): ")
-        if user_input.lower() == 'y':
-            compare_single_vs_two_slides('utah_jazz')
-
-        # Test with Dallas Cowboys
-        user_input = input("\n\nTest with Dallas Cowboys too? (y/n): ")
-        if user_input.lower() == 'y':
-            test_two_slide_demographics('dallas_cowboys')
-
-
-if __name__ == "__main__":
-    main()
+            p.alignment = PP_ALIGN.LEFT
