@@ -2,7 +2,7 @@
 """
 Main PowerPoint builder that orchestrates the entire presentation generation
 Combines all slide generators to create the complete sponsorship insights report
-UPDATED: Uses layout-based static slides instead of copying slide content
+UPDATED: Added demographic overview slide with AI insights
 """
 
 import logging
@@ -22,6 +22,7 @@ from data_processors.snowflake_connector import query_to_dataframe
 
 # Import slide generators
 from slide_generators.title_slide import TitleSlide
+from slide_generators.demographic_overview_slide import DemographicOverviewSlide  # NEW
 from slide_generators.demographics_slide import DemographicsSlide  # Now single slide
 from slide_generators.behaviors_slide import BehaviorsSlide
 from slide_generators.category_slide import CategorySlide
@@ -156,6 +157,10 @@ class PowerPointBuilder:
         import slide_generators.demographics_slide as demo_slide
         demo_slide.DEFAULT_FONT_FAMILY = font_name
 
+        # Update demographic overview slide
+        import slide_generators.demographic_overview_slide as demo_overview_slide
+        demo_overview_slide.DEFAULT_FONT_FAMILY = font_name
+
         # Update category slide
         import slide_generators.category_slide as cat_slide
         cat_slide.DEFAULT_FONT_FAMILY = font_name
@@ -171,9 +176,10 @@ class PowerPointBuilder:
         Slide Order:
         1. Title slide
         2. "How To Use This Report" (using layout 13)
-        3. Demographics slide
-        4. Behaviors slide
-        5-N. Category slides
+        3. Demographic Overview with AI insights (NEW - using layout 11)
+        4. Demographics slide with charts
+        5. Behaviors slide
+        6-N. Category slides
         N+1. "Sports Innovation Lab" branding (using layout 14)
 
         Args:
@@ -193,23 +199,26 @@ class PowerPointBuilder:
             # 2. Add "How To Use This Report" static slide (using layout 13)
             self._add_static_slide_from_layout(13, "How To Use This Report")
 
-            # 3. Create single demographics slide with all 6 charts
+            # 3. NEW: Create demographic overview slide with AI insights
+            self._create_demographic_overview_slide()
+
+            # 4. Create detailed demographics slide with all 6 charts
             self._create_demographics_slide()
 
-            # 4. Create behaviors slide
+            # 5. Create behaviors slide
             self._create_behaviors_slide()
 
-            # 5. Create category slides (fixed categories)
+            # 6. Create category slides (fixed categories)
             self._create_fixed_category_slides()
 
-            # 6. Create custom category slides (if requested)
+            # 7. Create custom category slides (if requested)
             if include_custom_categories:
                 self._create_custom_category_slides(custom_category_count)
 
-            # 7. Add SIL branding slide at the end (using layout 14)
+            # 8. Add SIL branding slide at the end (using layout 14)
             self._add_static_slide_from_layout(14, "Sports Innovation Lab Branding")
 
-            # 8. Save presentation
+            # 9. Save presentation
             output_path = self._save_presentation()
 
             logger.info(f"Presentation completed with {len(self.slides_created)} slides")
@@ -222,6 +231,88 @@ class PowerPointBuilder:
         except Exception as e:
             logger.error(f"Error building presentation: {str(e)}")
             raise
+
+    def _create_demographic_overview_slide(self):
+        """
+        NEW: Create the demographic overview slide with AI insights
+        Uses the blue SIL layout #11 with AI-generated demographic insights
+        """
+        logger.info("Creating demographic overview slide with AI insights...")
+
+        try:
+            # Get AI insights from demographic data
+            ai_insights = self._get_demographic_ai_insights()
+
+            # Create the slide
+            overview_generator = DemographicOverviewSlide(self.presentation)  # Pass template!
+            overview_generator.generate(
+                team_config=self.team_config,
+                ai_insights=ai_insights
+            )
+
+            self.slides_created.append("Demographic Overview")
+            logger.info("✓ Demographic overview slide created")
+
+        except Exception as e:
+            logger.error(f"Error creating demographic overview slide: {str(e)}")
+            # Create a fallback slide
+            self._add_placeholder_slide("Demographic Overview - Error loading data")
+
+    def _get_demographic_ai_insights(self) -> str:
+        """
+        Get AI-generated demographic insights for the overview slide
+
+        Returns:
+            AI-generated insights text or fallback text
+        """
+        try:
+            # Load demographics data
+            demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
+            query = f"SELECT * FROM {demographics_view}"
+            df = query_to_dataframe(query)
+
+            if df.empty:
+                logger.warning("No demographics data found for AI insights")
+                return self._get_fallback_demographic_insight()
+
+            # Process demographics with AI insights enabled
+            processor = DemographicsProcessor(
+                data_source=df,
+                team_name=self.team_name,
+                league=self.league,
+                use_ai_insights=True  # Enable AI insights
+            )
+
+            demographic_data = processor.process_all_demographics()
+
+            # Get the AI-generated insight
+            ai_insights = demographic_data.get('key_insights')
+            if ai_insights and len(ai_insights.strip()) > 20:
+                logger.info("Using AI-generated demographic insights")
+                return ai_insights
+            else:
+                logger.warning("AI insights not available, using fallback")
+                return self._get_fallback_demographic_insight()
+
+        except Exception as e:
+            logger.warning(f"Could not generate AI demographic insights: {e}")
+            return self._get_fallback_demographic_insight()
+
+    def _get_fallback_demographic_insight(self) -> str:
+        """
+        Generate fallback demographic insight when AI is not available
+
+        Returns:
+            Fallback insights text
+        """
+        team_name = self.team_config['team_name']
+        team_short = self.team_config['team_name_short']
+
+        # Provide a generic but professional fallback
+        return (f"{team_name} fans demonstrate distinct demographic characteristics including "
+                f"unique age distribution, income levels, and professional backgrounds compared "
+                f"to the local general population and {self.league} average fans, making them "
+                f"an attractive audience for targeted sponsorship opportunities.")
 
     def _add_static_slide_from_layout(self, layout_index: int, slide_name: str):
         """
@@ -275,51 +366,14 @@ class PowerPointBuilder:
         logger.info("✓ Title slide created")
 
     def _get_demographic_insights(self) -> Optional[str]:
-        """Generate demographic insights text for title slide"""
-        try:
-            # Load demographics data
-            demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
-            query = f"SELECT * FROM {demographics_view}"
-            df = query_to_dataframe(query)
-
-            if df.empty:
-                return None
-
-            # Process demographics to get key stats
-            processor = DemographicsProcessor(
-                data_source=df,
-                team_name=self.team_name,
-                league=self.league
-            )
-            demographic_data = processor.process_all_demographics()
-
-            # Get the AI-generated insight or format our own
-            if 'key_insights' in demographic_data and demographic_data['key_insights']:
-                return demographic_data['key_insights']
-            else:
-                return self._format_demographic_insights(demographic_data)
-
-        except Exception as e:
-            logger.warning(f"Could not generate demographic insights: {e}")
-            return None
+        """Generate demographic insights text for title slide (DEPRECATED - use _get_demographic_ai_insights)"""
+        # This method is kept for backward compatibility but now calls the new AI method
+        return self._get_demographic_ai_insights()
 
     def _format_demographic_insights(self, demographic_data: Dict[str, Any]) -> str:
-        """Format demographic data into insights text"""
-        # This is a fallback - ideally the DemographicsProcessor provides this
-        team_name = self.team_config['team_name']
-
-        # Default insight format matching the designer's sample
-        default_insight = (
-            f"{team_name} fans are significantly younger, with 79% being Millennials/Gen X "
-            f"compared to 0% in the Utah general population and 76% of NBA average fans, "
-            f"they have a higher household income with 76% earning $100K+ compared to 0% "
-            f"in the Utah general population and 73% of NBA average fans, are predominantly "
-            f"male at 54% versus 0% in the Utah general population and 52% of NBA average fans, "
-            f"and are largely working professionals at 64% compared to 0% in the Utah general "
-            f"population and 65% for NBA average fans."
-        )
-
-        return default_insight
+        """Format demographic data into insights text (DEPRECATED)"""
+        # This method is kept for backward compatibility
+        return self._get_fallback_demographic_insight()
 
     def _create_demographics_slide(self):
         """Create single demographics slide with all 6 charts"""

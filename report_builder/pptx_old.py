@@ -2,6 +2,7 @@
 """
 Main PowerPoint builder that orchestrates the entire presentation generation
 Combines all slide generators to create the complete sponsorship insights report
+UPDATED: Uses layout-based static slides instead of copying slide content
 """
 
 import logging
@@ -165,7 +166,15 @@ class PowerPointBuilder:
                            include_custom_categories: bool = True,
                            custom_category_count: Optional[int] = None) -> Path:
         """
-        Build the complete PowerPoint presentation
+        Build the complete PowerPoint presentation with static slides from layouts
+
+        Slide Order:
+        1. Title slide
+        2. "How To Use This Report" (using layout 13)
+        3. Demographics slide
+        4. Behaviors slide
+        5-N. Category slides
+        N+1. "Sports Innovation Lab" branding (using layout 14)
 
         Args:
             include_custom_categories: Whether to include custom categories
@@ -178,31 +187,77 @@ class PowerPointBuilder:
         logger.info(f"Font: {self.presentation_font}")
 
         try:
-            # 1. Create title slide with demographic insights
+            # 1. Create title slide
             self._create_title_slide()
 
-            # 2. Create single demographics slide with all 6 charts
+            # 2. Add "How To Use This Report" static slide (using layout 13)
+            self._add_static_slide_from_layout(13, "How To Use This Report")
+
+            # 3. Create single demographics slide with all 6 charts
             self._create_demographics_slide()
 
-            # 3. Create behaviors slide
+            # 4. Create behaviors slide
             self._create_behaviors_slide()
 
-            # 4. Create category slides (fixed categories)
+            # 5. Create category slides (fixed categories)
             self._create_fixed_category_slides()
 
-            # 5. Create custom category slides (if requested)
+            # 6. Create custom category slides (if requested)
             if include_custom_categories:
                 self._create_custom_category_slides(custom_category_count)
 
-            # 6. Save presentation
+            # 7. Add SIL branding slide at the end (using layout 14)
+            self._add_static_slide_from_layout(14, "Sports Innovation Lab Branding")
+
+            # 8. Save presentation
             output_path = self._save_presentation()
 
             logger.info(f"Presentation completed with {len(self.slides_created)} slides")
+            logger.info("Final slide order:")
+            for i, slide_name in enumerate(self.slides_created):
+                logger.info(f"  Slide {i + 1}: {slide_name}")
+
             return output_path
 
         except Exception as e:
             logger.error(f"Error building presentation: {str(e)}")
             raise
+
+    def _add_static_slide_from_layout(self, layout_index: int, slide_name: str):
+        """
+        Add a static slide using a specific layout from the template
+
+        Args:
+            layout_index: Index of layout to use (13 or 14)
+            slide_name: Name for tracking purposes
+        """
+        try:
+            # Check if the layout exists
+            if layout_index >= len(self.presentation.slide_layouts):
+                logger.warning(f"Layout {layout_index} not found - adding placeholder for {slide_name}")
+                self._add_placeholder_slide(f"{slide_name} - Layout not found")
+                return
+
+            # Get the layout
+            static_layout = self.presentation.slide_layouts[layout_index]
+            layout_name = getattr(static_layout, 'name', f'Layout {layout_index}')
+
+            logger.info(f"Adding static slide '{slide_name}' using layout {layout_index} ({layout_name})")
+
+            # Create new slide using the static layout
+            slide = self.presentation.slides.add_slide(static_layout)
+
+            # The content should already be in the layout, but we can add any dynamic content here if needed
+            # For now, just use the layout as-is since it contains your static content
+
+            # Track the slide
+            self.slides_created.append(slide_name)
+            logger.info(f"✓ Added static slide: {slide_name}")
+
+        except Exception as e:
+            logger.error(f"Error adding static slide '{slide_name}': {str(e)}")
+            # Add placeholder instead of failing
+            self._add_placeholder_slide(f"{slide_name} - Error loading layout")
 
     def _create_title_slide(self):
         """Create the title slide"""
