@@ -49,154 +49,156 @@ class TitleSlide(BaseSlide):
         team_name = team_config.get('team_name', 'Team')
         team_colors = team_config.get('colors', {})
 
-        # FIX 2: Use blank layout (no automatic title placeholder)
-        slide = self.presentation.slides.add_slide(self.blank_layout)
+        # Use the title layout (SIL blue layout #11)
+        slide = self.add_title_slide()
+        logger.info("Added title slide using SIL blue layout")
 
-        # Add background color
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+        # The SIL blue layout already has the background, so we don't need to add it
+        # Only add background if using fallback layout
+        if self.title_layout == self.presentation.slide_layouts[0]:  # Standard title layout
+            # Add background color manually for non-SIL templates
+            background = slide.background
+            fill = background.fill
+            fill.solid()
 
-        # Add team logo circle (placeholder)
-        self._add_team_logo_circle(slide, team_name, team_colors)
+            # Use team primary color or default
+            if 'primary' in team_colors:
+                primary_color = team_colors['primary']
+                if isinstance(primary_color, str):
+                    fill.fore_color.rgb = self._hex_to_rgb(primary_color)
+                else:
+                    fill.fore_color.rgb = primary_color
+            else:
+                fill.fore_color.rgb = RGBColor(0, 34, 68)  # Default blue
 
-        # Add title manually (no automatic placeholder)
-        self._add_title_text(slide, team_name)
+        # Add team logo circle
+        logo_x = Inches(6.4)  # Slightly adjusted for 16:9
+        logo_y = Inches(0.8)
+        logo_size = Inches(1.2)
 
-        # Add subtitle manually
-        self._add_subtitle_text(slide, subtitle)
+        # Outer circle (accent color)
+        outer_circle = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            logo_x - Inches(0.08),
+            logo_y - Inches(0.08),
+            logo_size + Inches(0.16),
+            logo_size + Inches(0.16)
+        )
+        outer_circle.fill.solid()
 
-        # Add decorative elements (optional)
-        self._add_decorative_elements(slide, team_colors)
+        # Use team accent color or default
+        if 'accent' in team_colors:
+            accent_color = team_colors['accent']
+            if isinstance(accent_color, str):
+                outer_circle.fill.fore_color.rgb = self._hex_to_rgb(accent_color)
+            else:
+                outer_circle.fill.fore_color.rgb = accent_color
+        else:
+            outer_circle.fill.fore_color.rgb = RGBColor(255, 182, 18)  # Default yellow
+
+        outer_circle.line.fill.background()
+
+        # Inner circle (white background for logo)
+        inner_circle = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            logo_x, logo_y,
+            logo_size, logo_size
+        )
+        inner_circle.fill.solid()
+        inner_circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        inner_circle.line.fill.background()
+
+        # Add team initials or logo
+        logo_text = slide.shapes.add_textbox(
+            logo_x, logo_y,
+            logo_size, logo_size
+        )
+        text_frame = logo_text.text_frame
+        text_frame.clear()
+
+        # Get team initials
+        team_initials = team_config.get('team_initials',
+                                        ''.join([word[0] for word in team_name.split()[:2]]))
+
+        p = text_frame.add_paragraph()
+        p.text = team_initials
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(36)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(0, 34, 68)  # Dark blue
+        p.alignment = PP_ALIGN.CENTER
+
+        # Center vertically
+        text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+        # Add main title (team name)
+        title_box = slide.shapes.add_textbox(
+            Inches(1.5), Inches(2.8),  # Adjusted for 16:9
+            Inches(10.333), Inches(1.5)  # Wider for 16:9
+        )
+        title_box.text_frame.text = team_name
+        title_box.text_frame.word_wrap = True
+
+        # Format title
+        for paragraph in title_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(48)
+            paragraph.font.bold = True
+            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
+            paragraph.alignment = PP_ALIGN.CENTER
+
+        # Add subtitle
+        subtitle_box = slide.shapes.add_textbox(
+            Inches(2), Inches(4.5),  # Adjusted positioning
+            Inches(9.333), Inches(1)  # Wider for 16:9
+        )
+        subtitle_box.text_frame.text = subtitle
+        subtitle_box.text_frame.word_wrap = True
+
+        # Format subtitle
+        for paragraph in subtitle_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(28)
+            paragraph.font.bold = False
+            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
+            paragraph.alignment = PP_ALIGN.CENTER
+
+        # Add date in bottom right
+        from datetime import datetime
+        current_date = datetime.now().strftime("%B %Y")
+
+        date_box = slide.shapes.add_textbox(
+            Inches(10.5), Inches(6.8),  # Bottom right for 16:9
+            Inches(2.5), Inches(0.5)
+        )
+        date_box.text_frame.text = current_date
+
+        # Format date
+        for paragraph in date_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(14)
+            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
+            paragraph.alignment = PP_ALIGN.RIGHT
 
         logger.info(f"Generated title slide for {team_name}")
         return self.presentation
 
-    def _add_team_logo_circle(self, slide, team_name: str, team_colors: Dict[str, str]):
-        """Add team logo placeholder circle"""
-        # Position for logo
-        left = Inches(5.5)
-        top = Inches(1.5)
-        size = Inches(2)
-
-        # Outer circle (secondary color)
-        if 'secondary' in team_colors:
-            outer_circle = slide.shapes.add_shape(
-                MSO_SHAPE.OVAL,
-                left - Inches(0.1), top - Inches(0.1),
-                size + Inches(0.2), size + Inches(0.2)
-            )
-            outer_circle.fill.solid()
-            outer_circle.fill.fore_color.rgb = self.hex_to_rgb(team_colors['secondary'])
-            outer_circle.line.fill.background()
-
-        # Inner circle (primary color)
-        inner_circle = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            left, top,
-            size, size
-        )
-        inner_circle.fill.solid()
-        inner_circle.fill.fore_color.rgb = self.hex_to_rgb(
-            team_colors.get('primary', '#002244')
-        )
-        inner_circle.line.fill.background()
-
-        # Team initials or short name
-        text_box = slide.shapes.add_textbox(
-            left, top + Inches(0.7),
-            size, Inches(0.6)
-        )
-        text_frame = text_box.text_frame
-        text_frame.text = team_name.split()[-1][:4].upper()  # e.g., "JAZZ" or "COWB"
-
-        p = text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(36)
-        p.font.bold = True
-        p.font.color.rgb = RGBColor(255, 255, 255)
-        p.alignment = PP_ALIGN.CENTER
-
-    def _add_title_text(self, slide, team_name: str):
-        """Add main title text manually"""
-        title_box = slide.shapes.add_textbox(
-            Inches(1), Inches(4),
-            Inches(11.333), Inches(1)  # Adjusted for 16:9 width
-        )
-
-        text_frame = title_box.text_frame
-        text_frame.text = team_name
-        text_frame.word_wrap = True
-
-        p = text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(44)
-        p.font.bold = True
-        p.font.color.rgb = RGBColor(51, 51, 51)
-        p.alignment = PP_ALIGN.CENTER
-
-    def _add_subtitle_text(self, slide, subtitle: str):
-        """Add subtitle text manually"""
-        subtitle_box = slide.shapes.add_textbox(
-            Inches(1), Inches(5),
-            Inches(11.333), Inches(0.8)  # Adjusted for 16:9 width
-        )
-
-        text_frame = subtitle_box.text_frame
-        text_frame.text = subtitle
-
-        p = text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(28)
-        p.font.bold = False
-        p.font.color.rgb = RGBColor(89, 89, 89)
-        p.alignment = PP_ALIGN.CENTER
-
-    def _add_decorative_elements(self, slide, team_colors: Dict[str, str]):
-        """Add optional decorative elements"""
-        # Add a subtle line below the subtitle
-        if 'accent' in team_colors:
-            line_y = Inches(5.8)
-            line = slide.shapes.add_shape(
-                MSO_SHAPE.RECTANGLE,
-                Inches(4), line_y,
-                Inches(5.333), Pt(3)  # Adjusted for 16:9 width
-            )
-            line.fill.solid()
-            line.fill.fore_color.rgb = self.hex_to_rgb(team_colors['accent'])
-            line.line.fill.background()
-
-        # Add date in bottom right
-        date_box = slide.shapes.add_textbox(
-            Inches(8.833), Inches(6.8),  # Adjusted for 16:9 width
-            Inches(4), Inches(0.3)
-        )
-
-        from datetime import datetime
-        date_text = datetime.now().strftime("%B %Y")
-
-        text_frame = date_box.text_frame
-        text_frame.text = date_text
-
-        p = text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(12)
-        p.font.color.rgb = RGBColor(150, 150, 150)
-        p.alignment = PP_ALIGN.RIGHT
+    def _hex_to_rgb(self, hex_color: str) -> RGBColor:
+        """Convert hex color to RGBColor"""
+        return self.hex_to_rgb(hex_color)  # Use parent method
 
 
-# Convenience function
+# Convenience function for backward compatibility
 def create_title_slide(team_config: Dict[str, Any],
-                       presentation: Optional[Presentation] = None,
-                       subtitle: str = "Sponsorship Insights Report") -> Presentation:
+                       subtitle: str = "Sponsorship Insights Report",
+                       presentation: Optional[Presentation] = None) -> Presentation:
     """
-    Create a title slide for the presentation
+    Create a title slide with team branding
 
     Args:
-        team_config: Team configuration
-        presentation: Existing presentation (creates new if None)
+        team_config: Team configuration dictionary
         subtitle: Subtitle text
+        presentation: Existing presentation to add to
 
     Returns:
         Presentation with title slide
