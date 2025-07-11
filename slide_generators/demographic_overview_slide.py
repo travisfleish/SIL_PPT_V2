@@ -137,7 +137,7 @@ class DemographicOverviewSlide(BaseSlide):
         """Add the main title: Team Name + Fan Demographic Overview"""
         # Title positioned below header bar
         title_text = slide.shapes.add_textbox(
-            Inches(1), Inches(1.2),
+            Inches(1), Inches(2.0),
             Inches(11), Inches(1.2)
         )
         title_frame = title_text.text_frame
@@ -167,8 +167,8 @@ class DemographicOverviewSlide(BaseSlide):
         """Add the AI-generated insights text"""
         # Position insights text below the title
         insights_text = slide.shapes.add_textbox(
-            Inches(1), Inches(3.0),
-            Inches(7), Inches(3)  # Left side, leaving room for image
+            Inches(1), Inches(3.6),
+            Inches(5), Inches(3)  # Left side, leaving room for image
         )
         insights_frame = insights_text.text_frame
         insights_frame.text = ai_insights
@@ -185,7 +185,7 @@ class DemographicOverviewSlide(BaseSlide):
 
         for run in insights_p.runs:
             run.font.name = DEFAULT_FONT_FAMILY
-            run.font.size = Pt(18)
+            run.font.size = Pt(12)
             run.font.color.rgb = RGBColor(255, 255, 255)  # White text on blue background
             run.font.bold = False
 
@@ -194,8 +194,8 @@ class DemographicOverviewSlide(BaseSlide):
         # Create circular placeholder on the right side
         placeholder_circle = slide.shapes.add_shape(
             MSO_SHAPE.OVAL,
-            Inches(9), Inches(2.5),
-            Inches(3.5), Inches(3.5)  # Circular shape
+            Inches(7.167), Inches(1.5),
+            Inches(5), Inches(5)  # Circular shape
         )
 
         # Style the placeholder - RGBColor only takes RGB values, no alpha
@@ -206,8 +206,8 @@ class DemographicOverviewSlide(BaseSlide):
 
         # Add placeholder text inside the circle
         placeholder_text = slide.shapes.add_textbox(
-            Inches(9.5), Inches(4),
-            Inches(2.5), Inches(1)
+            Inches(8.67), Inches(3.5),
+            Inches(2), Inches(1)
         )
         placeholder_frame = placeholder_text.text_frame
         placeholder_frame.text = "Team Image\nPlaceholder"

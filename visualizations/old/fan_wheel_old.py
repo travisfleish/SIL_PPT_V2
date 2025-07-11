@@ -358,7 +358,7 @@ class FanWheel(BaseChart):
 
     def _draw_center_circle(self, ax, team_logo: Optional[Image.Image] = None):
         """Draw the center circle with team branding"""
-        # Center circle
+        # Draw the black background circle
         center_circle = Circle((0, 0), self.inner_radius,
                                facecolor='black',
                                edgecolor=self.secondary_color,
@@ -366,7 +366,93 @@ class FanWheel(BaseChart):
                                zorder=20)
         ax.add_patch(center_circle)
 
-        # For now, just show team text (could be enhanced with actual logo later)
+        # If no team logo provided, try to load molly.png
+        if team_logo is None:
+            try:
+                # Get the project root more reliably
+                current_file = Path(__file__).resolve()
+
+                # Try multiple potential paths for the logo
+                logo_paths = [
+                    # Primary location - where the file actually is
+                    current_file.parent.parent / 'assets' / 'logos' / 'general' / 'molly.png',
+                    Path.cwd() / 'assets' / 'logos' / 'general' / 'molly.png',
+
+                    # Also check without 'general' subdirectory
+                    current_file.parent.parent / 'assets' / 'logos' / 'molly.png',
+                    current_file.parent.parent / 'assets' / 'molly.png',
+                    current_file.parent.parent / 'molly.png',
+                    Path.cwd() / 'assets' / 'logos' / 'molly.png',
+                    Path.cwd() / 'assets' / 'molly.png',
+                    Path.cwd() / 'molly.png',
+                ]
+
+                for logo_path in logo_paths:
+                    if logo_path.exists():
+                        team_logo = Image.open(logo_path)
+                        logger.info(f"Successfully loaded molly.png from {logo_path}")
+                        break
+                else:
+                    logger.warning("Could not find molly.png in any expected location")
+            except Exception as e:
+                logger.error(f"Failed to load molly.png: {e}", exc_info=True)
+
+        if team_logo is not None:
+            try:
+                # Prepare the logo for display
+                if team_logo.mode != 'RGBA':
+                    team_logo = team_logo.convert('RGBA')
+
+                # Calculate size to fit within the inner circle with room for text
+                # The logo should take up about 60% of the circle diameter to leave room for text
+                logo_size_pixels = int(self.inner_radius * 1.4 * 100)  # Much smaller than before
+
+                # Create a copy to avoid modifying the original
+                logo_copy = team_logo.copy()
+                logo_copy.thumbnail((logo_size_pixels, logo_size_pixels), Image.Resampling.LANCZOS)
+
+                logger.info(f"Logo resized to: {logo_copy.size}")
+
+                # Convert to numpy array for matplotlib
+                logo_array = np.array(logo_copy)
+
+                # Create OffsetImage with appropriate zoom
+                # Zoom factor to ensure it fits within the circle
+                zoom_factor = 0.5  # Reduced from 1.2 to make it smaller
+                imagebox = OffsetImage(logo_array, zoom=zoom_factor)
+
+                # Position logo in upper portion of circle to leave room for text
+                logo_y_offset = 0.4  # Position in upper part of circle
+                ab = AnnotationBbox(imagebox, (0, logo_y_offset),
+                                    frameon=False,
+                                    pad=0,
+                                    zorder=22)
+                ax.add_artist(ab)
+
+                # Add team text in lower portion of circle
+                fan_text = f"THE {self.team_short.upper()}\nFAN"
+
+                # Position text in lower part of circle
+                text_y_position = -.8  # Lower in the circle
+                ax.text(0, text_y_position, fan_text,
+                        ha='center', va='center',
+                        fontsize=24,  # Smaller font to fit better
+                        fontweight='bold',
+                        color='white',
+                        zorder=23,
+                        linespacing=0.8)
+
+                logger.info("Logo and text added successfully within circle bounds")
+            except Exception as e:
+                logger.error(f"Error adding logo to plot: {e}", exc_info=True)
+                # Fall back to text-only version
+                self._add_text_only_center(ax)
+        else:
+            # Fallback to text-only version
+            self._add_text_only_center(ax)
+
+    def _add_text_only_center(self, ax):
+        """Add text-only center when logo is not available"""
         fan_text = f"THE {self.team_short.upper()} FAN"
         ax.text(0, 0, fan_text,
                 ha='center', va='center',

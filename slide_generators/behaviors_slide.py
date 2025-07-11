@@ -71,16 +71,16 @@ class BehaviorsSlide(BaseSlide):
         title = f"Fan Behaviors: How Are {team_name} Fans Unique"
         self._add_title(slide, title)
 
-        # Add chart titles
+        # Add chart titles - UPDATED for swapped positions
         self._add_chart_titles(slide, team_name)
 
-        # Add visualizations (adjusted positions for 16:9)
-        self._add_fan_wheel(slide, fan_wheel_path)
-        self._add_community_chart(slide, chart_path)
-
-        # Add insight text
+        # Add insight text - MOVED above community chart (left side)
         insight = self._generate_insight_text(merchant_ranker, team_short)
         self._add_insight_text(slide, insight)
+
+        # Add visualizations - SWAPPED positions and 1.5x fan wheel
+        self._add_community_chart(slide, chart_path)  # Now on LEFT
+        self._add_fan_wheel(slide, fan_wheel_path)  # Now on RIGHT, 1.5x size
 
         # Add explanation text below community chart
         self._add_chart_explanation(slide)
@@ -183,22 +183,10 @@ class BehaviorsSlide(BaseSlide):
         pass
 
     def _add_chart_titles(self, slide, team_name: str):
-        """Add titles above both visualizations"""
-        # Fan wheel title
-        fan_wheel_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(1.1),
-            Inches(4.5), Inches(0.3)
-        )
-        fan_wheel_title.text_frame.text = "Top Community Fan Purchases"
-        p = fan_wheel_title.text_frame.paragraphs[0]
-        p.font.name = self.default_font
-        p.font.size = Pt(14)
-        p.font.bold = True
-        p.alignment = PP_ALIGN.CENTER
-
-        # Bar chart title
+        """Add titles above both visualizations - SWAPPED positions"""
+        # Community chart title (now on LEFT)
         bar_chart_title = slide.shapes.add_textbox(
-            Inches(6.8), Inches(1.1),
+            Inches(0.5), Inches(1.1),
             Inches(5.5), Inches(0.3)
         )
         bar_chart_title.text_frame.text = f"Top Ten {team_name} Fan Communities"
@@ -208,29 +196,57 @@ class BehaviorsSlide(BaseSlide):
         p.font.bold = True
         p.alignment = PP_ALIGN.CENTER
 
-    def _add_fan_wheel(self, slide, image_path: Path):
-        """Add fan wheel image to slide (adjusted for 16:9)"""
-        # Position on left side - vertically centered
-        left = Inches(0.5)
-        top = Inches(1.8)  # Adjusted for vertical centering
-        width = Inches(4.5)  # Fan wheel width
+        # Fan wheel title (now on RIGHT)
+        fan_wheel_title = slide.shapes.add_textbox(
+            Inches(7.0), Inches(1.1),
+            Inches(5.5), Inches(0.3)
+        )
+        fan_wheel_title.text_frame.text = "Top Community Fan Purchases"
+        p = fan_wheel_title.text_frame.paragraphs[0]
+        p.font.name = self.default_font
+        p.font.size = Pt(14)
+        p.font.bold = True
+        p.alignment = PP_ALIGN.CENTER
 
-        slide.shapes.add_picture(str(image_path), left, top, width=width)
+    def _add_fan_wheel(self, slide, image_path: Path):
+        """Add fan wheel image to slide - NOW on RIGHT side, 1.5x size, vertically centered"""
+        # 1.5x scaling
+        original_width = Inches(4.5)
+        new_width = original_width * 1.5  # Inches(6.75)
+
+        # Position on right side
+        left = Inches(13.333) - new_width - Inches(0.3)  # Right edge minus width minus margin
+
+        # Vertical center alignment
+        slide_height = Inches(7.5)
+        header_height = Inches(1.1)
+        available_height = slide_height - header_height
+        center_y = header_height + (available_height / 2)
+        top = center_y - (new_width / 2)  # Fan wheel is roughly square
+
+        slide.shapes.add_picture(str(image_path), left, top, width=new_width)
 
     def _add_community_chart(self, slide, image_path: Path):
-        """Add community index chart to slide (adjusted for 16:9)"""
-        # Position on right side - vertically centered with fan wheel
-        left = Inches(6.5)  # Right side positioning
-        top = Inches(1.8)  # Same top as fan wheel for vertical alignment
-        width = Inches(6.0)  # Chart width
+        """Add community index chart to slide - NOW on LEFT side, vertically centered"""
+        # Position on left side
+        left = Inches(0.5)
+        width = Inches(5.5)  # Reduced width to make room for larger fan wheel
+
+        # Vertical center alignment - match fan wheel center
+        slide_height = Inches(7.5)
+        header_height = Inches(1.1)
+        available_height = slide_height - header_height
+        center_y = header_height + (available_height / 2)
+        chart_height_estimate = Inches(4.0)  # Estimated chart height
+        top = center_y - (chart_height_estimate / 2)
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
 
     def _add_chart_explanation(self, slide):
-        """Add explanation text below the community index chart"""
+        """Add explanation text below the community index chart - LEFT side"""
         explanation_box = slide.shapes.add_textbox(
-            Inches(6.5), Inches(5.8),
-            Inches(6.0), Inches(0.9)
+            Inches(0.5), Inches(5.8),  # Below community chart on left
+            Inches(5.5), Inches(0.9)  # Same width as community chart
         )
         explanation_text = (
             "The top ten fan communities are ranked according to a composite index score "
@@ -247,10 +263,10 @@ class BehaviorsSlide(BaseSlide):
         p.line_spacing = 1.2
 
     def _add_insight_text(self, slide, insight: str):
-        """Add insight text below fan wheel"""
+        """Add insight text ABOVE community chart on LEFT side"""
         text_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(6.3),  # Aligned with fan wheel
-            Inches(4.5), Inches(0.8)
+            Inches(0.5), Inches(1.5),  # Above community chart, below title
+            Inches(5.5), Inches(0.8)  # Same width as community chart area
         )
         text_box.text_frame.text = insight
         text_box.text_frame.word_wrap = True
