@@ -15,9 +15,12 @@ from pptx.enum.dml import MSO_THEME_COLOR
 import pandas as pd
 import logging
 import re
+from PIL import Image, ImageDraw
+import io
 
 from .base_slide import BaseSlide
 from data_processors.category_analyzer import CategoryAnalyzer, CategoryMetrics
+from utils.logo_manager import LogoManager
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +120,8 @@ def remove_unnecessary_comparisons(text):
     text = re.sub(r'spend\s+(\$[\d,]+)\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1', text, flags=re.IGNORECASE)
 
     # Pattern: "spend $amount per year vs. the Local Gen Pop" -> "spend $amount per year"
-    text = re.sub(r'spend\s+(\$[\d,]+)\s+per\s+year\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1 per year', text,
-                  flags=re.IGNORECASE)
+    text = re.sub(r'spend\s+(\$[\d,]+)\s+per\s+year\s+vs\.\s+the\s+Local\s+Gen\s+Pop', r'spend \1 per year',
+                  text, flags=re.IGNORECASE)
 
     return text
 
@@ -181,11 +184,14 @@ class CategorySlide(BaseSlide):
         """
         super().__init__(presentation)
 
+        # Initialize LogoManager
+        self.logo_manager = LogoManager()
+
         # Colors for the slide - UPDATED with EQUAL color
         self.colors = {
             'header_bg': RGBColor(240, 240, 240),
             'header_border': RGBColor(200, 200, 200),
-            'table_header': RGBColor(217, 217, 217),
+            'table_header': RGBColor(0, 0, 0),  # Black background for headers
             'table_border': RGBColor(0, 0, 0),
             'positive': RGBColor(0, 176, 80),  # Green
             'negative': RGBColor(255, 0, 0),  # Red
@@ -289,45 +295,76 @@ class CategorySlide(BaseSlide):
 
     def _add_header(self, slide, team_name: str, slide_title: str):
         """Add header with team name and slide title"""
+        # Header background (adjusted for 16:9) - matching behaviors slide
+        header_rect = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            Inches(13.333), Inches(0.5)  # Full 16:9 width
+        )
+        header_rect.fill.solid()
+        header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)
+        header_rect.line.color.rgb = RGBColor(200, 200, 200)
+        header_rect.line.width = Pt(0.5)
+
         # Team name (left)
         team_text = slide.shapes.add_textbox(
-            Inches(0.5), Inches(0.05),
-            Inches(4), Inches(0.3)
+            Inches(0.2), Inches(0.1),
+            Inches(3), Inches(0.3)
         )
         team_text.text_frame.text = team_name
         p = team_text.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(12)
+        p.font.size = Pt(14)
+        p.font.bold = True
 
-        # Slide title (right) - adjusted position for 16:9
-        title_text = slide.shapes.add_textbox(
-            Inches(6.333), Inches(0.05),  # Moved right for 16:9
-            Inches(6.8), Inches(0.3)  # Wider for 16:9
+        # Slide indicator (right)
+        slide_text = slide.shapes.add_textbox(
+            Inches(6.5), Inches(0.1),  # Adjusted for 16:9
+            Inches(6.633), Inches(0.3)  # Adjusted width
         )
-        title_text.text_frame.text = slide_title
-        p = title_text.text_frame.paragraphs[0]
+        slide_text.text_frame.text = slide_title
+        p = slide_text.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
         p.alignment = PP_ALIGN.RIGHT
-        p.font.size = Pt(12)
+        p.font.size = Pt(14)
 
     def _add_title(self, slide, title: str):
-        """Add main slide title"""
+        """Add main slide title with two-line format"""
         title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(0.6),
-            Inches(12.333), Inches(0.5)  # Adjusted for 16:9 width
+            Inches(0.5), Inches(1.4),  # Moved down from 0.6
+            Inches(12.333), Inches(1.0)  # Increased height for two lines
         )
-        title_box.text_frame.text = title
+
+        # Split title for category slides
+        if "Category Analysis:" in title:
+            # Extract category name after the colon
+            category_name = title.replace("Category Analysis: ", "")
+            # Set text with line break
+            title_box.text_frame.text = f"Category Analysis:\n{category_name}"
+        else:
+            title_box.text_frame.text = title
+
         p = title_box.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(28)
+        p.font.size = Pt(32)
         p.font.bold = True
-        p.font.color.rgb = RGBColor(85, 85, 85)
+        p.font.italic = True
+        p.font.color.rgb = RGBColor(0, 0, 0)
+
+        # Format second line if it exists
+        if len(title_box.text_frame.paragraphs) > 1:
+            p2 = title_box.text_frame.paragraphs[1]
+            p2.font.name = self.default_font
+            p2.font.size = Pt(32)
+            p2.font.bold = True
+            p2.font.italic = True
+            p2.font.color.rgb = RGBColor(0, 0, 0)
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
         """Add category insights section - UPDATED WITH ALL FORMATTING FIXES"""
-        # Insights title
+        # Insights title - moved down
         insights_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(1.5),
+            Inches(0.5), Inches(2.8),  # Moved down from 1.5
             Inches(4), Inches(0.3)
         )
         insights_title.text_frame.text = "Category Insights:"
@@ -352,9 +389,9 @@ class CategorySlide(BaseSlide):
             else:
                 regular_insights.append(cleaned_insight)
 
-        # Regular insights box
+        # Regular insights box - moved down
         insights_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(1.9),
+            Inches(0.7), Inches(3.2),  # Moved down from 1.9
             Inches(4.5), Inches(3.0)  # Reduced height to make room for NBA section
         )
 
@@ -371,9 +408,9 @@ class CategorySlide(BaseSlide):
 
         # Add NBA comparison section if there are NBA insights
         if nba_insights:
-            # NBA comparison label
+            # NBA comparison label - moved down
             nba_label = slide.shapes.add_textbox(
-                Inches(0.5), Inches(5.2),
+                Inches(0.5), Inches(5.4),  # Moved down from 5.2
                 Inches(4), Inches(0.3)
             )
             nba_label.text_frame.text = f"{team_short} Fans vs. {team_config.get('league', 'NBA')} Fans:"
@@ -382,10 +419,10 @@ class CategorySlide(BaseSlide):
             p.font.size = Pt(14)
             p.font.bold = True
 
-            # NBA insights box
+            # NBA insights box - moved down
             nba_box = slide.shapes.add_textbox(
-                Inches(0.7), Inches(5.6),
-                Inches(4.5), Inches(1.5)
+                Inches(0.7), Inches(5.8),  # Moved down from 5.6
+                Inches(4.5), Inches(1.2)  # Reduced height slightly
             )
 
             nba_text_frame = nba_box.text_frame
@@ -404,11 +441,16 @@ class CategorySlide(BaseSlide):
         # Extract metrics from results
         metrics = results['category_metrics']
 
-        # Table position - adjusted to prevent bleeding
-        left = Inches(5.8)  # Moved left to fit better
-        top = Inches(1.5)
+        # Table position - adjusted to prevent bleeding and moved down
+        left = Inches(6.2)  # Moved left to fit better
+        top = Inches(1.6)  # Moved down from 1.5
         width = Inches(6.8)  # Adjusted width to fit within slide
         height = Inches(0.8)  # Reduced height for better proportions
+
+        # Adjust row height here
+        row_height = Inches(0.7)  # Height per row (increase this value for taller rows)
+        num_rows = 2  # Header + 1 data row
+        height = row_height * num_rows  # Total table height
 
         # Create table
         table_shape = slide.shapes.add_table(2, 4, left, top, width, height)
@@ -417,8 +459,8 @@ class CategorySlide(BaseSlide):
         # Set column widths - better distribution
         table.columns[0].width = Inches(1.3)  # Category
         table.columns[1].width = Inches(1.6)  # Percent of Fans
-        table.columns[2].width = Inches(2.0)  # How likely
-        table.columns[3].width = Inches(1.9)  # Purchases
+        table.columns[2].width = Inches(1.8)  # How likely
+        table.columns[3].width = Inches(1.7)  # Purchases
 
         # Header row - UPDATED with "local gen pop"
         headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
@@ -447,21 +489,26 @@ class CategorySlide(BaseSlide):
         if subcategory_stats.empty:
             return
 
-        # Table position - adjusted to prevent bleeding
-        left = Inches(5.8)  # Moved left to fit better
-        top = Inches(2.7)  # Adjusted vertical position
+        # Table position - adjusted to prevent bleeding and extend down
+        left = Inches(6.2)  # Moved left to fit better
+        top = Inches(3.2)  # Adjusted vertical position (was 2.7)
         width = Inches(6.8)  # Adjusted width to fit within slide
 
         # Create table with header + data rows
         rows = min(len(subcategory_stats), 5) + 1  # Max 5 subcategories + header
-        table_shape = slide.shapes.add_table(rows, 4, left, top, width, Inches(0.3 * rows))
+
+        # Calculate height to extend down the slide more
+        row_height = Inches(.7)  # Increased from 0.3
+        table_height = row_height * rows
+
+        table_shape = slide.shapes.add_table(rows, 4, left, top, width, table_height)
         table = table_shape.table
 
         # Set column widths - better distribution
         table.columns[0].width = Inches(1.6)  # Sub-Category
         table.columns[1].width = Inches(1.5)  # Percent of Fans
-        table.columns[2].width = Inches(1.9)  # How likely
-        table.columns[3].width = Inches(1.8)  # Purchases
+        table.columns[2].width = Inches(1.7)  # How likely
+        table.columns[3].width = Inches(1.6)  # Purchases
 
         # Headers - UPDATED with "local gen pop"
         headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
@@ -490,8 +537,76 @@ class CategorySlide(BaseSlide):
             for col in range(4):
                 self._format_data_cell(table.cell(row_idx, col))
 
+    def _has_colored_background(self, image: Image.Image, threshold: int = 240) -> bool:
+        """
+        Check if an image has a colored (non-white) background
+
+        Args:
+            image: PIL Image to check
+            threshold: RGB value threshold below which we consider it colored (default 240)
+
+        Returns:
+            True if image has colored background, False if white/transparent
+        """
+        # Convert to RGBA if not already
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+
+        width, height = image.size
+
+        # Sample more points around the edges to better detect background
+        sample_points = []
+
+        # Add corners
+        sample_points.extend([
+            (0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)
+        ])
+
+        # Add edge midpoints
+        sample_points.extend([
+            (width // 2, 0), (width // 2, height - 1),  # top and bottom middle
+            (0, height // 2), (width - 1, height // 2)  # left and right middle
+        ])
+
+        # Add points slightly inward from edges (to avoid anti-aliasing artifacts)
+        edge_offset = min(5, width // 10, height // 10)
+        sample_points.extend([
+            (edge_offset, edge_offset),
+            (width - edge_offset - 1, edge_offset),
+            (edge_offset, height - edge_offset - 1),
+            (width - edge_offset - 1, height - edge_offset - 1)
+        ])
+
+        colored_pixels = 0
+        total_opaque_pixels = 0
+
+        for x, y in sample_points:
+            try:
+                r, g, b, a = image.getpixel((x, y))
+
+                # Skip transparent pixels
+                if a < 128:
+                    continue
+
+                total_opaque_pixels += 1
+
+                # Check if this pixel is colored (not white/gray)
+                # A colored pixel has significant variation in RGB values or low values
+                if (r < threshold or g < threshold or b < threshold) or \
+                        (max(r, g, b) - min(r, g, b) > 30):
+                    colored_pixels += 1
+
+            except:
+                continue
+
+        # If more than 50% of opaque edge pixels are colored, consider it a colored background
+        if total_opaque_pixels > 0:
+            return colored_pixels / total_opaque_pixels > 0.5
+
+        return False
+
     def _add_brand_logos(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add brand logo placeholders (numbered circles) - adjusted for 16:9"""
+        """Add brand logos from local files with fallback to generated logos"""
         merchant_df, top_merchants = merchant_stats
 
         if merchant_df.empty:
@@ -501,33 +616,138 @@ class CategorySlide(BaseSlide):
         start_x = Inches(0.5)
         y = Inches(1.2)
         spacing = Inches(2.4)  # Wider spacing for 16:9
+        logo_size = (120, 120)  # Size in pixels for logo processing
+        display_size = Inches(1.2)  # Size on slide
 
-        # Add numbered circles for top 5 brands
+        # Add logos for top 5 brands
         for i in range(min(5, len(merchant_df))):
             x = start_x + (i * spacing)
+            merchant_name = merchant_df.iloc[i]['Brand']
 
-            # Circle
-            circle = slide.shapes.add_shape(
-                MSO_SHAPE.OVAL,
-                x, y,
-                Inches(1.2), Inches(1.2)
-            )
-            circle.fill.solid()
-            circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
-            circle.line.color.rgb = RGBColor(200, 200, 200)
-            circle.line.width = Pt(2)
+            # Try to get logo from LogoManager
+            logo_image = self.logo_manager.get_logo(merchant_name, size=logo_size)
 
-            # Number
+            # If no logo found, create fallback with initials
+            if logo_image is None:
+                logger.info(f"No logo found for {merchant_name}, creating fallback")
+                logo_image = self.logo_manager.create_fallback_logo(
+                    merchant_name,
+                    size=logo_size,
+                    bg_color='white',
+                    text_color='#888888'
+                )
+
+            # Check if logo has colored background
+            has_colored_bg = self._has_colored_background(logo_image)
+
+            # Log the detection result for debugging
+            logger.debug(f"{merchant_name} - Colored background detected: {has_colored_bg}")
+
+            if has_colored_bg:
+                # For colored background logos, create a circular mask to ensure clean edges
+                # Create a new image with transparent background
+                masked_logo = Image.new('RGBA', logo_size, (0, 0, 0, 0))
+
+                # Create circular mask
+                mask = Image.new('L', logo_size, 0)
+                draw = ImageDraw.Draw(mask)
+                draw.ellipse([0, 0, logo_size[0] - 1, logo_size[1] - 1], fill=255)
+
+                # Apply mask to logo
+                masked_logo.paste(logo_image, (0, 0))
+                masked_logo.putalpha(mask)
+
+                # Convert masked logo to bytes
+                image_stream = io.BytesIO()
+                masked_logo.save(image_stream, format='PNG')
+                image_stream.seek(0)
+
+                # Add the logo directly without circle background
+                try:
+                    pic = slide.shapes.add_picture(
+                        image_stream,
+                        x, y,
+                        display_size, display_size
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to add logo for {merchant_name}: {e}")
+                    self._add_numbered_circle_fallback(slide, i + 1, x, y, display_size)
+
+            else:
+                # For white/transparent background logos, add circle border
+                # First, add a circular background/border
+                circle = slide.shapes.add_shape(
+                    MSO_SHAPE.OVAL,
+                    x, y,
+                    display_size, display_size
+                )
+                circle.fill.solid()
+                circle.fill.fore_color.rgb = RGBColor(255, 255, 255)  # White background
+                circle.line.color.rgb = RGBColor(200, 200, 200)  # Light gray border
+                circle.line.width = Pt(1)
+
+                # Make the logo slightly smaller to fit within the circle border
+                logo_display_size = Inches(1.1)  # Slightly smaller than the circle
+                offset = (display_size - logo_display_size) / 2  # Center the logo
+
+                # Convert PIL Image to bytes for PowerPoint
+                image_stream = io.BytesIO()
+                logo_image.save(image_stream, format='PNG')
+                image_stream.seek(0)
+
+                # Add the logo centered within the circle
+                try:
+                    pic = slide.shapes.add_picture(
+                        image_stream,
+                        x + offset,  # Offset to center horizontally
+                        y + offset,  # Offset to center vertically
+                        logo_display_size, logo_display_size
+                    )
+
+                    # Ensure the logo is on top of the circle
+                    slide.shapes._spTree.remove(pic._element)
+                    slide.shapes._spTree.append(pic._element)
+
+                except Exception as e:
+                    logger.error(f"Failed to add logo for {merchant_name}: {e}")
+                    self._add_numbered_circle_fallback(slide, i + 1, x, y, display_size)
+
+            # Add brand name below logo
             text_box = slide.shapes.add_textbox(
-                x, y + Inches(0.4),
-                Inches(1.2), Inches(0.4)
+                x - Inches(0.3), y + display_size + Inches(0.1),
+                display_size + Inches(0.6), Inches(0.4)
             )
-            text_box.text_frame.text = str(i + 1)
+            text_box.text_frame.text = merchant_name
             p = text_box.text_frame.paragraphs[0]
-            p.font.name = self.default_font  # Red Hat Display
+            p.font.name = self.default_font
             p.alignment = PP_ALIGN.CENTER
-            p.font.size = Pt(48)
-            p.font.color.rgb = RGBColor(150, 150, 150)
+            p.font.size = Pt(10)
+            p.font.color.rgb = RGBColor(100, 100, 100)
+
+    def _add_numbered_circle_fallback(self, slide, number: int, x: float, y: float, size: float):
+        """Add numbered circle as ultimate fallback if logo processing fails"""
+        # Circle
+        circle = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL,
+            x, y,
+            size, size
+        )
+        circle.fill.solid()
+        circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        circle.line.color.rgb = RGBColor(200, 200, 200)
+        circle.line.width = Pt(2)
+
+        # Number
+        text_box = slide.shapes.add_textbox(
+            x, y + (size - Inches(0.4)) / 2,
+            size, Inches(0.4)
+        )
+        text_box.text_frame.text = str(number)
+        p = text_box.text_frame.paragraphs[0]
+        p.font.name = self.default_font
+        p.alignment = PP_ALIGN.CENTER
+        p.font.size = Pt(48)
+        p.font.color.rgb = RGBColor(150, 150, 150)
 
     def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str, team_short: str, category_name: str):
         """Add brand-specific insights with updated formatting"""
@@ -667,7 +887,7 @@ class CategorySlide(BaseSlide):
     def _format_header_cell(self, cell, small: bool = False):
         """Format table header cell"""
         cell.fill.solid()
-        cell.fill.fore_color.rgb = self.colors['table_header']
+        cell.fill.fore_color.rgb = self.colors['table_header']  # Black background
 
         # Format text
         text_frame = cell.text_frame
@@ -682,6 +902,7 @@ class CategorySlide(BaseSlide):
             paragraph.font.name = self.default_font  # Red Hat Display
             paragraph.font.size = Pt(8) if small else Pt(10)  # Smaller font for compact tables
             paragraph.font.bold = True
+            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
             paragraph.alignment = PP_ALIGN.CENTER
             paragraph.line_spacing = 1.0  # Tighter line spacing for headers
 
@@ -701,7 +922,7 @@ class CategorySlide(BaseSlide):
         # Format all paragraphs in the cell
         for paragraph in text_frame.paragraphs:
             paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(8) if small else Pt(11)  # Consistent data font size
+            paragraph.font.size = Pt(8) if small else Pt(12)  # Consistent data font size
             paragraph.alignment = PP_ALIGN.CENTER
 
             # UPDATED color coding with EQUAL handling
@@ -750,6 +971,34 @@ class CategorySlide(BaseSlide):
 
         # Fallback to original insight with general formatting
         return process_insight_text(insight)
+
+    def check_missing_logos(self, categories_data: Dict[str, Any]) -> Dict[str, List[str]]:
+        """
+        Check which logos are missing for all categories
+
+        Args:
+            categories_data: Dictionary of category analysis results
+
+        Returns:
+            Dictionary mapping category to list of missing logos
+        """
+        missing_logos = {}
+
+        for category_name, analysis_results in categories_data.items():
+            merchant_df, _ = analysis_results.get('merchant_stats', (pd.DataFrame(), []))
+            if not merchant_df.empty:
+                # Get top 5 merchants
+                top_merchants = merchant_df.head(5)['Brand'].tolist()
+
+                # Check which logos are missing
+                report = self.logo_manager.add_missing_logos_report(top_merchants)
+                missing = [merchant for merchant, has_logo in report.items() if not has_logo]
+
+                if missing:
+                    missing_logos[category_name] = missing
+                    logger.warning(f"Missing logos for {category_name}: {missing}")
+
+        return missing_logos
 
 
 # Convenience functions

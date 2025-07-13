@@ -1,26 +1,25 @@
-# test_logo_integration.py
+#!/usr/bin/env python3
 """
-Test script to verify logo integration in category slides
-Tests logo loading, fallback generation, and slide creation
+Test script to generate category slides for PowerPoint
+Tests the CategorySlide generator with mock data
 """
 
-import os
-import sys
-from pathlib import Path
-import logging
 import pandas as pd
+import numpy as np
+from pathlib import Path
 from pptx import Presentation
-from PIL import Image
-import shutil
 from datetime import datetime
+import logging
+import sys
 
-# Add project root to Python path
+# Add project root to path (adjust if your structure is different)
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+if project_root not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-# Import your modules
-from slide_generators.category_slide import CategorySlide, create_category_slides
-from utils.logo_manager import LogoManager
+# Import the required modules
+from slide_generators.category_slide import CategorySlide
+from data_processors.category_analyzer import CategoryMetrics
 
 # Configure logging
 logging.basicConfig(
@@ -30,329 +29,338 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_test_directories():
-    """Create necessary directories for testing"""
-    dirs = [
-        'assets/logos/merchants',
-        'test_output',
-        'test_logos'
-    ]
-    for dir_path in dirs:
-        Path(dir_path).mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created directory: {dir_path}")
+def create_mock_category_data():
+    """Create realistic mock data for testing category slides"""
 
+    # Category metrics
+    category_metrics = CategoryMetrics(
+        percent_fans=0.68,  # 68% of fans spend
+        percent_likely=127,  # 127% more likely
+        percent_purchases=85,  # 85% more purchases
+        composite_index=487.5,
+        total_spend=2500000,
+        spc=175.50,
+        audience_count=25000,
+        comparison_population="Local Gen Pop (Excl. Jazz)"
+    )
 
-def create_sample_logos():
-    """Create sample logo images for testing"""
-    logo_dir = Path('assets/logos/merchants')
-
-    # List of test brands with different naming conventions
-    test_brands = [
-        ('mcdonalds.png', 'McD', (255, 199, 0)),  # McDonald's yellow
-        ('chick-fil-a.png', 'CFA', (221, 0, 49)),  # Chick-fil-A red
-        ('wendys.png', 'W', (221, 0, 49)),  # Wendy's red
-        ('taco_bell.png', 'TB', (112, 35, 131)),  # Taco Bell purple
-        ('panda_express.png', 'PE', (194, 39, 45)),  # Panda Express red
-    ]
-
-    created_logos = []
-
-    for filename, text, color in test_brands:
-        logo_path = logo_dir / filename
-
-        # Create a simple logo image
-        img = Image.new('RGBA', (200, 200), (255, 255, 255, 255))
-        from PIL import ImageDraw, ImageFont
-        draw = ImageDraw.Draw(img)
-
-        # Draw colored circle
-        draw.ellipse([10, 10, 190, 190], fill=color, outline=(0, 0, 0))
-
-        # Add text
-        try:
-            font = ImageFont.truetype("arial.ttf", 60)
-        except:
-            font = ImageFont.load_default()
-
-        # Center text
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        x = (200 - text_width) // 2
-        y = (200 - text_height) // 2
-
-        draw.text((x, y), text, fill=(255, 255, 255), font=font)
-
-        # Save logo
-        img.save(logo_path)
-        created_logos.append(str(logo_path))
-        logger.info(f"Created sample logo: {logo_path}")
-
-    return created_logos
-
-
-def test_logo_manager():
-    """Test LogoManager functionality"""
-    print("\n" + "="*50)
-    print("TESTING LOGO MANAGER")
-    print("="*50)
-
-    logo_manager = LogoManager()
-
-    # Test 1: List available logos
-    print("\n1. Available logos:")
-    available = logo_manager.list_available_logos()
-    for logo in available:
-        print(f"   - {logo}")
-
-    # Test 2: Test logo loading with existing logo
-    print("\n2. Testing logo loading:")
-    test_cases = [
-        "McDonald's",  # Should find mcdonalds.png
-        "Chick-fil-A",  # Should find chick-fil-a.png
-        "WENDYS",  # Should find wendys.png (case insensitive)
-        "Taco Bell",  # Should find taco_bell.png
-        "Burger King",  # Should NOT find - will create fallback
-        "Subway"  # Should NOT find - will create fallback
-    ]
-
-    for brand in test_cases:
-        logo = logo_manager.get_logo(brand)
-        if logo:
-            print(f"   ✓ {brand}: Logo loaded (size: {logo.size})")
-        else:
-            print(f"   ✗ {brand}: No logo found")
-
-    # Test 3: Test fallback logo generation
-    print("\n3. Testing fallback logo generation:")
-    fallback_brands = ["Burger King", "Subway", "Pizza Hut"]
-
-    for brand in fallback_brands:
-        fallback = logo_manager.create_fallback_logo(brand)
-        fallback_path = Path('test_output') / f'fallback_{brand.replace(" ", "_")}.png'
-        fallback.save(fallback_path)
-        print(f"   - Created fallback for {brand}: {fallback_path}")
-
-    # Test 4: Test missing logos report
-    print("\n4. Testing missing logos report:")
-    all_brands = test_cases + ["Little Caesars", "Jimmy John's", "Domino's"]
-    report = logo_manager.add_missing_logos_report(all_brands)
-
-    print("   Logo availability:")
-    for brand, has_logo in report.items():
-        status = "✓" if has_logo else "✗"
-        print(f"   {status} {brand}")
-
-    return logo_manager
-
-
-def create_test_analysis_results():
-    """Create mock analysis results for testing"""
-
-    # Create mock merchant data
-    merchant_data = pd.DataFrame({
-        'Rank': [1, 2, 3, 4, 5],
-        'Brand': ["McDonald's", "Chick-fil-A", "Wendy's", "Taco Bell", "Panda Express"],
-        'Percent of Fans Who Spend': ['92%', '79%', '77%', '68%', '56%'],
-        'How likely fans are to spend vs. gen pop': ['35% More', '78% More', '55% More', '77% More', '64% More'],
-        'Purchases Per Fan (vs. Gen Pop)': ['93% More', '80% More', '45% More', '60% More', '33% More'],
-        'COMPOSITE_INDEX': [188, 158, 144, 137, 120]
-    })
-
-    # Create mock analysis results
-    analysis_results = {
-        'category_name': 'restaurants',
-        'display_name': 'Restaurants',
-        'slide_title': 'Sponsor Spending Analysis: Restaurants',
-        'category_metrics': type('obj', (object,), {
-            'format_percent_fans': lambda: '92%',
-            'format_likelihood': lambda: '35% More',
-            'format_purchases': lambda: '93% More'
-        })(),
-        'insights': [
-            "92% of Utah Jazz fans spent at McDonald's",
-            "Jazz fans make an average of 14 purchases per year at McDonald's—more than any other top Restaurants brand",
-            "Utah Jazz fans spent an average of $546 per fan on McDonald's per year",
-            "Utah Jazz fans are 158% more likely to spend on Panda Express than NBA Fans"
-        ],
-        'merchant_insights': [
-            "92% of Utah Jazz fans spent at McDonald's",
-            "Jazz fans make an average of 14 purchases per year at McDonald's",
-            "Utah Jazz fans spent an average of $546 per fan on McDonald's per year",
-            "Utah Jazz fans are 158% more likely to spend on Panda Express than NBA Fans"
-        ],
-        'subcategory_stats': pd.DataFrame({
-            'Subcategory': ['Fast Food', 'Casual Dining', 'Coffee Shops'],
-            'Percent of Fans Who Spend': ['92%', '85%', '78%'],
-            'How likely fans are to spend vs. gen pop': ['35% More', '28% More', '22% More'],
-            'Purchases per fan vs. gen pop': ['93% More', '75% More', '60% More']
-        }),
-        'merchant_stats': (merchant_data, merchant_data['Brand'].tolist()),
-        'recommendation': {
-            'merchant': "McDonald's",
-            'composite_index': 188
+    # Subcategory stats - formatted as they would be from the analyzer
+    subcategory_data = [
+        {
+            'Subcategory': 'Fast Food',
+            'Percent of Fans Who Spend': '72%',
+            'How likely fans are to spend vs. gen pop': '135% More',
+            'Purchases per fan vs. gen pop': '98% More'
+        },
+        {
+            'Subcategory': 'Fast Casual Dining',
+            'Percent of Fans Who Spend': '65%',
+            'How likely fans are to spend vs. gen pop': '118% More',
+            'Purchases per fan vs. gen pop': '76% More'
+        },
+        {
+            'Subcategory': 'Full Service Restaurants',
+            'Percent of Fans Who Spend': '58%',
+            'How likely fans are to spend vs. gen pop': '95% More',
+            'Purchases per fan vs. gen pop': '62% More'
+        },
+        {
+            'Subcategory': 'Coffee & Tea',
+            'Percent of Fans Who Spend': '52%',
+            'How likely fans are to spend vs. gen pop': '88% More',
+            'Purchases per fan vs. gen pop': '54% More'
         }
+    ]
+    subcategory_stats = pd.DataFrame(subcategory_data)
+
+    # Category insights
+    insights = [
+        "Jazz Fans are 127% MORE likely to spend on Restaurants than the Local Gen Pop (Excl. Jazz)",
+        "Jazz Fans make an average of 85% more purchases per fan on Restaurants than the Local Gen Pop (Excl. Jazz)",
+        "Jazz Fans are more than 4.3X more likely to spend on Fast Food vs. the Local Gen Pop (Excl. Jazz)",
+        "Jazz fans spend an average of $892 per fan per year on Fast Food",
+        "Jazz fans are 1% more likely to spend on QSR & Fast Casual when compared to the NBA average"
+    ]
+
+    # Merchant stats - as returned by the analyzer
+    merchant_data = [
+        {
+            'Rank': 1,
+            'Brand': 'Chick-fil-A',
+            'Percent of Fans Who Spend': '45.2%',
+            'How likely fans are to spend vs. gen pop': '156% More',
+            'Purchases Per Fan (vs. Gen Pop)': '112% More'
+        },
+        {
+            'Rank': 2,
+            'Brand': 'In-N-Out Burger',
+            'Percent of Fans Who Spend': '42.8%',
+            'How likely fans are to spend vs. gen pop': '148% More',
+            'Purchases Per Fan (vs. Gen Pop)': '98% More'
+        },
+        {
+            'Rank': 3,
+            'Brand': 'Chipotle',
+            'Percent of Fans Who Spend': '38.5%',
+            'How likely fans are to spend vs. gen pop': '135% More',
+            'Purchases Per Fan (vs. Gen Pop)': '87% More'
+        },
+        {
+            'Rank': 4,
+            'Brand': 'Starbucks',
+            'Percent of Fans Who Spend': '36.2%',
+            'How likely fans are to spend vs. gen pop': '128% More',
+            'Purchases Per Fan (vs. Gen Pop)': '92% More'
+        },
+        {
+            'Rank': 5,
+            'Brand': "McDonald's",
+            'Percent of Fans Who Spend': '34.7%',
+            'How likely fans are to spend vs. gen pop': '95% More',
+            'Purchases Per Fan (vs. Gen Pop)': '68% More'
+        }
+    ]
+    merchant_df = pd.DataFrame(merchant_data)
+    top_merchants = [row['Brand'] for row in merchant_data]
+
+    # Merchant insights
+    merchant_insights = [
+        "45.2% of Utah Jazz fans spent at Chick-fil-A",
+        "Utah Jazz fans make an average of 52 purchases per year at In-N-Out Burger—more than any other top Restaurant brand",
+        "Utah Jazz fans spent an average of $1,245 per fan on Chick-fil-A per year",
+        "Utah Jazz fans are 245% more likely to spend on Chipotle than NBA Fans"
+    ]
+
+    # Sponsorship recommendation
+    recommendation = {
+        'merchant': 'Chick-fil-A',
+        'composite_index': 542.8,
+        'explanation': 'The Jazz should target Chick-fil-A for a sponsorship based on having the highest composite index of 543',
+        'sub_explanation': 'The composite index indicates a brand with significant likelihood for more fans to be spending more frequently, and at a higher spend per fan vs. other brands',
+        'full_recommendation': {
+            'main': 'The Utah Jazz should target Chick-fil-A for a sponsorship based on having the highest composite index of 543',
+            'sub_bullet': 'The composite index indicates a brand with significant likelihood for more fans to be spending more frequently, and at a higher spend per fan vs. other brands'
+        }
+    }
+
+    # Complete analysis results as would be returned by CategoryAnalyzer
+    analysis_results = {
+        'category_key': 'restaurants',
+        'display_name': 'Restaurants',
+        'slide_title': 'Dining & QSR Analysis',
+        'category_metrics': category_metrics,
+        'subcategory_stats': subcategory_stats,
+        'insights': insights,
+        'merchant_stats': (merchant_df, top_merchants),
+        'merchant_insights': merchant_insights,
+        'recommendation': recommendation,
+        'validation_report': None
     }
 
     return analysis_results
 
 
-def test_slide_generation():
-    """Test actual slide generation with logos"""
-    print("\n" + "="*50)
-    print("TESTING SLIDE GENERATION")
-    print("="*50)
-
-    # Create team configuration
-    team_config = {
+def create_mock_team_config():
+    """Create mock team configuration"""
+    return {
         'team_name': 'Utah Jazz',
         'team_name_short': 'Jazz',
         'league': 'NBA',
-        'primary_color': RGBColor(0, 43, 92),  # Jazz navy
-        'secondary_color': RGBColor(249, 160, 27)  # Jazz gold
+        'primary_color': '002B5C',  # Jazz navy blue
+        'secondary_color': 'F9A01B',  # Jazz gold
+        'logo_path': None  # Would normally point to team logo
     }
 
-    # Create analysis results
-    analysis_results = create_test_analysis_results()
 
-    # Initialize presentation
-    presentation = Presentation()
+def load_sil_template():
+    """Load the SIL template presentation"""
+    # Try different possible paths for the template
+    template_paths = [
+        Path("templates/sil_combined_template.pptx"),
+        Path("../templates/sil_combined_template.pptx"),
+        Path("../../templates/sil_combined_template.pptx"),
+        Path.cwd() / "templates" / "sil_combined_template.pptx",
+    ]
 
-    # Create CategorySlide instance
-    slide_generator = CategorySlide(presentation)
+    for template_path in template_paths:
+        if template_path.exists():
+            logger.info(f"Found SIL template at: {template_path}")
+            return Presentation(str(template_path))
 
-    # Test missing logos report
-    print("\n1. Checking for missing logos:")
-    missing = slide_generator.check_missing_logos({'restaurants': analysis_results})
-    if missing:
-        for category, logos in missing.items():
-            print(f"   Category '{category}' missing: {', '.join(logos)}")
-    else:
-        print("   All logos found!")
+    logger.warning("SIL template not found, creating blank presentation")
+    logger.warning("Looked in: " + ", ".join(str(p) for p in template_paths))
+    return None
 
-    # Generate category analysis slide
-    print("\n2. Generating category analysis slide...")
-    presentation = slide_generator.generate(analysis_results, team_config)
-    print("   ✓ Category analysis slide created")
 
-    # Generate brand slide with logos
-    print("\n3. Generating brand slide with logos...")
-    presentation = slide_generator.generate_brand_slide(analysis_results, team_config)
-    print("   ✓ Brand slide with logos created")
+def test_category_slide_generation():
+    """Test generating category analysis slides"""
+    logger.info("Starting category slide generation test...")
 
-    # Save presentation
-    output_path = Path('test_output') / f'test_slides_with_logos_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pptx'
+    # Create mock data
+    analysis_results = create_mock_category_data()
+    team_config = create_mock_team_config()
+
+    # Load SIL template
+    template_presentation = load_sil_template()
+
+    # Initialize slide generator with template
+    generator = CategorySlide(presentation=template_presentation)
+
+    # Log available layouts
+    if template_presentation:
+        logger.info(f"Template has {len(generator.presentation.slide_layouts)} layouts")
+        for i, layout in enumerate(generator.presentation.slide_layouts):
+            logger.info(f"  Layout {i}: {layout.name}")
+
+    # Generate the category analysis slide (first slide)
+    logger.info("Generating category analysis slide...")
+    presentation = generator.generate(analysis_results, team_config)
+
+    # Generate the brand analysis slide (second slide)
+    logger.info("Generating brand analysis slide...")
+    presentation = generator.generate_brand_slide(analysis_results, team_config)
+
+    # Save the presentation
+    output_path = Path("test_category_slides.pptx")
     presentation.save(output_path)
-    print(f"\n4. Presentation saved to: {output_path}")
+    logger.info(f"✅ Test presentation saved to: {output_path.absolute()}")
 
-    return str(output_path)
+    # Print summary
+    logger.info("\nSlide Generation Summary:")
+    logger.info(f"- Category: {analysis_results['display_name']}")
+    logger.info(f"- Team: {team_config['team_name']}")
+    logger.info(f"- Total slides generated: {len(presentation.slides)}")
+    logger.info(f"- Category metrics: {analysis_results['category_metrics'].percent_fans * 100:.0f}% of fans spend")
+    logger.info(f"- Top merchant: {analysis_results['merchant_stats'][0].iloc[0]['Brand']}")
+    logger.info(f"- Recommendation: {analysis_results['recommendation']['merchant']}")
+
+    return presentation
 
 
-def test_mixed_logos():
-    """Test with mix of available and missing logos"""
-    print("\n" + "="*50)
-    print("TESTING MIXED LOGO SCENARIOS")
-    print("="*50)
+def test_multiple_categories():
+    """Test generating slides for multiple categories"""
+    logger.info("\nTesting multiple category generation...")
 
-    # Create analysis with mix of brands (some with logos, some without)
-    merchant_data = pd.DataFrame({
-        'Rank': [1, 2, 3, 4, 5],
-        'Brand': ["McDonald's", "Burger King", "Wendy's", "Subway", "Taco Bell"],
-        'Percent of Fans Who Spend': ['92%', '79%', '77%', '68%', '56%'],
-        'How likely fans are to spend vs. gen pop': ['35% More', '78% More', '55% More', '77% More', '64% More'],
-        'Purchases Per Fan (vs. Gen Pop)': ['93% More', '80% More', '45% More', '60% More', '33% More'],
-        'COMPOSITE_INDEX': [188, 158, 144, 137, 120]
-    })
+    # Categories to test
+    categories = [
+        {
+            'display_name': 'Restaurants',
+            'slide_title': 'Dining & QSR Analysis',
+            'top_brands': ['Chick-fil-A', 'In-N-Out Burger', 'Chipotle', 'Starbucks', "McDonald's"]
+        },
+        {
+            'display_name': 'Athleisure',
+            'slide_title': 'Athleisure & Sporting Goods',
+            'top_brands': ['Nike', 'Adidas', 'Under Armour', 'Lululemon', 'Dick\'s Sporting Goods']
+        },
+        {
+            'display_name': 'Finance',
+            'slide_title': 'Financial Services',
+            'top_brands': ['Chase', 'Bank of America', 'Wells Fargo', 'American Express', 'Capital One']
+        }
+    ]
 
-    analysis_results = create_test_analysis_results()
-    analysis_results['merchant_stats'] = (merchant_data, merchant_data['Brand'].tolist())
-    analysis_results['display_name'] = 'QSR'  # Test QSR special formatting
+    team_config = create_mock_team_config()
 
-    team_config = {
-        'team_name': 'Dallas Cowboys',
-        'team_name_short': 'Cowboys',
-        'league': 'NFL'
-    }
+    # Load SIL template
+    template_presentation = load_sil_template()
+    presentation = template_presentation
 
-    # Generate slides
-    presentation = Presentation()
-    slide_generator = CategorySlide(presentation)
+    for i, cat_info in enumerate(categories):
+        logger.info(f"\nGenerating slides for {cat_info['display_name']}...")
 
-    print("\n1. Brand logo status:")
-    logo_manager = slide_generator.logo_manager
-    for brand in merchant_data['Brand']:
-        logo = logo_manager.get_logo(brand)
-        status = "Found" if logo else "Will use fallback"
-        print(f"   - {brand}: {status}")
+        # Create mock data for this category
+        analysis_results = create_mock_category_data()
+        analysis_results['display_name'] = cat_info['display_name']
+        analysis_results['slide_title'] = cat_info['slide_title']
 
-    print("\n2. Generating slides with mixed logos...")
-    presentation = slide_generator.generate(analysis_results, team_config)
-    presentation = slide_generator.generate_brand_slide(analysis_results, team_config)
+        # Update merchant data with appropriate brands
+        merchant_data = []
+        for j, brand in enumerate(cat_info['top_brands']):
+            merchant_data.append({
+                'Rank': j + 1,
+                'Brand': brand,
+                'Percent of Fans Who Spend': f"{45 - j * 2:.1f}%",
+                'How likely fans are to spend vs. gen pop': f"{150 - j * 10}% More",
+                'Purchases Per Fan (vs. Gen Pop)': f"{110 - j * 8}% More"
+            })
 
-    output_path = Path('test_output') / 'test_mixed_logos.pptx'
+        merchant_df = pd.DataFrame(merchant_data)
+        analysis_results['merchant_stats'] = (merchant_df, cat_info['top_brands'])
+        analysis_results['recommendation']['merchant'] = cat_info['top_brands'][0]
+
+        # Generate slides
+        generator = CategorySlide(presentation)
+        presentation = generator.generate(analysis_results, team_config)
+        presentation = generator.generate_brand_slide(analysis_results, team_config)
+
+    # Save the multi-category presentation
+    output_path = Path("test_multiple_categories.pptx")
     presentation.save(output_path)
-    print(f"\n3. Mixed logo presentation saved to: {output_path}")
+    logger.info(f"\n✅ Multi-category presentation saved to: {output_path.absolute()}")
+    logger.info(f"Total slides: {len(presentation.slides)}")
+
+    return presentation
 
 
-def cleanup_test_files(keep_outputs=True):
-    """Clean up test files"""
-    print("\n" + "="*50)
-    print("CLEANUP")
-    print("="*50)
+def test_edge_cases():
+    """Test edge cases and error handling"""
+    logger.info("\nTesting edge cases...")
 
-    if not keep_outputs:
-        # Remove test outputs
-        if Path('test_output').exists():
-            shutil.rmtree('test_output')
-            print("   - Removed test_output directory")
+    # Load SIL template
+    template_presentation = load_sil_template()
 
-    # Always remove test logos (keep actual logos)
-    test_logo_dir = Path('test_logos')
-    if test_logo_dir.exists():
-        shutil.rmtree(test_logo_dir)
-        print("   - Removed test_logos directory")
+    # Test with empty subcategory data
+    analysis_results = create_mock_category_data()
+    analysis_results['subcategory_stats'] = pd.DataFrame()  # Empty dataframe
 
-
-def main():
-    """Run all tests"""
-    print("\n" + "="*70)
-    print("SPORTS INNOVATION LAB - LOGO INTEGRATION TEST SUITE")
-    print("="*70)
+    team_config = create_mock_team_config()
+    generator = CategorySlide(presentation=template_presentation)
 
     try:
-        # Setup
-        create_test_directories()
-        created_logos = create_sample_logos()
-
-        # Run tests
-        logo_manager = test_logo_manager()
-        output_path = test_slide_generation()
-        test_mixed_logos()
-
-        # Summary
-        print("\n" + "="*50)
-        print("TEST SUMMARY")
-        print("="*50)
-        print(f"✓ Created {len(created_logos)} sample logos")
-        print(f"✓ Logo Manager tested successfully")
-        print(f"✓ Slides generated with logos")
-        print(f"✓ Mixed logo scenarios handled")
-        print(f"\nCheck the generated PowerPoint files in: test_output/")
-        print("\nTo add real logos:")
-        print("1. Add logo files to: assets/logos/merchants/")
-        print("2. Use filenames like: mcdonalds.png, burger_king.png, etc.")
-        print("3. Supported formats: .png, .jpg, .jpeg, .gif, .bmp")
-
+        presentation = generator.generate(analysis_results, team_config)
+        logger.info("✅ Handled empty subcategory data successfully")
     except Exception as e:
-        logger.error(f"Test failed: {str(e)}", exc_info=True)
-        raise
-    finally:
-        # Cleanup (keep outputs for inspection)
-        cleanup_test_files(keep_outputs=True)
+        logger.error(f"❌ Failed with empty subcategory data: {e}")
+
+    # Test with very long brand names
+    analysis_results = create_mock_category_data()
+    merchant_df, _ = analysis_results['merchant_stats']
+    merchant_df.loc[0, 'Brand'] = "Very Long Restaurant Name That Might Cause Layout Issues"
+
+    try:
+        presentation = generator.generate(analysis_results, team_config)
+        presentation = generator.generate_brand_slide(analysis_results, team_config)
+        logger.info("✅ Handled long brand names successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed with long brand names: {e}")
+
+    # Save edge case test
+    output_path = Path("test_edge_cases.pptx")
+    presentation.save(output_path)
+    logger.info(f"✅ Edge case presentation saved to: {output_path.absolute()}")
 
 
 if __name__ == "__main__":
-    # For missing RGBColor import in test
-    from pptx.dml.color import RGBColor
+    # Run the tests
+    try:
+        # Test 1: Basic category slide generation
+        test_category_slide_generation()
 
-    main()
+        # Test 2: Multiple categories
+        test_multiple_categories()
+
+        # Test 3: Edge cases
+        test_edge_cases()
+
+        logger.info("\n🎉 All tests completed successfully!")
+        logger.info("\nGenerated files:")
+        logger.info("- test_category_slides.pptx (2 slides for Restaurants)")
+        logger.info("- test_multiple_categories.pptx (6 slides for 3 categories)")
+        logger.info("- test_edge_cases.pptx (edge case testing)")
+
+    except Exception as e:
+        logger.error(f"\n❌ Test failed with error: {e}")
+        import traceback
+
+        traceback.print_exc()

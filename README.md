@@ -369,7 +369,7 @@ python report_builder/pptx_builder.py
 ls -la templates/sil_combined_template.pptx
 
 # Test template loading
-python slide_generators/tests/demo_overview_test.py
+python slide_generators/tests/test_demo_overview_.py
 ```
 
 ### Monitoring & Alerts
