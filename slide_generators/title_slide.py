@@ -71,69 +71,112 @@ class TitleSlide(BaseSlide):
             else:
                 fill.fore_color.rgb = RGBColor(0, 34, 68)  # Default blue
 
-        # Add team logo circle
-        logo_x = Inches(6.4)  # Slightly adjusted for 16:9
-        logo_y = Inches(0.8)
-        logo_size = Inches(1.2)
+        # Add team logo image (positioned where title would be)
+        self._add_team_logo(slide, team_config)
 
-        # Outer circle (accent color)
-        outer_circle = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            logo_x - Inches(0.08),
-            logo_y - Inches(0.08),
-            logo_size + Inches(0.16),
-            logo_size + Inches(0.16)
+        # Add subtitle
+        subtitle_box = slide.shapes.add_textbox(
+            Inches(2), Inches(3.8),  # Moved up with more space from logo
+            Inches(9.333), Inches(1)  # Wider for 16:9
         )
-        outer_circle.fill.solid()
+        subtitle_box.text_frame.text = subtitle
+        subtitle_box.text_frame.word_wrap = True
 
-        # Use team accent color or default
-        if 'accent' in team_colors:
-            accent_color = team_colors['accent']
-            if isinstance(accent_color, str):
-                outer_circle.fill.fore_color.rgb = self._hex_to_rgb(accent_color)
-            else:
-                outer_circle.fill.fore_color.rgb = accent_color
-        else:
-            outer_circle.fill.fore_color.rgb = RGBColor(255, 182, 18)  # Default yellow
+        # Format subtitle
+        for paragraph in subtitle_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(48)
+            paragraph.font.bold = True
+            paragraph.font.italic = True
+            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
+            paragraph.alignment = PP_ALIGN.CENTER
 
-        outer_circle.line.fill.background()
-
-        # Inner circle (white background for logo)
-        inner_circle = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            logo_x, logo_y,
-            logo_size, logo_size
+        # Add descriptive text
+        desc_text = "A purchase-based, data-backed view into who fans are and the brands they buy."
+        desc_box = slide.shapes.add_textbox(
+            Inches(3.5), Inches(4.8),  # Moved up with spacing from subtitle
+            Inches(6.333), Inches(0.8)  # Narrower width
         )
-        inner_circle.fill.solid()
-        inner_circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
-        inner_circle.line.fill.background()
+        desc_box.text_frame.text = desc_text
+        desc_box.text_frame.word_wrap = True
 
-        # Add team initials or logo
-        logo_text = slide.shapes.add_textbox(
-            logo_x, logo_y,
-            logo_size, logo_size
-        )
-        text_frame = logo_text.text_frame
-        text_frame.clear()
+        # Format descriptive text
+        for paragraph in desc_box.text_frame.paragraphs:
+            paragraph.font.name = self.default_font  # Red Hat Display
+            paragraph.font.size = Pt(18)
+            paragraph.font.italic = True
+            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
+            paragraph.alignment = PP_ALIGN.CENTER
 
-        # Get team initials
-        team_initials = team_config.get('team_initials',
-                                        ''.join([word[0] for word in team_name.split()[:2]]))
+        # Add SIL logo in corner
+        self._add_sil_logo(slide)
 
-        p = text_frame.add_paragraph()
-        p.text = team_initials
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(36)
-        p.font.bold = True
-        p.font.color.rgb = RGBColor(0, 34, 68)  # Dark blue
-        p.alignment = PP_ALIGN.CENTER
+        logger.info(f"Generated title slide for {team_name}")
+        return self.presentation
 
-        # Center vertically
-        text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    def _add_team_logo(self, slide, team_config: Dict[str, Any]):
+        """Add team logo image to the slide"""
+        try:
+            # Get team name for file lookup
+            team_name = team_config.get('team_name', '').lower().replace(' ', '_')
+
+            # Construct path to team logo
+            # Expected format: assets/logos/teams/utah_jazz.png
+            # Get the project root directory
+            from pathlib import Path
+            import os
+
+            # Try to find the project root
+            current_file = Path(__file__).resolve()
+            project_root = current_file.parent.parent  # Go up from slide_generators/title_slide.py
+
+            logo_path = project_root / 'assets' / 'logos' / 'teams' / f"{team_name}.png"
+
+            # Check if file exists
+            if not logo_path.exists():
+                logger.warning(f"Team logo not found at {logo_path}, falling back to text")
+                self._add_team_name_text(slide, team_config)
+                return
+
+            # Add the logo image
+            # Position it where the team name would go
+            logo_height = Inches(2.5)  # Larger size for main logo
+
+            # Add the logo first to get its dimensions
+            try:
+                logo = slide.shapes.add_picture(
+                    str(logo_path),
+                    Inches(0),  # Temporary position
+                    Inches(0),
+                    height=logo_height
+                )
+
+                # Center the logo horizontally where the title would be
+                slide_width = Inches(13.333)  # 16:9 slide width
+                logo_x = (slide_width - logo.width) / 2
+                logo_y = Inches(1.0)  # Position higher up on slide
+
+                # Move logo to centered position
+                logo.left = int(logo_x)
+                logo.top = int(logo_y)
+
+                logger.info(f"Added team logo from {logo_path}")
+
+            except Exception as e:
+                logger.error(f"Error adding logo image: {e}")
+                self._add_team_name_text(slide, team_config)
+
+        except Exception as e:
+            logger.error(f"Error in _add_team_logo: {e}")
+            self._add_team_name_text(slide, team_config)
+
+    def _add_team_name_text(self, slide, team_config: Dict[str, Any]):
+        """Add team name as text (fallback when logo not available)"""
+        team_name = team_config.get('team_name', 'Team')
 
         # Add main title (team name)
         title_box = slide.shapes.add_textbox(
-            Inches(1.5), Inches(2.8),  # Adjusted for 16:9
+            Inches(1.5), Inches(1.5),  # Positioned higher up
             Inches(10.333), Inches(1.5)  # Wider for 16:9
         )
         title_box.text_frame.text = team_name
@@ -147,61 +190,60 @@ class TitleSlide(BaseSlide):
             paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
             paragraph.alignment = PP_ALIGN.CENTER
 
-        # Add subtitle
-        subtitle_box = slide.shapes.add_textbox(
-            Inches(2), Inches(4.5),  # Adjusted positioning
-            Inches(9.333), Inches(1)  # Wider for 16:9
+    def _add_sil_logo(self, slide):
+        """Add SIL logo to bottom left corner"""
+        try:
+            # Get the project root directory
+            from pathlib import Path
+
+            current_file = Path(__file__).resolve()
+            project_root = current_file.parent.parent  # Go up from slide_generators/title_slide.py
+
+            # Path to SIL logo
+            sil_logo_path = project_root / 'assets' / 'logos' / 'general' / 'SIL_white.png'
+
+            if sil_logo_path.exists():
+                # Add the SIL logo image
+                logo_height = Inches(1.0)  # Reasonable size for corner logo
+
+                try:
+                    sil_logo = slide.shapes.add_picture(
+                        str(sil_logo_path),
+                        Inches(0.5),  # Left margin
+                        Inches(6.0),  # Bottom position
+                        height=logo_height
+                    )
+                    logger.info(f"Added SIL logo from {sil_logo_path}")
+
+                except Exception as e:
+                    logger.error(f"Error adding SIL logo: {e}")
+                    self._add_sil_text_fallback(slide)
+            else:
+                logger.warning(f"SIL logo not found at {sil_logo_path}")
+                self._add_sil_text_fallback(slide)
+
+        except Exception as e:
+            logger.error(f"Error in _add_sil_logo: {e}")
+            self._add_sil_text_fallback(slide)
+
+    def _add_sil_text_fallback(self, slide):
+        """Add SIL text as fallback when logo not available"""
+        sil_box = slide.shapes.add_textbox(
+            Inches(0.5), Inches(6.8),  # Bottom left
+            Inches(2), Inches(0.5)
         )
-        subtitle_box.text_frame.text = subtitle
-        subtitle_box.text_frame.word_wrap = True
+        sil_box.text_frame.text = "Sports Innovation Lab"
 
-        # Format subtitle
-        for paragraph in subtitle_box.text_frame.paragraphs:
+        # Format SIL text
+        for paragraph in sil_box.text_frame.paragraphs:
             paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(28)
-            paragraph.font.bold = False
+            paragraph.font.size = Pt(12)
             paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
-            paragraph.alignment = PP_ALIGN.CENTER
-
-        # Add date in bottom right
-        from datetime import datetime
-        current_date = datetime.now().strftime("%B %Y")
-
-        date_box = slide.shapes.add_textbox(
-            Inches(10.5), Inches(6.8),  # Bottom right for 16:9
-            Inches(2.5), Inches(0.5)
-        )
-        date_box.text_frame.text = current_date
-
-        # Format date
-        for paragraph in date_box.text_frame.paragraphs:
-            paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(14)
-            paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
-            paragraph.alignment = PP_ALIGN.RIGHT
-
-        logger.info(f"Generated title slide for {team_name}")
-        return self.presentation
 
     def _hex_to_rgb(self, hex_color: str) -> RGBColor:
         """Convert hex color to RGBColor"""
-        return self.hex_to_rgb(hex_color)  # Use parent method
-
-
-# Convenience function for backward compatibility
-def create_title_slide(team_config: Dict[str, Any],
-                       subtitle: str = "Sponsorship Insights Report",
-                       presentation: Optional[Presentation] = None) -> Presentation:
-    """
-    Create a title slide with team branding
-
-    Args:
-        team_config: Team configuration dictionary
-        subtitle: Subtitle text
-        presentation: Existing presentation to add to
-
-    Returns:
-        Presentation with title slide
-    """
-    generator = TitleSlide(presentation)
-    return generator.generate(team_config, subtitle)
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return RGBColor(r, g, b)

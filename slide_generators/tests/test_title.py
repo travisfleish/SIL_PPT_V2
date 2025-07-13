@@ -11,8 +11,22 @@ from pptx import Presentation
 from datetime import datetime
 
 # Add project root to Python path
-project_root = Path(__file__).parent.parent
+# Fix the path resolution to handle different directory structures
+current_file = Path(__file__).resolve()
+if current_file.parent.name == 'tests' and current_file.parent.parent.name == 'slide_generators':
+    # Running from slide_generators/tests/
+    project_root = current_file.parent.parent.parent
+elif current_file.parent.name == 'slide_generators':
+    # Running from slide_generators/
+    project_root = current_file.parent.parent
+else:
+    # Default fallback
+    project_root = current_file.parent.parent
+
 sys.path.insert(0, str(project_root))
+
+print(f"Script location: {current_file}")
+print(f"Project root: {project_root}")
 
 
 def test_template_integration():
@@ -28,8 +42,27 @@ def test_template_integration():
 
         if not template_path.exists():
             print(f"❌ Template not found: {template_path}")
-            print("🔧 Ensure sil_combined_template.pptx exists in templates/ directory")
-            return False
+
+            # Try alternative locations
+            print("\n🔍 Searching for template in alternative locations...")
+            alternative_paths = [
+                Path.cwd() / 'templates' / 'sil_combined_template.pptx',
+                project_root.parent / 'templates' / 'sil_combined_template.pptx',
+                Path(__file__).parent / 'templates' / 'sil_combined_template.pptx',
+                Path(__file__).parent.parent / 'templates' / 'sil_combined_template.pptx',
+            ]
+
+            for alt_path in alternative_paths:
+                print(f"   Checking: {alt_path}")
+                if alt_path.exists():
+                    template_path = alt_path
+                    print(f"   ✅ Found template at: {template_path}")
+                    break
+            else:
+                print("\n❌ Template not found in any location!")
+                print("🔧 Ensure sil_combined_template.pptx exists in:")
+                print(f"   {project_root / 'templates'}/")
+                return False
 
         print(f"✅ Loading template: {template_path}")
         presentation = Presentation(str(template_path))
@@ -69,17 +102,34 @@ def test_template_integration():
 
         # 6. Save and verify
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"utah_jazz_title_slide_fixed_{timestamp}.pptx"
-        presentation.save(filename)
+
+        # Create output directory if it doesn't exist
+        output_dir = project_root / 'output' / 'test'
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = output_dir / f"utah_jazz_title_slide_fixed_{timestamp}.pptx"
+        presentation.save(str(filename))
 
         print(f"✅ SUCCESS! Title slide created: {filename}")
+
+        # Check if team logo exists
+        logo_path = project_root / 'assets' / 'logos' / 'teams' / 'utah_jazz.png'
+        if logo_path.exists():
+            print(f"✅ Team logo found at: {logo_path}")
+            logo_status = "Utah Jazz logo image"
+        else:
+            print(f"⚠️  Team logo not found at: {logo_path}")
+            logo_status = "placeholder with 'UJ' initials"
+
         print(f"\n📋 Verification checklist:")
         print(f"   □ Open the PowerPoint file")
         print(f"   □ Slide should have BLUE background from template (not manually added)")
-        print(f"   □ Centered team logo placeholder with 'UJ' initials")
-        print(f"   □ 'Sponsorship Insights Report' title")
-        print(f"   □ Descriptive subtitle below")
-        print(f"   □ SIL logo in bottom left")
+        print(f"   □ Centered team logo: {logo_status}")
+        print(f"   □ 'Utah Jazz' as main title")
+        print(f"   □ 'Sponsorship Insights Report' subtitle")
+        print(f"   □ Descriptive text below subtitle")
+        print(f"   □ Current date in bottom right")
+        print(f"   □ SIL logo/text in bottom left")
 
         return True
 
@@ -105,6 +155,11 @@ def test_background_inheritance():
             print("❌ Template not found - skipping background test")
             return False
 
+        # Import required classes
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN
+
         # Load template
         presentation = Presentation(str(template_path))
 
@@ -127,10 +182,10 @@ def test_background_inheritance():
         # Add some text to both slides for testing
         for i, slide in enumerate([slide_blue, slide_blank], 1):
             text_box = slide.shapes.add_textbox(
-                presentation.slide_width / 2 - presentation.slide_width / 4,  # Center
-                presentation.slide_height / 2,  # Middle
-                presentation.slide_width / 2,  # Width
-                presentation.slide_height / 8  # Height
+                Inches(3),  # Left position
+                Inches(3),  # Top position
+                Inches(7),  # Width
+                Inches(1.5)  # Height
             )
             text_box.text_frame.text = f"Test Slide {i}\n{'Layout #11 (SIL Blue)' if i == 1 else 'Blank Layout'}"
 
@@ -143,8 +198,11 @@ def test_background_inheritance():
 
         # Save comparison
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"background_inheritance_test_{timestamp}.pptx"
-        presentation.save(filename)
+        output_dir = project_root / 'output' / 'test'
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = output_dir / f"background_inheritance_test_{timestamp}.pptx"
+        presentation.save(str(filename))
 
         print(f"\n✅ Background comparison saved: {filename}")
         print(f"📋 Expected results:")
@@ -155,6 +213,8 @@ def test_background_inheritance():
 
     except Exception as e:
         print(f"❌ Background test failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -181,6 +241,9 @@ def main():
         print("   • Removed manual background color setting")
         print("   • Title slide uses self.add_title_slide() which leverages layout #11")
         print("   • Template-loaded presentation passed to TitleSlide constructor")
+        print("\n💡 If using team logos:")
+        print("   • Place logo files in: assets/logos/teams/")
+        print("   • Use format: team_name.png (e.g., utah_jazz.png)")
     else:
         print("❌ Some tests failed")
         print("🔧 Troubleshooting:")
@@ -190,9 +253,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Import statements here to catch issues early
-    from pptx.util import Inches, Pt
-    from pptx.dml.color import RGBColor
-    from pptx.enum.text import PP_ALIGN
-
     main()
