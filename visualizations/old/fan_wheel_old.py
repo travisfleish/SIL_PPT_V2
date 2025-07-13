@@ -228,7 +228,7 @@ class FanWheel(BaseChart):
                output_path: Optional[Path] = None,
                team_logo: Optional[Image.Image] = None) -> Path:
         """
-        Create fan wheel visualization
+        Create fan wheel visualization with minimal whitespace
 
         Args:
             wheel_data: DataFrame with columns: COMMUNITY, MERCHANT, behavior, PERC_INDEX
@@ -245,8 +245,14 @@ class FanWheel(BaseChart):
         dpi = 150 if self.enable_logos else 100
         fig = plt.figure(figsize=(12, 12), facecolor='white', dpi=dpi)
         ax = fig.add_subplot(111, aspect='equal')
-        ax.set_xlim(-6, 6)
-        ax.set_ylim(-6, 6)
+
+        # FIXED: Reduce whitespace by setting limits closer to actual wheel size
+        # Original: ax.set_xlim(-6, 6), ax.set_ylim(-6, 6)
+        # New: Set limits just slightly larger than outer_radius (5.0)
+        margin = 0.3  # Small margin around the wheel
+        limit = self.outer_radius + margin  # 5.0 + 0.3 = 5.3
+        ax.set_xlim(-limit, limit)
+        ax.set_ylim(-limit, limit)
         ax.axis('off')
 
         num_items = len(wheel_data)
@@ -270,10 +276,11 @@ class FanWheel(BaseChart):
         # Add logos and text for each segment
         self._add_segment_content(ax, wheel_data, angle_step)
 
-        # Save
+        # Save with improved bbox settings to minimize whitespace
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight',
-                    facecolor='white', edgecolor='none')
+                    facecolor='white', edgecolor='none',
+                    pad_inches=0.05)  # REDUCED padding from default
         plt.close()
 
         logger.info(f"Fan wheel saved to {output_path}")

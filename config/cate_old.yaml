@@ -21,43 +21,6 @@ fixed_categories:
     - beauty
     - health
 
-# Categories allowed for custom selection (from your Snowflake data)
-# Custom categories must be in this list AND not in excluded_from_custom
-allowed_for_custom:
-  - "Accessories"
-  - "Apparel"
-  - "Athleisure"
-  - "Athletic"
-  - "Attractions"
-  - "Auto"
-  - "Baby"
-  - "Beauty"
-  - "Business Services"
-  - "Collectibles"
-  - "Dating"
-  - "Education Resources"
-  - "Electronics"
-  - "Entertainment & News"
-  - "Finance"
-  - "Fitness"
-  - "Footwear"
-  - "Gambling"
-  - "Gaming"
-  - "Health"
-  - "Home"
-  - "Home Furnishings & Goods"
-  - "Lodging & Accommodation"
-  - "Pets"
-  - "Resale"
-  - "Restaurants"
-  - "Retailers"
-  - "Specialty Food & Gifts"
-  - "Specialty Retailers"
-  - "Sportstainment"
-  - "Streaming"
-  - "Telcom"
-  - "Travel"
-
 # Detailed category definitions
 categories:
   restaurants:
@@ -261,3 +224,4 @@ slide_settings:
 # 2. Parts & Services needs to combine "Auto - Auto Parts" and "Auto - Auto Service"
 # 3. "Telcom" is misspelled in the data (not "Telecom")
 # 4. Some excluded categories might be subcategories (e.g., "Home - Utilities")
+
