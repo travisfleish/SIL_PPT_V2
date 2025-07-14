@@ -3,6 +3,7 @@
 Generate demographic overview slide with AI-generated insights
 Uses the blue SIL layout (#11) with team branding and AI insights text
 FIXED VERSION: No RGBColor transparency errors, works with template layouts
+Updated to use Overpass font for insights text
 """
 
 from pathlib import Path
@@ -18,8 +19,9 @@ from .base_slide import BaseSlide
 
 logger = logging.getLogger(__name__)
 
-# Default font
+# Default fonts
 DEFAULT_FONT_FAMILY = "Red Hat Display"
+INSIGHTS_FONT_FAMILY = "Overpass"  # New font for insights
 
 
 class DemographicOverviewSlide(BaseSlide):
@@ -115,6 +117,7 @@ class DemographicOverviewSlide(BaseSlide):
         title_p.alignment = PP_ALIGN.RIGHT
         title_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
         # Note: Right side text is NOT bold, which matches other slides
+
     def _add_main_title(self, slide, team_name: str):
         """Add the main title: Team Name + Fan Demographic Overview"""
         # Title positioned below header bar
@@ -146,7 +149,7 @@ class DemographicOverviewSlide(BaseSlide):
                     run.font.size = Pt(28)
 
     def _add_insights_text(self, slide, ai_insights: str):
-        """Add the AI-generated insights text"""
+        """Add the AI-generated insights text with Overpass font"""
         # Position insights text below the title
         insights_text = slide.shapes.add_textbox(
             Inches(1), Inches(3.6),
@@ -160,13 +163,13 @@ class DemographicOverviewSlide(BaseSlide):
         insights_frame.margin_bottom = Inches(0)
         insights_frame.word_wrap = True
 
-        # Style the insights text
+        # Style the insights text with Overpass font
         insights_p = insights_frame.paragraphs[0]
         insights_p.alignment = PP_ALIGN.LEFT
         insights_p.line_spacing = 1.2  # Slightly more spacing for readability
 
         for run in insights_p.runs:
-            run.font.name = DEFAULT_FONT_FAMILY
+            run.font.name = INSIGHTS_FONT_FAMILY  # Using Overpass for insights
             run.font.size = Pt(12)
             run.font.color.rgb = RGBColor(255, 255, 255)  # White text on blue background
             run.font.bold = False

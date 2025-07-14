@@ -4,6 +4,7 @@ Process demographic data from Snowflake exports to generate insights
 for PowerPoint presentations. Handles large datasets (400K+ rows) efficiently.
 Now includes AI-powered insights generation and ethnicity processing.
 FIXED VERSION: Handles null values in ETHNIC_GROUP column.
+UPDATED: Filters out 'Retired' and 'Other' from occupation charts.
 """
 
 import pandas as pd
@@ -277,16 +278,29 @@ class DemographicsProcessor:
         }
 
     def process_occupation(self) -> Dict[str, Any]:
-        """Process occupation category distribution"""
+        """Process occupation category distribution - UPDATED to filter out Retired and Other"""
+        # Get all percentages first (needed for insights)
         percentages = self._calculate_percentages('OCCUPATION_CATEGORY', self.OCCUPATION_ORDER)
+
+        # Filter out Retired and Other categories for the chart
+        filtered_categories = [cat for cat in self.OCCUPATION_ORDER
+                               if cat not in ['Retired', 'Other']]
+
+        # Filter the data to exclude Retired and Other
+        filtered_data = {}
+        for community, data in percentages.items():
+            filtered_data[community] = {
+                cat: data.get(cat, 0)
+                for cat in filtered_categories
+            }
 
         return {
             'chart_type': 'grouped_bar',
             'title': 'Occupation Category',
-            'categories': self.OCCUPATION_ORDER,
+            'categories': filtered_categories,  # Use filtered categories
             'communities': self.communities,
-            'data': percentages,
-            'insights': self._generate_occupation_insights(percentages)
+            'data': filtered_data,  # Use filtered data
+            'insights': self._generate_occupation_insights(percentages)  # Keep original for insights
         }
 
     def process_gender(self) -> Dict[str, Any]:

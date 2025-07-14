@@ -1,8 +1,7 @@
 # visualizations/demographic_charts_fixed.py
 """
-Fixed demographic visualization with proper text scaling
-Uses explicit positioning and removes auto-layout conflicts
-Updated with optimized gender pie chart layout and wider bar charts
+Fixed demographic visualization with proper text scaling and correct aspect ratios
+Matches PowerPoint placeholder dimensions exactly
 """
 
 import matplotlib.pyplot as plt
@@ -16,7 +15,7 @@ import os
 
 
 class DemographicCharts:
-    """Generate demographic charts with guaranteed legible text"""
+    """Generate demographic charts with guaranteed legible text and correct aspect ratios"""
 
     def __init__(self, team_colors: Optional[Dict[str, str]] = None):
         self.colors = team_colors or {
@@ -28,17 +27,54 @@ class DemographicCharts:
         # CRITICAL: Higher DPI but with explicit size control
         self.fig_dpi = 100  # Lower DPI prevents auto-scaling
 
-        # Font sizes designed for PowerPoint readability
-        self.font_size = 16
-        self.title_size = 20
-        self.label_size = 14  # Bar value labels
-        self.axis_label_size = 16  # Axis titles
-        self.tick_label_size = 12  # Axis tick labels
-        self.pie_text_size = 18  # Pie chart percentages
-        self.legend_size = 14
+        # Font sizes adjusted for small PowerPoint display dimensions
+        self.font_size = 10
+        self.title_size = 12
+        self.label_size = 8  # Bar value labels (the percentages on bars)
+        self.axis_label_size = 10  # Axis titles
+        self.tick_label_size = 8  # Axis tick labels
+        self.pie_text_size = 10  # Pie chart percentages
+        self.legend_size = 9
 
-        # Font family
-        self.font_family = 'Arial'  # More reliable than Red Hat Display
+        # Font family - try Overpass Light first, fallback to Arial
+        try:
+            # Check if Overpass Light is available
+            import matplotlib.font_manager as fm
+
+            # Get all available font names
+            available_fonts = sorted(set([f.name for f in fm.fontManager.ttflist]))
+
+            # Debug: Print available fonts that contain "Overpass"
+            overpass_fonts = [f for f in available_fonts if 'Overpass' in f.lower()]
+            if overpass_fonts:
+                print(f"Found Overpass fonts: {overpass_fonts}")
+
+            # Try different variations of Overpass
+            if 'Overpass Light' in available_fonts:
+                self.font_family = 'Overpass Light'
+                print("Using: Overpass Light")
+            elif 'Overpass-Light' in available_fonts:
+                self.font_family = 'Overpass-Light'
+                print("Using: Overpass-Light")
+            elif 'Overpass' in available_fonts:
+                self.font_family = 'Overpass'
+                # Try to use light weight
+                plt.rcParams['font.weight'] = 'light'
+                print("Using: Overpass (with light weight)")
+            else:
+                # Fallback to Arial if Overpass not found
+                self.font_family = 'Arial'
+                print(
+                    f"Warning: Overpass font not found in system. Available fonts containing 'over': {[f for f in available_fonts if 'over' in f.lower()][:5]}")
+                print("Using Arial as fallback. To use Overpass Light:")
+                print("1. Download from: https://fonts.google.com/specimen/Overpass")
+                print("2. Install the font on your system")
+                print("3. Clear matplotlib cache: import matplotlib; matplotlib.font_manager._rebuild()")
+                print("4. Restart your Python environment")
+        except Exception as e:
+            self.font_family = 'Arial'  # Fallback
+            print(f"Font detection error: {e}")
+            print("Using Arial as fallback")
 
         # Chart colors
         self.community_colors = [
@@ -51,17 +87,17 @@ class DemographicCharts:
         plt.rcParams['figure.autolayout'] = False
         plt.rcParams['axes.autolimit_mode'] = 'data'
 
-    def _format_income_label(self, label: str) -> str:
-        """Format income labels to be more concise"""
-        # Handle income ranges like "10,000-49,999" -> "$10K-$50K"
-        # Handle income ranges like "$10,000 to $49,999" -> "$10K-$50K"
-        # Handle single values like "200,000 or more" -> "$200K+"
+        # Configure font settings
+        plt.rcParams['font.family'] = self.font_family
+        if 'Overpass' in self.font_family:
+            plt.rcParams['font.weight'] = 'light'
 
+    def _format_income_label(self, label: str) -> str:
+        """Format income labels to be extremely concise for small charts"""
         label = str(label).strip()
 
         # Handle "X or more" cases
         if "or more" in label.lower():
-            # Extract number and convert
             import re
             numbers = re.findall(r'[\d,]+', label)
             if numbers:
@@ -72,39 +108,39 @@ class DemographicCharts:
                     formatted = f"${num}+"
                 return formatted
 
-        # Handle ranges with "to"
-        if " to " in label:
-            parts = label.split(" to ")
-            if len(parts) == 2:
-                # Extract numbers from both parts
-                import re
-                start_nums = re.findall(r'[\d,]+', parts[0])
-                end_nums = re.findall(r'[\d,]+', parts[1])
-
-                if start_nums and end_nums:
-                    start = int(start_nums[0].replace(',', ''))
-                    end = int(end_nums[0].replace(',', ''))
-
-                    # Format both numbers
-                    start_fmt = f"${start // 1000}K" if start >= 1000 else f"${start}"
-                    end_fmt = f"${end // 1000}K" if end >= 1000 else f"${end}"
-
-                    return f"{start_fmt}-{end_fmt}"
-
-        # Handle ranges with dash
-        if "-" in label and any(char.isdigit() for char in label):
+        # Handle ranges - make them ultra-compact
+        if " to " in label or "-" in label:
             import re
             numbers = re.findall(r'[\d,]+', label)
-            if len(numbers) == 2:
+            if len(numbers) >= 2:
                 start = int(numbers[0].replace(',', ''))
                 end = int(numbers[1].replace(',', ''))
 
-                start_fmt = f"${start // 1000}K" if start >= 1000 else f"${start}"
-                end_fmt = f"${end // 1000}K" if end >= 1000 else f"${end}"
+                # Ultra-compact format
+                if start < 1000:
+                    start_fmt = f"<1"
+                else:
+                    start_fmt = f"{start // 1000}"
 
-                return f"{start_fmt}-{end_fmt}"
+                if end >= 1000:
+                    end_fmt = f"{end // 1000}K"
+                else:
+                    end_fmt = f"{end}"
 
-        # If no pattern matches, return original
+                # Special cases for common ranges
+                if start == 10000 and end == 49999:
+                    return "10-50K"
+                elif start == 50000 and end == 74999:
+                    return "50-75K"
+                elif start == 75000 and end == 99999:
+                    return "75-100K"
+                elif start == 100000 and end == 149999:
+                    return "100-150K"
+                elif start == 150000 and end == 199999:
+                    return "150-200K"
+                else:
+                    return f"{start_fmt}-{end_fmt}"
+
         return label
 
     def _format_generation_label(self, label: str) -> str:
@@ -125,7 +161,6 @@ class DemographicCharts:
             'Gen Z': 'Gen Z'
         }
 
-        # Check if the cleaned label matches any known generation
         for full_name, short_name in generation_map.items():
             if full_name.lower() in cleaned.lower():
                 return short_name
@@ -136,7 +171,6 @@ class DemographicCharts:
         """Format occupation labels to be more concise"""
         label = str(label).strip()
 
-        # Occupation mappings for shorter labels
         occupation_map = {
             'Blue Collar': 'Blue Collar',
             'Homemaker': 'Homemaker',
@@ -154,7 +188,6 @@ class DemographicCharts:
         """Format ethnicity labels to be more concise"""
         label = str(label).strip()
 
-        # Ethnicity mappings for shorter labels
         ethnicity_map = {
             'African American': 'African American',
             'Hispanic': 'Hispanic',
@@ -171,7 +204,6 @@ class DemographicCharts:
         """Format children labels to be more concise"""
         label = str(label).strip()
 
-        # Children mappings
         children_map = {
             'No Children in HH': 'No Children',
             'At least 1 Child in HH': 'Has Children',
@@ -198,7 +230,7 @@ class DemographicCharts:
 
     def create_grouped_bar_chart(self, data: pd.DataFrame, title: str = None,
                                  ylabel: str = '% of Total Customer Count',
-                                 figsize: Tuple[float, float] = (16, 10),  # Larger base size
+                                 figsize: Tuple[float, float] = (4.5, 2.5),  # Default to match PPT
                                  rotation: int = 0,
                                  show_legend: bool = False,
                                  chart_type: str = None) -> plt.Figure:
@@ -207,33 +239,47 @@ class DemographicCharts:
         # Create figure with explicit size and positioning
         fig = plt.figure(figsize=figsize, dpi=self.fig_dpi)
 
-        # CRITICAL: More room for x-axis labels
-        bottom_margin = 0.25 if rotation != 0 else 0.20
+        # CRITICAL: Adjusted margins for small chart sizes - more aggressive
+        bottom_margin = 0.25 if rotation else 0.18
+        left_margin = 0.18  # More room for y-axis labels
         ax = fig.add_subplot(111)
-        fig.subplots_adjust(left=0.12, right=0.95, top=0.90, bottom=bottom_margin)
+        fig.subplots_adjust(left=left_margin, right=0.97, top=0.94, bottom=bottom_margin)
 
         n_groups = len(data.index)
         n_bars = len(data.columns)
-        bar_width = 0.25
+        bar_width = 0.15  # Further reduced for more spacing between groups
         indices = np.arange(n_groups)
 
-        # Create bars
+        # Create bars and track values for each group
+        bar_groups = []
         for i, (community, color) in enumerate(zip(data.columns, self.community_colors)):
             positions = indices + (i - n_bars / 2 + 0.5) * bar_width
             bars = ax.bar(positions, data[community], bar_width,
                           label=community, color=color, alpha=0.8)
+            bar_groups.append((bars, data[community].values))
 
-            # Add value labels with explicit font settings
-            for bar in bars:
-                height = bar.get_height()
-                if height > 0:
-                    ax.text(bar.get_x() + bar.get_width() / 2., height,
-                            f'{int(round(height))}%',
-                            ha='center', va='bottom',
-                            fontsize=self.label_size,
-                            fontfamily=self.font_family,
-                            fontweight='bold',
-                            clip_on=False)
+        # Add value labels only for the highest bar in each group
+        for group_idx in range(n_groups):
+            # Find which community has the highest value for this group
+            max_value = 0
+            max_bar = None
+            max_community_idx = 0
+
+            for comm_idx, (bars, values) in enumerate(bar_groups):
+                if values[group_idx] > max_value:
+                    max_value = values[group_idx]
+                    max_bar = bars[group_idx]
+                    max_community_idx = comm_idx
+
+            # Only add label to the highest bar
+            if max_bar and max_value > 0:
+                ax.text(max_bar.get_x() + max_bar.get_width() / 2., max_value,
+                        f'{int(round(max_value))}%',
+                        ha='center', va='bottom',
+                        fontsize=self.label_size,
+                        fontfamily=self.font_family,
+                        fontweight='bold',  # Bold for visibility
+                        clip_on=False)
 
         # Set labels with explicit font settings
         ax.set_xlabel('', fontsize=self.axis_label_size,
@@ -244,25 +290,35 @@ class DemographicCharts:
         # Title only if requested
         if title:
             ax.set_title(title, fontsize=self.title_size, fontweight='bold',
-                         pad=20, fontfamily=self.font_family)
+                         pad=10, fontfamily=self.font_family)
 
-        # CRITICAL: Format labels based on chart type before setting
+        # Format labels based on chart type before setting
         original_labels = list(data.index)
         if chart_type:
             formatted_labels = self._format_labels_for_chart_type(original_labels, chart_type)
         else:
             formatted_labels = original_labels
 
-        # CRITICAL: Force larger x-axis labels and prevent auto-compression
+        # Force larger x-axis labels and prevent auto-compression
         ax.set_xticks(indices)
+
+        # Adjust font size based on number of categories and chart width
+        if n_groups > 8:
+            x_label_size = 7  # Very small for many categories
+            rotation = 45  # Force rotation for crowded labels
+        elif n_groups > 6:
+            x_label_size = 8  # Smaller for many categories
+        else:
+            x_label_size = 9  # Slightly larger for fewer categories
+
         ax.set_xticklabels(formatted_labels, rotation=rotation,
                            ha='right' if rotation else 'center',
                            fontfamily=self.font_family,
-                           fontsize=18,  # Much larger!
-                           fontweight='bold')
+                           fontsize=x_label_size,
+                           fontweight='bold')  # Bold for better readability
 
-        # CRITICAL: Explicitly set tick parameters
-        ax.tick_params(axis='x', which='major', labelsize=18, pad=10)
+        # Explicitly set tick parameters
+        ax.tick_params(axis='x', which='major', labelsize=x_label_size, pad=3)  # Minimal padding
 
         # Legend only if requested
         if show_legend:
@@ -282,88 +338,171 @@ class DemographicCharts:
         # Format y-axis
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}%'))
 
-        # CRITICAL: Explicitly set y-tick label fonts
+        # Explicitly set y-tick label fonts
         for label in ax.get_yticklabels():
             label.set_fontfamily(self.font_family)
             label.set_fontsize(self.tick_label_size)
 
         return fig
 
-    def create_pie_charts(self, data: Dict[str, Dict[str, float]],
-                          title: str = 'Gender',
-                          figsize: Tuple[float, float] = (4, 8)) -> plt.Figure:  # NARROWER
-        """Create vertically stacked pie charts with minimal white space"""
-        n_communities = len(data)
+    def create_gender_chart(self, data: Dict[str, Dict[str, float]],
+                            title: str = 'Gender',
+                            figsize: Tuple[float, float] = (1.5, 2.5)) -> plt.Figure:
+        """Create horizontal stacked bars for gender distribution - ALREADY CORRECT SIZE"""
+        # Set matplotlib parameters for better rendering
+        plt.rcParams['text.antialiased'] = True
+        plt.rcParams['axes.linewidth'] = 0.8
+
         fig = plt.figure(figsize=figsize, dpi=self.fig_dpi)
+        ax = fig.add_subplot(111)
 
-        # Manual positioning with minimal margins
-        pie_radius = 0.15
-        pie_spacing = 0.35
-        start_y = 0.75
+        # Enable better rendering
+        ax.set_rasterization_zorder(0)  # Rasterize background only
 
-        for idx, (community, values) in enumerate(data.items()):
-            # Calculate position
-            center_y = start_y - (idx * pie_spacing)
-            center_x = 0.5
+        # Get communities in the expected order
+        communities = list(data.keys())
+        n_communities = len(communities)
 
-            # Create tight axes
-            ax_left = center_x - pie_radius
-            ax_bottom = center_y - pie_radius
-            ax_width = pie_radius * 2
-            ax_height = pie_radius * 2
+        # Bar parameters
+        bar_height = 0.6
+        y_positions = np.arange(n_communities)
 
-            ax = fig.add_axes([ax_left, ax_bottom, ax_width, ax_height])
+        # Use consistent colors for all bars
+        male_color = self.community_colors[0]  # Primary color (blue)
+        female_color = self.community_colors[1]  # Secondary color (yellow)
 
-            percentages = list(values.values())
-            colors = ['#4472C4', '#FFC000']  # Blue for male, yellow for female
+        # Define edge properties for crisp rendering (without alpha)
+        edge_props = dict(linewidth=0.5, edgecolor='#666666')  # Gray edge for subtlety
 
-            # Create pie chart
-            wedges, texts, autotexts = ax.pie(percentages, labels=None, colors=colors,
-                                              autopct='%1.0f%%', startangle=90,
-                                              textprops={'fontsize': 14,  # Larger font for percentages
-                                                         'fontfamily': self.font_family})
+        # Simplified community labels
+        community_labels = []
+        for community in communities:
+            if "Jazz Fans" in community and "NBA" not in community:
+                community_labels.append("Jazz Fans")
+            elif "Local Gen Pop" in community:
+                community_labels.append("Local Gen Pop")
+            elif "NBA Fans" in community or "League" in community:
+                community_labels.append("NBA Fans")
+            else:
+                community_labels.append(community)  # Fallback
 
-            # Style the percentage text
-            for autotext in autotexts:
-                autotext.set_color('white')
-                autotext.set_fontweight('bold')
-                autotext.set_fontfamily(self.font_family)
-                autotext.set_fontsize(16)  # Even larger for visibility
+        # Track male/female positions for top labels
+        male_positions = []
+        female_positions = []
 
-            ax.axis('equal')
-            ax.set_xlim(-1.1, 1.1)
-            ax.set_ylim(-1.1, 1.1)
+        for idx, community in enumerate(communities):
+            values = data[community]
+            male_pct = values.get('Male', 0)
+            female_pct = values.get('Female', 0)
 
-        # Remove all padding
-        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            # Draw stacked horizontal bar with consistent colors and edges
+            # Male portion (blue)
+            ax.barh(y_positions[idx], male_pct, bar_height,
+                    left=0, color=male_color, alpha=0.8, **edge_props)
+
+            # Female portion (yellow)
+            ax.barh(y_positions[idx], female_pct, bar_height,
+                    left=male_pct, color=female_color, alpha=0.8, **edge_props)
+
+            # Store positions for top labels
+            if idx == 0:
+                male_positions.append(male_pct / 2)
+                female_positions.append(male_pct + female_pct / 2)
+
+            # Add percentage labels
+            if male_pct > 5:
+                ax.text(male_pct / 2, y_positions[idx], f'{int(male_pct)}%',
+                        ha='center', va='center', fontweight='bold',
+                        color='white', fontsize=self.label_size,
+                        fontfamily=self.font_family)
+
+            if female_pct > 5:
+                ax.text(male_pct + female_pct / 2, y_positions[idx], f'{int(female_pct)}%',
+                        ha='center', va='center', fontweight='bold',
+                        color='black', fontsize=self.label_size,
+                        fontfamily=self.font_family)
+
+            # Add community label below each bar
+            ax.text(50, y_positions[idx] - 0.4, community_labels[idx],
+                    ha='center', va='top', fontsize=10,
+                    fontfamily=self.font_family, color='black')
+
+        # Add "Male" and "Female" labels at the top - centered on entire chart
+        top_y = n_communities - 0.5 + 0.15  # Moved closer to top bar (was 0.4)
+
+        # Center positions for visual balance - centered on the entire chart width
+        chart_center = 50  # Center of 0-100 scale
+        label_offset = 20  # Distance from center for each label
+
+        male_center = chart_center - label_offset
+        female_center = chart_center + label_offset
+
+        ax.text(male_center, top_y, 'Male',
+                ha='center', va='bottom', fontweight='bold',  # Bold
+                fontsize=self.axis_label_size + 1, fontfamily=self.font_family,  # Slightly larger
+                color='black')
+
+        ax.text(female_center, top_y, 'Female',
+                ha='center', va='bottom', fontweight='bold',  # Bold
+                fontsize=self.axis_label_size + 1, fontfamily=self.font_family,  # Slightly larger
+                color='black')
+
+        # Formatting - minimal design with space for labels
+        ax.set_ylim(-0.8, n_communities - 0.5 + 0.6)
+        ax.set_xlim(0, 100)
+
+        # Remove ALL axes and labels
+        ax.set_yticks([])
+        ax.set_xticks([])
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+
+        # Remove ALL spines for clean look
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        ax.grid(False)
+        plt.tight_layout()
+
         return fig
 
     def create_ethnicity_chart(self, data: pd.DataFrame) -> plt.Figure:
-        """Create ethnicity grouped bar chart with formatted labels"""
-        return self.create_grouped_bar_chart(data, chart_type='ethnicity', figsize=(16, 10))
+        """Create ethnicity grouped bar chart with correct aspect ratio"""
+        # PowerPoint size: 4.5" x 2.5" = 1.8 aspect ratio
+        return self.create_grouped_bar_chart(data, chart_type='ethnicity', figsize=(4.5, 2.5))
 
     def create_generation_chart(self, data: pd.DataFrame) -> plt.Figure:
-        """Create generation chart with wider layout"""
-        return self.create_grouped_bar_chart(data, chart_type='generation', ylabel='Balanced Pct', figsize=(18, 8))
+        """Create generation chart with correct aspect ratio"""
+        # PowerPoint size: 4.5" x 2.5" = 1.8 aspect ratio
+        return self.create_grouped_bar_chart(data, chart_type='generation', ylabel='Balanced Pct', figsize=(4.5, 2.5))
 
     def create_income_chart(self, data: pd.DataFrame) -> plt.Figure:
-        """Create income chart with wider layout for better readability"""
-        return self.create_grouped_bar_chart(data, chart_type='income', ylabel='Balanced Pct', figsize=(24, 8))
+        """Create income chart with correct aspect ratio"""
+        # PowerPoint size: 4.8" x 2.5" = 1.92 aspect ratio
+        return self.create_grouped_bar_chart(data, chart_type='income', ylabel='Balanced Pct', figsize=(4.8, 2.5))
 
     def create_occupation_chart(self, data: pd.DataFrame) -> plt.Figure:
-        """Create occupation chart with wider layout for better readability"""
+        """Create occupation chart with correct aspect ratio"""
+        # PowerPoint size: 5.6" x 2.5" = 2.24 aspect ratio
         return self.create_grouped_bar_chart(data, chart_type='occupation', ylabel='% of Total Customer Count',
-                                             figsize=(24, 8))
+                                             figsize=(5.6, 2.5))
 
     def create_children_chart(self, data: pd.DataFrame) -> plt.Figure:
-        """Create children chart with wider layout"""
+        """Create children chart with correct aspect ratio"""
+        # PowerPoint size: 3.0" x 2.5" = 1.2 aspect ratio
         return self.create_grouped_bar_chart(data, chart_type='children', ylabel='% of Total Customer Count',
-                                             figsize=(12, 8))
+                                             figsize=(3.0, 2.5))
 
     def save_chart_for_powerpoint(self, fig: plt.Figure, filename: str,
-                                  output_dir: Path, width_inches: float = 12,
-                                  height_inches: float = 8) -> Path:
+                                  output_dir: Path, width_inches: float = None,
+                                  height_inches: float = None) -> Path:
         """Save chart optimized for PowerPoint insertion"""
+
+        # Use the figure's current size if not specified
+        if width_inches is None or height_inches is None:
+            current_size = fig.get_size_inches()
+            width_inches = width_inches or current_size[0]
+            height_inches = height_inches or current_size[1]
 
         # Set exact size for PowerPoint
         fig.set_size_inches(width_inches, height_inches)
@@ -377,11 +516,20 @@ class DemographicCharts:
                     edgecolor='none',
                     pad_inches=0.1)  # Small padding
 
+        # Also save a high-res version for better quality
+        hires_path = output_dir / f'{filename}_hires.png'
+        fig.savefig(hires_path,
+                    dpi=300,  # Extra high DPI
+                    bbox_inches='tight',
+                    facecolor='white',
+                    edgecolor='none',
+                    pad_inches=0.1)
+
         return output_path
 
     def create_all_demographic_charts(self, demographic_data: Dict[str, Any],
                                       output_dir: Optional[Path] = None) -> Dict[str, plt.Figure]:
-        """Create all demographic charts with guaranteed legible text"""
+        """Create all demographic charts with correct PowerPoint aspect ratios"""
         charts = {}
         demographics = demographic_data.get('demographics', {})
 
@@ -399,7 +547,7 @@ class DemographicCharts:
                             if existing_categories:
                                 df = df.reindex(existing_categories)
 
-                    # Create appropriate chart with chart_type parameter
+                    # Create appropriate chart with correct aspect ratio
                     if demo_type == 'generation':
                         fig = self.create_generation_chart(df)
                     elif demo_type == 'income':
@@ -416,7 +564,8 @@ class DemographicCharts:
                     charts[demo_type] = fig
 
                 elif demo_data['chart_type'] == 'pie' and demo_type == 'gender':
-                    fig = self.create_pie_charts(data_dict)
+                    # Use horizontal bars for gender
+                    fig = self.create_gender_chart(data_dict)
                     charts[demo_type] = fig
 
             except Exception as e:
@@ -431,184 +580,39 @@ class DemographicCharts:
 
             for chart_name, fig in charts.items():
                 try:
-                    # Save for PowerPoint insertion
-                    output_path = self.save_chart_for_powerpoint(
-                        fig, f'{chart_name}_chart', output_dir)
-                    print(f"Saved {chart_name} chart to {output_path}")
+                    # Get the actual figure dimensions
+                    current_size = fig.get_size_inches()
+                    width_inches = current_size[0]
+                    height_inches = current_size[1]
+
+                    # Special handling for gender chart - save at higher DPI
+                    if chart_name == 'gender':
+                        # Save gender chart at higher DPI for better text clarity
+                        output_path = output_dir / f'{chart_name}_chart.png'
+                        fig.savefig(output_path,
+                                    dpi=300,  # Higher DPI for gender chart
+                                    bbox_inches='tight',
+                                    facecolor='white',
+                                    edgecolor='none',
+                                    pad_inches=0.05)
+
+                        hires_path = output_dir / f'{chart_name}_chart_hires.png'
+                        fig.savefig(hires_path,
+                                    dpi=400,  # Extra high DPI
+                                    bbox_inches='tight',
+                                    facecolor='white',
+                                    edgecolor='none',
+                                    pad_inches=0.05)
+                    else:
+                        # Save other charts normally
+                        output_path = self.save_chart_for_powerpoint(
+                            fig, f'{chart_name}_chart', output_dir,
+                            width_inches=width_inches,
+                            height_inches=height_inches
+                        )
+                    print(f"Saved {chart_name} chart to {output_path} at {width_inches:.1f}x{height_inches:.1f} inches")
 
                 except Exception as e:
                     print(f"Error saving {chart_name} chart: {str(e)}")
 
         return charts
-
-
-# Additional utility for testing text visibility
-def test_text_visibility():
-    """Test function to verify text is legible at different sizes"""
-
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=100)
-    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1,
-                        wspace=0.3, hspace=0.3)
-
-    font_sizes = [10, 12, 14, 16]
-    test_text = "Sample Text 123%"
-
-    for i, (ax, size) in enumerate(zip(axes.flat, font_sizes)):
-        ax.text(0.5, 0.5, f"{test_text}\nFont Size: {size}pt",
-                ha='center', va='center', fontsize=size,
-                fontfamily='Arial', transform=ax.transAxes)
-        ax.set_title(f"Font Size {size}pt", fontsize=size + 2)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-
-    return fig
-
-
-def test_label_formatting():
-    """Test function to verify label formatting works correctly"""
-
-    charter = DemographicCharts()
-
-    # Test income formatting
-    income_labels = [
-        "10,000-49,999",
-        "$50,000 to $74,999",
-        "$100,000 to $149,999",
-        "$200,000 or more"
-    ]
-
-    print("Income Label Formatting:")
-    for label in income_labels:
-        formatted = charter._format_income_label(label)
-        print(f"  '{label}' -> '{formatted}'")
-
-    # Test generation formatting
-    generation_labels = [
-        "1. Millennials and Gen Z (1982 and after)",
-        "2. Generation X (1961-1981)",
-        "3. Baby Boomers (1943-1960)",
-        "4. Post-WWII (1942 and before)"
-    ]
-
-    print("\nGeneration Label Formatting:")
-    for label in generation_labels:
-        formatted = charter._format_generation_label(label)
-        print(f"  '{label}' -> '{formatted}'")
-
-    # Test occupation formatting
-    occupation_labels = [
-        "Blue Collar",
-        "Lower Management",
-        "Upper Management",
-        "White Collar Worker"
-    ]
-
-    print("\nOccupation Label Formatting:")
-    for label in occupation_labels:
-        formatted = charter._format_occupation_label(label)
-        print(f"  '{label}' -> '{formatted}'")
-
-    return True
-
-
-def test_formatted_charts():
-    """Test charts with formatted labels"""
-
-    # Sample data with realistic labels that need formatting
-    income_data = pd.DataFrame({
-        'Utah Jazz Fans': {
-            '10,000-49,999': 25,
-            '$50,000 to $74,999': 24,
-            '$75,000 to $99,999': 17,
-            '$100,000 to $149,999': 21,
-            '$150,000 to $199,999': 23,
-            '$200,000 or more': 12
-        },
-        'Local Gen Pop': {
-            '10,000-49,999': 20,
-            '$50,000 to $74,999': 17,
-            '$75,000 to $99,999': 17,
-            '$100,000 to $149,999': 14,
-            '$150,000 to $199,999': 15,
-            '$200,000 or more': 6
-        }
-    })
-
-    generation_data = pd.DataFrame({
-        'Utah Jazz Fans': {
-            '1. Millennials and Gen Z (1982 and after)': 51,
-            '2. Generation X (1961-1981)': 37,
-            '3. Baby Boomers (1943-1960)': 10,
-            '4. Post-WWII (1942 and before)': 2
-        },
-        'Local Gen Pop': {
-            '1. Millennials and Gen Z (1982 and after)': 45,
-            '2. Generation X (1961-1981)': 34,
-            '3. Baby Boomers (1943-1960)': 17,
-            '4. Post-WWII (1942 and before)': 4
-        }
-    })
-
-    charter = DemographicCharts()
-
-    # Create charts with formatted labels
-    income_fig = charter.create_income_chart(income_data)
-    generation_fig = charter.create_generation_chart(generation_data)
-
-    # Save test charts
-    income_fig.savefig('income_formatted_test.png', dpi=200, bbox_inches='tight')
-    generation_fig.savefig('generation_formatted_test.png', dpi=200, bbox_inches='tight')
-
-    print("Created test charts with formatted labels:")
-    print("- income_formatted_test.png")
-    print("- generation_formatted_test.png")
-
-    return income_fig, generation_fig
-
-
-if __name__ == "__main__":
-    # Test text visibility
-    test_fig = test_text_visibility()
-    test_fig.savefig('text_visibility_test.png', dpi=200, bbox_inches='tight')
-    print("Text visibility test saved as 'text_visibility_test.png'")
-
-    # Test with mock data
-    mock_data = {
-        'team_name': 'Utah Jazz',
-        'demographics': {
-            'gender': {
-                'chart_type': 'pie',
-                'title': 'Gender',
-                'data': {
-                    'Utah Jazz Fans': {'Male': 54, 'Female': 46},
-                    'NBA Fans': {'Male': 52, 'Female': 48}
-                }
-            },
-            'ethnicity': {
-                'chart_type': 'grouped_bar',
-                'title': 'Ethnicity',
-                'categories': ['White', 'Hispanic', 'African American', 'Asian', 'Other'],
-                'data': {
-                    'Utah Jazz Fans': {
-                        'White': 65,
-                        'Hispanic': 18,
-                        'African American': 8,
-                        'Asian': 5,
-                        'Other': 4
-                    },
-                    'Local Gen Pop (Excl. Jazz)': {
-                        'White': 70,
-                        'Hispanic': 15,
-                        'African American': 5,
-                        'Asian': 7,
-                        'Other': 3
-                    }
-                }
-            }
-        }
-    }
-
-    # Create charts
-    charter = DemographicCharts()
-    charts = charter.create_all_demographic_charts(mock_data, Path('./test_output'))
-    print(f"Generated {len(charts)} charts with legible text")
