@@ -96,43 +96,25 @@ class DemographicOverviewSlide(BaseSlide):
             Inches(0.2), Inches(0.1),
             Inches(3), Inches(0.3)
         )
-        team_frame = team_text.text_frame
-        team_frame.text = team_name
-        team_frame.margin_left = Inches(0)
-        team_frame.margin_right = Inches(0)
-        team_frame.margin_top = Inches(0)
-        team_frame.margin_bottom = Inches(0)
-
-        # Style team name text
-        team_p = team_frame.paragraphs[0]
-        team_p.alignment = PP_ALIGN.LEFT
-        team_run = team_p.runs[0]
-        team_run.font.name = DEFAULT_FONT_FAMILY
-        team_run.font.size = Pt(12)
-        team_run.font.bold = True
-        team_run.font.color.rgb = RGBColor(64, 64, 64)  # Dark gray
+        team_text.text_frame.text = team_name
+        team_p = team_text.text_frame.paragraphs[0]
+        team_p.font.name = DEFAULT_FONT_FAMILY
+        team_p.font.size = Pt(14)
+        team_p.font.bold = True
+        team_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
 
         # Add page title on the right side of header
         title_text = slide.shapes.add_textbox(
-            Inches(8), Inches(0.1),
-            Inches(5), Inches(0.3)
+            Inches(6.5), Inches(0.1),
+            Inches(6.633), Inches(0.3)
         )
-        title_frame = title_text.text_frame
-        title_frame.text = "Fan Demographics: How Are {} Fans Unique".format(team_name.split()[-1])
-        title_frame.margin_left = Inches(0)
-        title_frame.margin_right = Inches(0.2)
-        title_frame.margin_top = Inches(0)
-        title_frame.margin_bottom = Inches(0)
-
-        # Style page title text
-        title_p = title_frame.paragraphs[0]
+        title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
+        title_p = title_text.text_frame.paragraphs[0]
+        title_p.font.name = DEFAULT_FONT_FAMILY
+        title_p.font.size = Pt(14)
         title_p.alignment = PP_ALIGN.RIGHT
-        title_run = title_p.runs[0]
-        title_run.font.name = DEFAULT_FONT_FAMILY
-        title_run.font.size = Pt(12)
-        title_run.font.bold = True
-        title_run.font.color.rgb = RGBColor(64, 64, 64)  # Dark gray
-
+        title_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
+        # Note: Right side text is NOT bold, which matches other slides
     def _add_main_title(self, slide, team_name: str):
         """Add the main title: Team Name + Fan Demographic Overview"""
         # Title positioned below header bar

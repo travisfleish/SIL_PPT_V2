@@ -136,7 +136,7 @@ class DemographicsSlide:
             Inches(6), Inches(0.1),
             Inches(7.133), Inches(0.3)
         )
-        title_text.text_frame.text = f"FAN DEMOGRAPHICS: HOW ARE {team_name.upper()} FANS UNIQUE"
+        title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
         p = title_text.text_frame.paragraphs[0]
         p.font.name = self.default_font
         p.alignment = PP_ALIGN.RIGHT

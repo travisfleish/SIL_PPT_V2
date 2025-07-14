@@ -108,6 +108,9 @@ class CommunityIndexChart:
                             height=0.08,  # Very thin height for line effect
                             label='Team Fan Index')  # Changed from '% Audience Index'
 
+        # Add vertical reference line at x=100 (where index = 1.0)
+        ax.axvline(x=100, color='#808080', linestyle='-', linewidth=1.5, alpha=0.6, zorder=1)
+
         # Add percentage labels in yellow boxes at the end of gray bars
         for i, (idx, row) in enumerate(data.iterrows()):
             # Convert to percentage if needed
@@ -122,10 +125,20 @@ class CommunityIndexChart:
 
             # Create yellow box
             box_width = 60
-            box_height = 0.5
+            box_height = 0.6  # Match the height of gray bars
+
+            # Check if the yellow box would extend beyond the chart
+            # If the box would be cut off (x_pos + box_width > max_value),
+            # position it inside the gray bar instead
+            if (x_pos + box_width - 5) > max_value:
+                # Position the box inside the gray bar, anchored from the right edge
+                box_x_pos = max_value - box_width - 5
+            else:
+                # Normal positioning - at the end of the gray bar
+                box_x_pos = x_pos - 5
 
             # Add yellow rectangle
-            rect = Rectangle((x_pos - 5, y_pos - box_height / 2),
+            rect = Rectangle((box_x_pos, y_pos - box_height / 2),
                              box_width, box_height,
                              facecolor=self.highlight_color,
                              edgecolor='none',
@@ -133,7 +146,7 @@ class CommunityIndexChart:
             ax.add_patch(rect)
 
             # Add percentage text - show PERC_AUDIENCE with font
-            ax.text(x_pos + box_width / 2 - 5, y_pos,
+            ax.text(box_x_pos + box_width / 2, y_pos,
                     f"{pct_value:.1f}%",
                     ha='center', va='center',
                     fontweight='bold', fontsize=11,
@@ -142,13 +155,13 @@ class CommunityIndexChart:
 
         # Customize the plot with Red Hat Display font
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(data['Community'], fontsize=13, fontfamily=self.font_family)
+        ax.set_yticklabels(data['Community'], fontsize=15, fontweight='bold', fontfamily=self.font_family)
         ax.set_xlabel('Percent Fan Audience', fontsize=13, fontweight='bold', fontfamily=self.font_family)
         ax.set_xlim(0, max_value)
 
         # Add x-axis labels at specific intervals with bold font and Red Hat Display
         ax.set_xticks([0, 100, 200, 300, 400, 500, 600, 700])
-        ax.tick_params(axis='x', labelsize=12, labelbottom=True)
+        ax.tick_params(axis='x', labelsize=15, labelbottom=True)
         for label in ax.get_xticklabels():
             label.set_fontweight('bold')
             label.set_fontfamily(self.font_family)
@@ -180,8 +193,8 @@ class CommunityIndexChart:
                            frameon=True,
                            fancybox=True,
                            shadow=False,
-                           fontsize=13,
-                           prop={'family': self.font_family})
+                           fontsize=15,
+                           prop={'family': self.font_family, 'weight': 'bold'})
 
         # Adjust layout
         plt.tight_layout()

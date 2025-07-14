@@ -2,7 +2,7 @@
 """
 Generate Fan Behaviors slide for PowerPoint presentations
 Combines fan wheel and community index chart with insights
-UPDATED with correct positioning from test script
+UPDATED with 6.5" community chart and centered text alignment
 """
 
 from pathlib import Path
@@ -71,15 +71,12 @@ class BehaviorsSlide(BaseSlide):
         # Generate insight text
         insight = self._generate_insight_text(merchant_ranker, team_short)
 
-        # Add elements with CORRECTED positioning
+        # Add elements with 6.5" chart coordinated positioning
         self._add_insight_text(slide, insight)  # TOP left - large text
         self._add_chart_titles(slide, team_name)  # Titles for both sides
-        self._add_community_chart(slide, chart_path)  # LEFT chart
-        self._add_fan_wheel(slide, fan_wheel_path)  # RIGHT wheel (5.8" diameter)
+        self._add_community_chart(slide, chart_path)  # LEFT chart - 6.5" wide
+        self._add_fan_wheel(slide, fan_wheel_path)  # RIGHT wheel - 5.5" diameter
         self._add_chart_explanation(slide)  # BOTTOM left explanation
-
-        # Add footer/logo
-        self._add_team_logo(slide, team_config)
 
         logger.info(f"Generated behaviors slide for {team_name}")
         return self.presentation
@@ -171,80 +168,85 @@ class BehaviorsSlide(BaseSlide):
         p.font.size = Pt(14)
 
     def _add_insight_text(self, slide, insight: str):
-        """Add large insight text at TOP of left side - CORRECTED positioning"""
+        """Add large insight text at TOP - CENTERED with 6.5" chart"""
         text_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(1.2),  # Vertically centered - matches test
-            Inches(5.5), Inches(1.0)  # Large width for prominence
+            Inches(0.5), Inches(1.2),  # Match chart left position
+            Inches(6.5), Inches(1.0)   # Match chart width
         )
         text_box.text_frame.text = insight
         text_box.text_frame.word_wrap = True
 
-        # Format text - large and bold
+        # Format text - large, bold, and CENTER aligned
         p = text_box.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(18)  # Large font for prominence
         p.font.bold = True
-        p.alignment = PP_ALIGN.LEFT
+        p.alignment = PP_ALIGN.CENTER  # CENTER aligned
 
     def _add_chart_titles(self, slide, team_name: str):
-        """Add titles above both visualizations - CORRECTED positioning"""
-        # Community chart title (LEFT side)
+        """Add titles above both visualizations"""
+        # Community chart title (LEFT side) - centered over 6.5" chart
         bar_chart_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(2.2),  # Below insight text - matches test
-            Inches(5.5), Inches(0.3)
+            Inches(0.5), Inches(2.0),  # Match chart left position
+            Inches(6.5), Inches(0.3)   # Match chart width
         )
         bar_chart_title.text_frame.text = f"Top Ten {team_name} Fan Communities"
         p = bar_chart_title.text_frame.paragraphs[0]
         p.font.name = self.default_font
-        p.font.size = Pt(12)  # ← Reduced from 14 to 12
+        p.font.size = Pt(12)
         p.font.bold = True
-        p.alignment = PP_ALIGN.CENTER  # ← Changed from LEFT to CENTER
+        p.alignment = PP_ALIGN.CENTER
 
-        # Fan wheel title (RIGHT side) - HORIZONTALLY CENTERED with fan wheel
-        # Fan wheel center: 9.667", title should be centered on this
-        title_center = 9.667
+        # Fan wheel title (RIGHT side) - ADJUSTED for new spacing
+        # Chart right edge: 0.5 + 6.5 = 7.0"
+        # Page right edge: 13.333"
+        # Available space: 13.333 - 7.0 = 6.333"
+        # Fan wheel will be 5.5"
+        # Center of remaining space: 7.0 + (6.333 / 2) = 10.1665"
+
+        title_center = 10.1665
         title_width = 5.5
-        title_left = title_center - (title_width / 2)  # 7.167"
+        title_left = title_center - (title_width / 2)  # 7.4165"
 
         fan_wheel_title = slide.shapes.add_textbox(
-            Inches(title_left), Inches(0.95),  # Equal white space from header - matches test
+            Inches(title_left), Inches(0.95),
             Inches(title_width), Inches(0.3)
         )
         fan_wheel_title.text_frame.text = "Top Community Fan Purchases"
         p = fan_wheel_title.text_frame.paragraphs[0]
         p.font.name = self.default_font
-        p.font.size = Pt(12)  # ← Reduced from 14 to 12
+        p.font.size = Pt(12)
         p.font.bold = True
         p.alignment = PP_ALIGN.CENTER
 
     def _add_community_chart(self, slide, image_path: Path):
-        """Add community index chart - LEFT side, CORRECTED positioning"""
-        left = Inches(0.5)
-        top = Inches(2.5)  # Below title - matches test
-        width = Inches(5.5)
+        """Add community index chart - LEFT side, 6.5" WIDTH"""
+        left = Inches(0.5)   # Left margin
+        top = Inches(2.4)    # Below title
+        width = Inches(6.5)  # 6.5" width
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
 
     def _add_fan_wheel(self, slide, image_path: Path):
-        """Add fan wheel - RIGHT side, 5.8" diameter, CORRECTED positioning"""
-        width = Inches(5.8)  # 5.8" diameter as requested
+        """Add fan wheel - RIGHT side, 5.5" diameter"""
+        width = Inches(5.5)  # 5.5" diameter
 
-        # HORIZONTALLY CENTERED between chart edge and page edge
-        # Community chart right edge: 6.0", Page right edge: 13.333"
-        # Center point: (6.0 + 13.333) / 2 = 9.667"
-        # Fan wheel left: 9.667 - (5.8 / 2) = 6.767"
-        left = Inches(6.767)
+        # Chart right edge: 0.5 + 6.5 = 7.0"
+        # Page right edge: 13.333"
+        # Available space: 13.333 - 7.0 = 6.333"
+        # Center point of available space: 7.0 + (6.333 / 2) = 10.1665"
+        # Fan wheel left: 10.1665 - (5.5 / 2) = 7.4165"
 
-        # EQUAL WHITE SPACE top and bottom
-        top = Inches(1.25)  # Equal white space - matches test
+        left = Inches(7.4165)
+        top = Inches(1.35)  # Vertical position
 
         slide.shapes.add_picture(str(image_path), left, top, width=width)
 
     def _add_chart_explanation(self, slide):
-        """Add explanation text below community chart - CORRECTED positioning"""
+        """Add explanation text below community chart - CENTERED with 6.5" chart"""
         explanation_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(6.0),  # Bottom left - matches test
-            Inches(5.5), Inches(0.8)  # REDUCED height to fit text only
+            Inches(0.5), Inches(6.4),  # Match chart left position
+            Inches(6.5), Inches(0.8)   # Match chart width
         )
         explanation_text = (
             "The top ten fan communities are ranked according to a composite index score "
@@ -256,8 +258,8 @@ class BehaviorsSlide(BaseSlide):
 
         p = explanation_box.text_frame.paragraphs[0]
         p.font.name = self.default_font
-        p.font.size = Pt(8)  # ← Reduced from 10 to 8
-        p.alignment = PP_ALIGN.LEFT
+        p.font.size = Pt(8)
+        p.alignment = PP_ALIGN.CENTER  # CENTER aligned
         p.line_spacing = 1.2
 
     def _generate_insight_text(self, merchant_ranker: MerchantRanker,
@@ -317,19 +319,6 @@ class BehaviorsSlide(BaseSlide):
 
         # Fallback
         return f"{team_short} fans have unique behaviors that set them apart from the general population!"
-
-    def _add_team_logo(self, slide, team_config: Dict[str, Any]):
-        """Add small team logo in corner"""
-        # For now, just add a small text placeholder (adjusted for 16:9)
-        logo_box = slide.shapes.add_textbox(
-            Inches(12.533), Inches(0.1),  # Moved right for 16:9
-            Inches(0.7), Inches(0.3)
-        )
-        logo_box.text_frame.text = team_config.get('team_name_short', 'Team')
-        p = logo_box.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(10)
-        p.alignment = PP_ALIGN.CENTER
 
 
 # Convenience function
