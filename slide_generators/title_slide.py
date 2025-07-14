@@ -76,7 +76,7 @@ class TitleSlide(BaseSlide):
 
         # Add subtitle
         subtitle_box = slide.shapes.add_textbox(
-            Inches(2), Inches(3.8),  # Moved up with more space from logo
+            Inches(2), Inches(4.0),  # Moved up with more space from logo
             Inches(9.333), Inches(1)  # Wider for 16:9
         )
         subtitle_box.text_frame.text = subtitle
@@ -94,7 +94,7 @@ class TitleSlide(BaseSlide):
         # Add descriptive text
         desc_text = "A purchase-based, data-backed view into who fans are and the brands they buy."
         desc_box = slide.shapes.add_textbox(
-            Inches(3.5), Inches(4.8),  # Moved up with spacing from subtitle
+            Inches(3.5), Inches(5.0),  # Moved up with spacing from subtitle
             Inches(6.333), Inches(0.8)  # Narrower width
         )
         desc_box.text_frame.text = desc_text
@@ -140,7 +140,7 @@ class TitleSlide(BaseSlide):
 
             # Add the logo image
             # Position it where the team name would go
-            logo_height = Inches(2.5)  # Larger size for main logo
+            logo_height = Inches(2.2)  # Larger size for main logo
 
             # Add the logo first to get its dimensions
             try:
@@ -154,7 +154,7 @@ class TitleSlide(BaseSlide):
                 # Center the logo horizontally where the title would be
                 slide_width = Inches(13.333)  # 16:9 slide width
                 logo_x = (slide_width - logo.width) / 2
-                logo_y = Inches(1.0)  # Position higher up on slide
+                logo_y = Inches(1.5)  # Position higher up on slide
 
                 # Move logo to centered position
                 logo.left = int(logo_x)

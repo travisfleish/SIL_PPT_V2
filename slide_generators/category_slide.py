@@ -344,7 +344,7 @@ class CategorySlide(BaseSlide):
 
         # Make text box taller to accommodate potential second line
         title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(1.4),
+            Inches(0.6), Inches(1.3),
             width, Inches(1.8)  # Increased height from 1.0 to 1.8 for two lines
         )
 
@@ -458,7 +458,7 @@ class CategorySlide(BaseSlide):
 
         # Table position - adjusted to prevent bleeding and moved down
         left = Inches(6.2)  # Moved left to fit better
-        top = Inches(1.6)  # Moved down from 1.5
+        top = Inches(1.4)  # Moved down from 1.5
         width = Inches(6.8)  # Adjusted width to fit within slide
         height = Inches(0.8)  # Reduced height for better proportions
 
@@ -471,11 +471,11 @@ class CategorySlide(BaseSlide):
         table_shape = slide.shapes.add_table(2, 4, left, top, width, height)
         table = table_shape.table
 
-        # Set column widths - better distribution
-        table.columns[0].width = Inches(1.3)  # Category
-        table.columns[1].width = Inches(1.6)  # Percent of Fans
-        table.columns[2].width = Inches(1.8)  # How likely
-        table.columns[3].width = Inches(1.7)  # Purchases
+        # Set column widths - matching subcategory table
+        table.columns[0].width = Inches(1.6)  # Category
+        table.columns[1].width = Inches(1.5)  # Percent of Fans
+        table.columns[2].width = Inches(1.7)  # How likely
+        table.columns[3].width = Inches(1.6)  # Purchases
 
         # Header row - UPDATED with "local gen pop"
         headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
@@ -506,7 +506,7 @@ class CategorySlide(BaseSlide):
 
         # Table position - adjusted to prevent bleeding and extend down
         left = Inches(6.2)  # Moved left to fit better
-        top = Inches(3.2)  # Adjusted vertical position (was 2.7)
+        top = Inches(3.0)  # Adjusted vertical position (was 2.7)
         width = Inches(6.8)  # Adjusted width to fit within slide
 
         # Create table with header + data rows
@@ -628,7 +628,7 @@ class CategorySlide(BaseSlide):
             return
 
         # Align with brand table dimensions - MATCH THE TABLE POSITION AND WIDTH
-        table_left = Inches(6.8)  # Updated to match table left position
+        table_left = Inches(6.6)  # Updated to match table left position
         table_width = Inches(6.0)  # Updated to match table width
 
         # Calculate logo positions
@@ -642,7 +642,7 @@ class CategorySlide(BaseSlide):
         spacing_between = available_space / (num_logos - 1) if num_logos > 1 else 0
 
         # Position for logos - above the table
-        y = Inches(1.0)  # Keep existing y position
+        y = Inches(1.2)  # Shifted down from 1.0 to 1.5
 
         # Add logos for top 5 brands
         for i in range(num_logos):
@@ -775,7 +775,7 @@ class CategorySlide(BaseSlide):
         p.font.color.rgb = RGBColor(150, 150, 150)
 
     def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str, team_short: str, category_name: str):
-        """Add brand-specific insights with updated formatting"""
+        """Add brand-specific insights with updated formatting to match reference"""
         # Top Brand Insights section
         insights_title = slide.shapes.add_textbox(
             Inches(0.5), Inches(2.8),
@@ -787,34 +787,125 @@ class CategorySlide(BaseSlide):
         p.font.size = Pt(14)
         p.font.bold = True
 
-        # Insights box
+        # Insights box - extended width to be closer to logos/table
         insights_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(3.2),
-            Inches(4.5), Inches(1.6)  # Reduced height to make room for Top Brand Target
+            Inches(5.5), Inches(1.6)  # Extended width from 4.5 to 5.5
         )
 
         text_frame = insights_box.text_frame
         text_frame.word_wrap = True
 
-        # UPDATED: Format insight #2 with standardized text
+        # Get merchant insights
         merchant_insights = results.get('merchant_insights', [])
+        merchant_df, _ = results.get('merchant_stats', (pd.DataFrame(), []))
 
+        # Format insights based on reference image pattern
         for i, insight in enumerate(merchant_insights[:4]):
             p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
-
-            # Format insight #2 (index 1) with standardized format
-            if i == 1 and 'purchases per year' in insight.lower():
-                # Extract brand and number from insight for standardization
-                formatted_insight = self._format_insight_two(insight, team_short, category_name)
-                p.text = f"• {formatted_insight}"
-            else:
-                # Apply general formatting
-                formatted_insight = process_insight_text(insight)
-                p.text = f"• {formatted_insight}"
-
-            p.font.name = self.default_font  # Red Hat Display
-            p.font.size = Pt(10)
             p.line_spacing = 1.0
+
+            # Determine which type of insight this is and format accordingly
+            if i == 0:  # First insight - Highest % of Fans
+                # Add the label in bold
+                run1 = p.add_run()
+                run1.text = "• Highest % of Fans: "
+                run1.font.name = self.default_font
+                run1.font.size = Pt(11)  # Increased from 10 to match Top Brand Target
+                run1.font.bold = True
+
+                # Add the rest of the insight
+                run2 = p.add_run()
+                # Extract percentage and brand from data if available
+                if not merchant_df.empty:
+                    top_brand = merchant_df.iloc[0]['Brand']
+                    percent = merchant_df.iloc[0]['Percent of Fans Who Spend']
+                    formatted_percent = self._format_metric_value(percent)
+                    run2.text = f"{formatted_percent} of {team_name} fans spend at {top_brand}"
+                else:
+                    # Fallback to formatting the existing insight
+                    formatted_insight = process_insight_text(insight)
+                    run2.text = formatted_insight.replace("• ", "")
+                run2.font.name = self.default_font
+                run2.font.size = Pt(11)  # Match Top Brand Target font size
+                run2.font.bold = False
+
+            elif i == 1:  # Second insight - Most Purchases per Fan
+                # Add the label in bold
+                run1 = p.add_run()
+                run1.text = "• Most Purchases per Fan: "
+                run1.font.name = self.default_font
+                run1.font.size = Pt(11)
+                run1.font.bold = True
+
+                # Add the rest of the insight
+                run2 = p.add_run()
+                # Extract and format the purchases per year info
+                if 'purchases per year' in insight.lower():
+                    formatted_insight = self._format_insight_two(insight, team_short, category_name)
+                    # Remove the team name from start if it's there
+                    if formatted_insight.startswith(f"{team_short} fans"):
+                        formatted_insight = formatted_insight.replace(f"{team_short} fans", f"{team_short} fans", 1)
+                    run2.text = formatted_insight
+                else:
+                    formatted_insight = process_insight_text(insight)
+                    run2.text = formatted_insight.replace("• ", "")
+                run2.font.name = self.default_font
+                run2.font.size = Pt(11)
+                run2.font.bold = False
+
+            elif i == 2:  # Third insight - Highest Spend per Fan
+                # Add the label in bold
+                run1 = p.add_run()
+                run1.text = "• Highest Spend per Fan: "
+                run1.font.name = self.default_font
+                run1.font.size = Pt(11)
+                run1.font.bold = True
+
+                # Add the rest of the insight
+                run2 = p.add_run()
+                # Format the spend per fan info
+                formatted_insight = process_insight_text(insight)
+                # Extract just the relevant part after the bullet
+                insight_text = formatted_insight.replace("• ", "")
+                # Add [Team] notation if team name is mentioned
+                if team_name in insight_text:
+                    insight_text = insight_text.replace(f"{team_name} fans", f"{team_short} Fans")
+                run2.text = insight_text
+                run2.font.name = self.default_font
+                run2.font.size = Pt(11)
+                run2.font.bold = False
+
+            elif i == 3:  # Fourth insight - NBA/League comparison
+                # Add the label in bold
+                run1 = p.add_run()
+                run1.text = f"• Highest % of Fans Index vs NBA: "
+                run1.font.name = self.default_font
+                run1.font.size = Pt(11)
+                run1.font.bold = True
+
+                # Add the rest of the insight
+                run2 = p.add_run()
+                # Format the NBA comparison
+                formatted_insight = process_insight_text(insight)
+                insight_text = formatted_insight.replace("• ", "")
+                # Simplify the comparison text
+                if "more likely" in insight_text.lower():
+                    # Extract the percentage and brand info
+                    import re
+                    match = re.search(r'(\d+)%\s+more\s+likely.*?(?:on|at)\s+([^"]+?)(?:\s+than|\s+when)', insight_text,
+                                      re.IGNORECASE)
+                    if match:
+                        percent = match.group(1)
+                        brand = match.group(2).strip()
+                        run2.text = f"{team_short} Fans are {percent}% more likely to spend on {brand} than the average NBA fan"
+                    else:
+                        run2.text = insight_text
+                else:
+                    run2.text = insight_text
+                run2.font.name = self.default_font
+                run2.font.size = Pt(11)
+                run2.font.bold = False
 
     def _add_brand_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
         """Add brand ranking table - adjusted for 16:9 with reduced width"""
@@ -826,10 +917,9 @@ class CategorySlide(BaseSlide):
         # Create table - adjusted position and size for 16:9
         rows = min(len(merchant_df) + 1, 6)  # Header + max 5 brands
         cols = 5
-        left = Inches(6.8)  # Keep same left position
-        top = Inches(2.8)
+        left = Inches(6.6)  # Keep same left position
+        top = Inches(3.0)  # Shifted down from 2.8 to 3.3
         width = Inches(6.0)  # REDUCED from 7.0 to 6.0
-
 
         # Calculate height with proper row spacing
         row_height = Inches(0.6)  # or whatever you're using
@@ -892,7 +982,7 @@ class CategorySlide(BaseSlide):
         # Recommendation content
         rec_box = slide.shapes.add_textbox(
             Inches(0.7), Inches(5.4),
-            Inches(4.5), Inches(1.2)
+            Inches(5.5), Inches(1.2)  # Extended width to match insights box
         )
 
         text_frame = rec_box.text_frame
@@ -914,12 +1004,15 @@ class CategorySlide(BaseSlide):
         p1.font.size = Pt(11)
         p1.line_spacing = 1.2
 
-        # Second bullet - standardized explanation
+        # Second bullet - standardized explanation with proper indentation
         p2 = text_frame.add_paragraph()
         p2.text = "• The composite index indicates a brand with significant likelihood for more fans to be spending more frequently, and at a higher spend per fan vs. other brands"
         p2.font.name = self.default_font
         p2.font.size = Pt(11)
         p2.line_spacing = 1.2
+        # Set both left indent and first line indent to ensure entire paragraph is indented
+        p2.left_indent = Inches(0.25)  # Indent entire paragraph
+        p2.first_line_indent = Inches(0)  # No additional indent for first line
 
     def _format_header_cell(self, cell, small: bool = False):
         """Format table header cell"""
@@ -993,16 +1086,19 @@ class CategorySlide(BaseSlide):
         return formatted_value
 
     def _format_insight_two(self, insight: str, team_short: str, category_name: str) -> str:
-        """Format insight #2 with standardized format"""
+        """Format insight #2 with standardized format for Most Purchases per Fan"""
         # Extract relevant information using regex
 
         # Try to extract brand name and number of purchases
-        brand_match = re.search(r'at ([A-Z\s&\']+)', insight, re.IGNORECASE)
+        brand_match = re.search(r'at\s+([A-Za-z0-9\s&\'-]+?)(?:\s+than|\s+compared|$)', insight, re.IGNORECASE)
         purchases_match = re.search(r'(\d+)\s+purchases?\s+per\s+year', insight, re.IGNORECASE)
 
         if brand_match and purchases_match:
-            brand = brand_match.group(1)
+            brand = brand_match.group(1).strip()
             purchases = purchases_match.group(1)
+
+            # Remove trailing punctuation from brand name if any
+            brand = brand.rstrip('.,;:')
 
             return f"{team_short} fans make an average of {purchases} purchases per year at {brand}—more than any other top {category_name} brand"
 

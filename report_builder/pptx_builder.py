@@ -368,7 +368,7 @@ class PowerPointBuilder:
                 team_p.font.name = self.presentation_font
                 team_p.font.size = Pt(14)
                 team_p.font.bold = True
-                team_p.font.color.rgb = RGBColor(64, 64, 64)  # Dark gray
+                team_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
 
                 # Header title text (right side)
                 title_text = slide.shapes.add_textbox(
@@ -380,7 +380,7 @@ class PowerPointBuilder:
                 title_p.font.name = self.presentation_font
                 title_p.font.size = Pt(14)
                 title_p.alignment = PP_ALIGN.RIGHT
-                title_p.font.color.rgb = RGBColor(64, 64, 64)  # Dark gray
+                title_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
 
             # Track the slide
             self.slides_created.append(slide_name)

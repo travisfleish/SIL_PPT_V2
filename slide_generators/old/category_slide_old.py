@@ -329,36 +329,51 @@ class CategorySlide(BaseSlide):
         p.font.size = Pt(14)
 
     def _add_title(self, slide, title: str):
-        """Add main slide title with two-line format"""
+        """Add main slide title with appropriate width and automatic line wrapping"""
+
+        # Determine width based on title type
+        if "Top" in title and "Brands for" in title:
+            # Brand slide - title should end where brand table starts
+            width = Inches(5.333)  # Table starts at 5.833, so stop just before
+        elif "Category Analysis:" in title:
+            # Category slide - title should end where category table starts
+            width = Inches(5.7)  # Table starts at 6.2, so stop just before
+        else:
+            # Default width for other slides
+            width = Inches(12.333)
+
+        # Make text box taller to accommodate potential second line
         title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(1.4),  # Moved down from 0.6
-            Inches(12.333), Inches(1.0)  # Increased height for two lines
+            Inches(0.5), Inches(1.4),
+            width, Inches(1.8)  # Increased height from 1.0 to 1.8 for two lines
         )
+
+        # Configure text frame for proper text wrapping
+        text_frame = title_box.text_frame
+        text_frame.word_wrap = True  # This enables automatic line wrapping
+        text_frame.auto_size = MSO_AUTO_SIZE.NONE  # Prevent box from auto-resizing
+
+        # Remove margins to maximize text space
+        text_frame.margin_left = Inches(0)
+        text_frame.margin_right = Inches(0)
+        text_frame.margin_top = Inches(0)
+        text_frame.margin_bottom = Inches(0)
 
         # Split title for category slides
         if "Category Analysis:" in title:
-            # Extract category name after the colon
             category_name = title.replace("Category Analysis: ", "")
-            # Set text with line break
-            title_box.text_frame.text = f"Category Analysis:\n{category_name}"
+            text_frame.text = f"Category Analysis:\n{category_name}"
         else:
-            title_box.text_frame.text = title
+            text_frame.text = title
 
-        p = title_box.text_frame.paragraphs[0]
-        p.font.name = self.default_font  # Red Hat Display
-        p.font.size = Pt(32)
-        p.font.bold = True
-        p.font.italic = True
-        p.font.color.rgb = RGBColor(0, 0, 0)
-
-        # Format second line if it exists
-        if len(title_box.text_frame.paragraphs) > 1:
-            p2 = title_box.text_frame.paragraphs[1]
-            p2.font.name = self.default_font
-            p2.font.size = Pt(32)
-            p2.font.bold = True
-            p2.font.italic = True
-            p2.font.color.rgb = RGBColor(0, 0, 0)
+        # Format all paragraphs (handles both single and multi-line titles)
+        for paragraph in text_frame.paragraphs:
+            paragraph.font.name = self.default_font
+            paragraph.font.size = Pt(32)
+            paragraph.font.bold = True
+            paragraph.font.italic = True
+            paragraph.font.color.rgb = RGBColor(0, 0, 0)
+            paragraph.line_spacing = 1.0  # Adjust line spacing if needed
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
         """Add category insights section - UPDATED WITH ALL FORMATTING FIXES"""
@@ -457,10 +472,10 @@ class CategorySlide(BaseSlide):
         table = table_shape.table
 
         # Set column widths - better distribution
-        table.columns[0].width = Inches(1.3)  # Category
-        table.columns[1].width = Inches(1.6)  # Percent of Fans
-        table.columns[2].width = Inches(1.8)  # How likely
-        table.columns[3].width = Inches(1.7)  # Purchases
+        table.columns[0].width = Inches(1.6)  # Category
+        table.columns[1].width = Inches(1.5)  # Percent of Fans
+        table.columns[2].width = Inches(1.7)  # How likely
+        table.columns[3].width = Inches(1.6)  # Purchases
 
         # Header row - UPDATED with "local gen pop"
         headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
@@ -606,22 +621,33 @@ class CategorySlide(BaseSlide):
         return False
 
     def _add_brand_logos(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add brand logos from local files with fallback to generated logos"""
+        """Add brand logos aligned with the brand table below"""
         merchant_df, top_merchants = merchant_stats
 
         if merchant_df.empty:
             return
 
-        # Position for logos - adjusted spacing for 16:9
-        start_x = Inches(0.5)
-        y = Inches(1.2)
-        spacing = Inches(2.4)  # Wider spacing for 16:9
+        # Align with brand table dimensions - MATCH THE TABLE POSITION AND WIDTH
+        table_left = Inches(6.8)  # Updated to match table left position
+        table_width = Inches(6.0)  # Updated to match table width
+
+        # Calculate logo positions
+        num_logos = min(5, len(merchant_df))
         logo_size = (120, 120)  # Size in pixels for logo processing
-        display_size = Inches(1.2)  # Size on slide
+        display_size = Inches(1.0)  # Logo display size
+
+        # Calculate spacing between logos
+        # Account for logo width when calculating available space
+        available_space = table_width - (display_size * num_logos)
+        spacing_between = available_space / (num_logos - 1) if num_logos > 1 else 0
+
+        # Position for logos - above the table
+        y = Inches(1.3)  # Keep existing y position
 
         # Add logos for top 5 brands
-        for i in range(min(5, len(merchant_df))):
-            x = start_x + (i * spacing)
+        for i in range(num_logos):
+            # Calculate x position for each logo
+            x = table_left + (i * (display_size + spacing_between))
             merchant_name = merchant_df.iloc[i]['Brand']
 
             # Try to get logo from LogoManager
@@ -645,7 +671,6 @@ class CategorySlide(BaseSlide):
 
             if has_colored_bg:
                 # For colored background logos, create a circular mask to ensure clean edges
-                # Create a new image with transparent background
                 masked_logo = Image.new('RGBA', logo_size, (0, 0, 0, 0))
 
                 # Create circular mask
@@ -675,7 +700,6 @@ class CategorySlide(BaseSlide):
 
             else:
                 # For white/transparent background logos, add circle border
-                # First, add a circular background/border
                 circle = slide.shapes.add_shape(
                     MSO_SHAPE.OVAL,
                     x, y,
@@ -687,7 +711,7 @@ class CategorySlide(BaseSlide):
                 circle.line.width = Pt(1)
 
                 # Make the logo slightly smaller to fit within the circle border
-                logo_display_size = Inches(1.1)  # Slightly smaller than the circle
+                logo_display_size = Inches(0.9)  # Slightly smaller than the circle
                 offset = (display_size - logo_display_size) / 2  # Center the logo
 
                 # Convert PIL Image to bytes for PowerPoint
@@ -699,8 +723,8 @@ class CategorySlide(BaseSlide):
                 try:
                     pic = slide.shapes.add_picture(
                         image_stream,
-                        x + offset,  # Offset to center horizontally
-                        y + offset,  # Offset to center vertically
+                        x + offset,
+                        y + offset,
                         logo_display_size, logo_display_size
                     )
 
@@ -712,16 +736,17 @@ class CategorySlide(BaseSlide):
                     logger.error(f"Failed to add logo for {merchant_name}: {e}")
                     self._add_numbered_circle_fallback(slide, i + 1, x, y, display_size)
 
-            # Add brand name below logo
-            text_box = slide.shapes.add_textbox(
-                x - Inches(0.3), y + display_size + Inches(0.1),
-                display_size + Inches(0.6), Inches(0.4)
+            # Add ranking number below each logo
+            number_box = slide.shapes.add_textbox(
+                x, y + display_size + Inches(0.05),
+                display_size, Inches(0.3)
             )
-            text_box.text_frame.text = merchant_name
-            p = text_box.text_frame.paragraphs[0]
+            number_box.text_frame.text = str(i + 1)
+            p = number_box.text_frame.paragraphs[0]
             p.font.name = self.default_font
             p.alignment = PP_ALIGN.CENTER
-            p.font.size = Pt(10)
+            p.font.size = Pt(24)
+            p.font.bold = True
             p.font.color.rgb = RGBColor(100, 100, 100)
 
     def _add_numbered_circle_fallback(self, slide, number: int, x: float, y: float, size: float):
@@ -792,7 +817,7 @@ class CategorySlide(BaseSlide):
             p.line_spacing = 1.0
 
     def _add_brand_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
-        """Add brand ranking table - adjusted for 16:9 with formatting fixes"""
+        """Add brand ranking table - adjusted for 16:9 with reduced width"""
         merchant_df, _ = merchant_stats
 
         if merchant_df.empty:
@@ -801,12 +826,24 @@ class CategorySlide(BaseSlide):
         # Create table - adjusted position and size for 16:9
         rows = min(len(merchant_df) + 1, 6)  # Header + max 5 brands
         cols = 5
-        left = Inches(5.833)  # Moved right for 16:9
-        top = Inches(3.0)
-        width = Inches(7.0)  # Wider for 16:9
-        height = Inches(0.35 * rows)
+        left = Inches(6.8)  # Keep same left position
+        top = Inches(3.1)
+        width = Inches(6.0)  # REDUCED from 7.0 to 6.0
 
-        table = slide.shapes.add_table(rows, cols, left, top, width, height).table
+
+        # Calculate height with proper row spacing
+        row_height = Inches(0.6)  # or whatever you're using
+        height = row_height * rows
+
+        table_shape = slide.shapes.add_table(rows, cols, left, top, width, height)
+        table = table_shape.table
+
+        # ADJUSTED column widths proportionally for smaller table
+        table.columns[0].width = Inches(1.0)  # Rank (reduced from 1.3)
+        table.columns[1].width = Inches(1.4)  # Brand (reduced from 1.6)
+        table.columns[2].width = Inches(1.2)  # Percent of Fans (reduced from 1.5)
+        table.columns[3].width = Inches(1.2)  # How likely (reduced from 1.7)
+        table.columns[4].width = Inches(1.2)  # Purchases (reduced from 1.6)
 
         # Headers
         headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand',
@@ -922,7 +959,7 @@ class CategorySlide(BaseSlide):
         # Format all paragraphs in the cell
         for paragraph in text_frame.paragraphs:
             paragraph.font.name = self.default_font  # Red Hat Display
-            paragraph.font.size = Pt(8) if small else Pt(12)  # Consistent data font size
+            paragraph.font.size = Pt(12) if small else Pt(12)  # Consistent data font size
             paragraph.alignment = PP_ALIGN.CENTER
 
             # UPDATED color coding with EQUAL handling
