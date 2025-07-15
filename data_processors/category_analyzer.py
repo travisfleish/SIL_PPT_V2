@@ -4,6 +4,7 @@ Category analyzer that processes spending data by category
 Generates insights and recommendations for sponsorship opportunities
 ENHANCED with OpenAI-powered merchant name standardization
 UPDATED to use allowed_for_custom list for custom category selection
+UPDATED with consistent column names for slide compatibility
 """
 
 import pandas as pd
@@ -378,10 +379,10 @@ class CategoryAnalyzer:
             results.append({
                 'Subcategory': subcategory_name,
                 'Percent of Fans Who Spend': f"{percent_fans:.0f}%",
-                'How likely fans are to spend vs. gen pop':
+                'Likelihood to spend (vs. Local Gen Pop)':  # UPDATED to match slide header
                     f"{abs(percent_likely):.0f}% {'More' if percent_likely > 0 else 'Less'}",
-                'Purchases per fan vs. gen pop':
-                    f"{abs(percent_purch):.0f}% {'more' if percent_purch > 0 else 'Less'}"
+                'Purchases Per Fan (vs. Gen Pop)':
+                    f"{abs(percent_purch):.0f}% {'More' if percent_purch > 0 else 'Less'}"
             })
 
         return pd.DataFrame(results)
@@ -427,7 +428,7 @@ class CategoryAnalyzer:
                 results.append({
                     'Brand': merchant,  # Now using standardized names
                     'Percent of Fans Who Spend': f"{percent_fans:.1f}%",
-                    'How likely fans are to spend vs. gen pop':
+                    'Likelihood to spend (vs. Local Gen Pop)':  # UPDATED to match slide header
                         f"{abs(percent_likely):.0f}% {'More' if percent_likely >= 0 else 'Less'}",
                     'Purchases Per Fan (vs. Gen Pop)':
                         f"{abs(ppc_diff):.0f}% {'More' if ppc_diff >= 0 else 'Less'}"
@@ -439,7 +440,7 @@ class CategoryAnalyzer:
 
             # Reorder columns
             cols = ['Rank', 'Brand', 'Percent of Fans Who Spend',
-                    'How likely fans are to spend vs. gen pop',
+                    'Likelihood to spend (vs. Local Gen Pop)',  # UPDATED
                     'Purchases Per Fan (vs. Gen Pop)']
 
             return merchant_df[cols], top_5_merchants
@@ -456,14 +457,14 @@ class CategoryAnalyzer:
 
         # 1. Likelihood to spend
         insights.append(
-            f"{self.team_short} Fans are {abs(metrics.percent_likely):.0f}% "
+            f"{self.team_short} fans are {abs(metrics.percent_likely):.0f}% "
             f"{'MORE' if metrics.percent_likely > 0 else 'LESS'} likely to spend on "
             f"{category_config['display_name']} than the {self.comparison_pop}"
         )
 
         # 2. Purchase frequency
         insights.append(
-            f"{self.team_short} Fans make an average of {abs(metrics.percent_purchases):.0f}% "
+            f"{self.team_short} fans make an average of {abs(metrics.percent_purchases):.0f}% "
             f"{'more' if metrics.percent_purchases > 0 else 'fewer'} purchases per fan on "
             f"{category_config['display_name']} than the {self.comparison_pop}"
         )
@@ -485,7 +486,8 @@ class CategoryAnalyzer:
 
     def _add_subcategory_insight(self, insights: List[str], top_sub: pd.Series):
         """Add subcategory insight with validation"""
-        likelihood_text = top_sub['How likely fans are to spend vs. gen pop']
+        # UPDATED to use new column name
+        likelihood_text = top_sub['Likelihood to spend (vs. Local Gen Pop)']
 
         if '% More' in likelihood_text:
             try:
@@ -498,12 +500,12 @@ class CategoryAnalyzer:
                     multiplier = round(perc_index / 100, 1)  # 430 / 100 = 4.3X
 
                     insights.append(
-                        f"{self.team_short} Fans are more than {multiplier}X more likely "
+                        f"{self.team_short} fans are more than {multiplier}X more likely "
                         f"to spend on {top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
                 else:
                     insights.append(
-                        f"{self.team_short} Fans are {likelihood_text} likely to spend on "
+                        f"{self.team_short} fans are {likelihood_text} likely to spend on "
                         f"{top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
             except (ValueError, IndexError) as e:
@@ -657,8 +659,7 @@ class CategoryAnalyzer:
 
             insights.append(
                 f"{self.team_name} fans make an average of {highest_ppc_merchant['ppc']:.0f} "
-                f"purchases per year at {standardized_name}—more than any other "
-                f"top {merchant_table.iloc[0]['Brand'].split()[0]} brand"
+                f"purchases per year at {standardized_name}"
             )
 
         # 3. Find merchant with highest SPC - USE STANDARDIZED NAMES CONSISTENTLY
@@ -690,7 +691,7 @@ class CategoryAnalyzer:
 
             insights.append(
                 f"{self.team_name} fans are {best_nba_merchant['index_diff']:.0f}% more likely "
-                f"to spend on {standardized_name} than {self.league} Fans"
+                f"to spend on {standardized_name} than {self.league} fans"
             )
 
         return insights

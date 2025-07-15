@@ -49,26 +49,26 @@ def create_mock_category_data():
         {
             'Subcategory': 'Fast Food',
             'Percent of Fans Who Spend': '72%',
-            'How likely fans are to spend vs. gen pop': '135% More',
-            'Purchases per fan vs. gen pop': '98% More'
+            'Likelihood to spend (vs. Local Gen Pop)': '135% More',  # UPDATED column name
+            'Purchases Per Fan (vs. Gen Pop)': '98% More'
         },
         {
             'Subcategory': 'Fast Casual Dining',
             'Percent of Fans Who Spend': '65%',
-            'How likely fans are to spend vs. gen pop': '118% More',
-            'Purchases per fan vs. gen pop': '76% More'
+            'Likelihood to spend (vs. Local Gen Pop)': '118% More',  # UPDATED column name
+            'Purchases Per Fan (vs. Gen Pop)': '76% More'
         },
         {
             'Subcategory': 'Full Service Restaurants',
             'Percent of Fans Who Spend': '58%',
-            'How likely fans are to spend vs. gen pop': '95% More',
-            'Purchases per fan vs. gen pop': '62% More'
+            'Likelihood to spend (vs. Local Gen Pop)': '95% More',  # UPDATED column name
+            'Purchases Per Fan (vs. Gen Pop)': '62% More'
         },
         {
             'Subcategory': 'Coffee & Tea',
             'Percent of Fans Who Spend': '52%',
-            'How likely fans are to spend vs. gen pop': '88% More',
-            'Purchases per fan vs. gen pop': '54% More'
+            'Likelihood to spend (vs. Local Gen Pop)': '88% More',  # UPDATED column name
+            'Purchases Per Fan (vs. Gen Pop)': '54% More'
         }
     ]
     subcategory_stats = pd.DataFrame(subcategory_data)
@@ -88,35 +88,35 @@ def create_mock_category_data():
             'Rank': 1,
             'Brand': 'Chick-fil-A',
             'Percent of Fans Who Spend': '45.2%',
-            'How likely fans are to spend vs. gen pop': '156% More',
+            'Likelihood to spend (vs. Local Gen Pop)': '156% More',  # UPDATED column name
             'Purchases Per Fan (vs. Gen Pop)': '112% More'
         },
         {
             'Rank': 2,
             'Brand': 'In-N-Out Burger',
             'Percent of Fans Who Spend': '42.8%',
-            'How likely fans are to spend vs. gen pop': '148% More',
+            'Likelihood to spend (vs. Local Gen Pop)': '148% More',  # UPDATED column name
             'Purchases Per Fan (vs. Gen Pop)': '98% More'
         },
         {
             'Rank': 3,
             'Brand': 'Chipotle',
             'Percent of Fans Who Spend': '38.5%',
-            'How likely fans are to spend vs. gen pop': '135% More',
+            'Likelihood to spend (vs. Local Gen Pop)': '135% More',  # UPDATED column name
             'Purchases Per Fan (vs. Gen Pop)': '87% More'
         },
         {
             'Rank': 4,
             'Brand': 'Starbucks',
             'Percent of Fans Who Spend': '36.2%',
-            'How likely fans are to spend vs. gen pop': '128% More',
+            'Likelihood to spend (vs. Local Gen Pop)': '128% More',  # UPDATED column name
             'Purchases Per Fan (vs. Gen Pop)': '92% More'
         },
         {
             'Rank': 5,
             'Brand': "McDonald's",
             'Percent of Fans Who Spend': '34.7%',
-            'How likely fans are to spend vs. gen pop': '95% More',
+            'Likelihood to spend (vs. Local Gen Pop)': '95% More',  # UPDATED column name
             'Purchases Per Fan (vs. Gen Pop)': '68% More'
         }
     ]
@@ -281,7 +281,7 @@ def test_multiple_categories():
                 'Rank': j + 1,
                 'Brand': brand,
                 'Percent of Fans Who Spend': f"{45 - j * 2:.1f}%",
-                'How likely fans are to spend vs. gen pop': f"{150 - j * 10}% More",
+                'Likelihood to spend (vs. Local Gen Pop)': f"{150 - j * 10}% More",  # UPDATED column name
                 'Purchases Per Fan (vs. Gen Pop)': f"{110 - j * 8}% More"
             })
 

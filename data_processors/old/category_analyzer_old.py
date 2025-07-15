@@ -3,7 +3,7 @@
 Category analyzer that processes spending data by category
 Generates insights and recommendations for sponsorship opportunities
 ENHANCED with OpenAI-powered merchant name standardization
-FIXED: Ensures consistent standardized names throughout all insights
+UPDATED to use allowed_for_custom list for custom category selection
 """
 
 import pandas as pd
@@ -110,6 +110,7 @@ class CategoryAnalyzer:
 
         self.categories = self.config['categories']
         self.excluded_custom = self.config['excluded_from_custom']
+        self.allowed_custom = self.config.get('allowed_for_custom', [])  # NEW: Get allowed list
 
         # Validation thresholds
         self.max_reasonable_index = 1000  # 1000% = 10x more likely
@@ -455,14 +456,14 @@ class CategoryAnalyzer:
 
         # 1. Likelihood to spend
         insights.append(
-            f"{self.team_short} Fans are {abs(metrics.percent_likely):.0f}% "
+            f"{self.team_short} fans are {abs(metrics.percent_likely):.0f}% "
             f"{'MORE' if metrics.percent_likely > 0 else 'LESS'} likely to spend on "
             f"{category_config['display_name']} than the {self.comparison_pop}"
         )
 
         # 2. Purchase frequency
         insights.append(
-            f"{self.team_short} Fans make an average of {abs(metrics.percent_purchases):.0f}% "
+            f"{self.team_short} fans make an average of {abs(metrics.percent_purchases):.0f}% "
             f"{'more' if metrics.percent_purchases > 0 else 'fewer'} purchases per fan on "
             f"{category_config['display_name']} than the {self.comparison_pop}"
         )
@@ -497,7 +498,7 @@ class CategoryAnalyzer:
                     multiplier = round(perc_index / 100, 1)  # 430 / 100 = 4.3X
 
                     insights.append(
-                        f"{self.team_short} Fans are more than {multiplier}X more likely "
+                        f"{self.team_short} fans are more than {multiplier}X more likely "
                         f"to spend on {top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
                 else:
@@ -656,8 +657,7 @@ class CategoryAnalyzer:
 
             insights.append(
                 f"{self.team_name} fans make an average of {highest_ppc_merchant['ppc']:.0f} "
-                f"purchases per year at {standardized_name}—more than any other "
-                f"top {merchant_table.iloc[0]['Brand'].split()[0]} brand"
+                f"purchases per year at {standardized_name}"
             )
 
         # 3. Find merchant with highest SPC - USE STANDARDIZED NAMES CONSISTENTLY
@@ -689,7 +689,7 @@ class CategoryAnalyzer:
 
             insights.append(
                 f"{self.team_name} fans are {best_nba_merchant['index_diff']:.0f}% more likely "
-                f"to spend on {standardized_name} than {self.league} Fans"
+                f"to spend on {standardized_name} than {self.league} fans"
             )
 
         return insights
@@ -871,6 +871,7 @@ class CategoryAnalyzer:
                               existing_categories: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
         Get custom categories based on composite index
+        UPDATED to use allowed_for_custom list
 
         Args:
             category_df: DataFrame from CATEGORY_INDEXING_ALL_TIME view
@@ -902,7 +903,7 @@ class CategoryAnalyzer:
             logger.warning("No category data found for custom category selection")
             return []
 
-        # Exclude already included categories
+        # Get category names already used in fixed categories
         category_names_to_exclude = []
         for cat_key in existing_categories:
             if cat_key in self.categories:
@@ -910,17 +911,32 @@ class CategoryAnalyzer:
                     self.categories[cat_key].get('category_names_in_data', [])
                 )
 
-        # Also exclude categories from the excluded list
-        category_names_to_exclude.extend(self.excluded_custom)
-
-        # Filter out excluded categories
+        # UPDATED LOGIC: Filter using BOTH allowed and excluded lists
+        # Start with allowed categories
         available_categories = team_data[
-            ~team_data['CATEGORY'].isin(category_names_to_exclude)
+            team_data['CATEGORY'].isin(self.allowed_custom)
+        ]
+
+        # Then remove excluded categories
+        available_categories = available_categories[
+            ~available_categories['CATEGORY'].isin(self.excluded_custom)
+        ]
+
+        # Finally remove already-used fixed categories
+        available_categories = available_categories[
+            ~available_categories['CATEGORY'].isin(category_names_to_exclude)
         ]
 
         if available_categories.empty:
             logger.warning("No available categories after filtering")
             return []
+
+        # Log filtering results for debugging
+        logger.info(f"Custom category selection:")
+        logger.info(f"  - Started with {len(team_data)} categories meeting audience threshold")
+        logger.info(
+            f"  - After allowed list filter: {len(team_data[team_data['CATEGORY'].isin(self.allowed_custom)])} categories")
+        logger.info(f"  - After exclusion filter: {len(available_categories)} categories available")
 
         # Get top N by composite index
         top_categories = available_categories.nlargest(n_categories, 'COMPOSITE_INDEX')
@@ -943,7 +959,7 @@ class CategoryAnalyzer:
 
             custom_categories.append(category_info)
 
-        logger.info(f"Selected {len(custom_categories)} custom categories")
+        logger.info(f"Selected {len(custom_categories)} custom categories:")
         for cat in custom_categories:
             logger.info(f"  - {cat['display_name']} (composite index: {cat['composite_index']:.1f})")
 
@@ -957,7 +973,7 @@ class CategoryAnalyzer:
             category_name: Name of the category from the data
 
         Returns:
-            Category configuration similar to what's in categories.yaml
+            Category configuration similar to what's in category_config.yaml
         """
         # Generate a reasonable slide title
         slide_title = f"{category_name} Sponsor Analysis"

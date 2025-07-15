@@ -126,6 +126,16 @@ def remove_unnecessary_comparisons(text):
     return text
 
 
+def lowercase_fan_references(text):
+    """Convert 'Fan' or 'Fans' to lowercase except at start of sentences"""
+    # Pattern to match 'fan' or 'fans' not at the start of a sentence
+    # Negative lookbehind for sentence start indicators
+    text = re.sub(r'(?<![.!?]\s)(?<![.!?]\s\s)(?<!^)(?<!^\s)\b(Fan|Fans)\b',
+                  lambda m: m.group(1).lower(), text)
+
+    return text
+
+
 def process_insight_text_enhanced(insight_text: str, category_name: str = "") -> str:
     """Enhanced process insight text with all formatting rules including subcategory fixes"""
     # Apply all formatting rules
@@ -141,6 +151,9 @@ def process_insight_text_enhanced(insight_text: str, category_name: str = "") ->
 
     # Remove unnecessary comparison language
     text = remove_unnecessary_comparisons(text)
+
+    # Convert Fan/Fans to lowercase (except at sentence start)
+    text = lowercase_fan_references(text)
 
     # Format any embedded percentages and currency
     def format_pct_match(match):
@@ -477,9 +490,9 @@ class CategorySlide(BaseSlide):
         table.columns[2].width = Inches(1.7)  # How likely
         table.columns[3].width = Inches(1.6)  # Purchases
 
-        # Header row - UPDATED with "local gen pop"
-        headers = ['Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
-                   'How many more purchases\nper fan vs. local gen pop']
+        # Header row - UPDATED with consistent header
+        headers = ['Category', 'Percent of Fans\nWho Spend', 'Likelihood to Spend\n(vs. Local Gen Pop)',
+                   'Purchases Per Fan\n(vs. Local Gen Pop)']
 
         for i, header in enumerate(headers):
             cell = table.cell(0, i)
@@ -525,9 +538,9 @@ class CategorySlide(BaseSlide):
         table.columns[2].width = Inches(1.7)  # How likely
         table.columns[3].width = Inches(1.6)  # Purchases
 
-        # Headers - UPDATED with "local gen pop"
-        headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'How likely fans are to\nspend vs. local gen pop',
-                   'How many more purchases\nper fan vs. local gen pop']
+        # Headers - UPDATED with consistent header
+        headers = ['Sub-Category', 'Percent of Fans\nWho Spend', 'Likelihood to Spend\n(vs. Local Gen Pop)',
+                   'Purchases Per Fan\n(vs. Local Gen Pop)']
 
         for i, header in enumerate(headers):
             cell = table.cell(0, i)
@@ -545,8 +558,8 @@ class CategorySlide(BaseSlide):
 
             # Apply formatting to metric values
             table.cell(row_idx, 1).text = self._format_metric_value(row['Percent of Fans Who Spend'])
-            table.cell(row_idx, 2).text = self._format_metric_value(row['How likely fans are to spend vs. gen pop'])
-            table.cell(row_idx, 3).text = self._format_metric_value(row['Purchases per fan vs. gen pop'])
+            table.cell(row_idx, 2).text = self._format_metric_value(row.get('Likelihood to spend (vs. Local Gen Pop)', row.get('Likelihood to spend vs. gen pop', '')))
+            table.cell(row_idx, 3).text = self._format_metric_value(row.get('Purchases Per Fan (vs. Gen Pop)', ''))
 
             # Format cells
             for col in range(4):
@@ -870,7 +883,7 @@ class CategorySlide(BaseSlide):
                 insight_text = formatted_insight.replace("• ", "")
                 # Add [Team] notation if team name is mentioned
                 if team_name in insight_text:
-                    insight_text = insight_text.replace(f"{team_name} fans", f"{team_short} Fans")
+                    insight_text = insight_text.replace(f"{team_name} fans", f"{team_short} fans")
                 run2.text = insight_text
                 run2.font.name = self.default_font
                 run2.font.size = Pt(11)
@@ -898,7 +911,7 @@ class CategorySlide(BaseSlide):
                     if match:
                         percent = match.group(1)
                         brand = match.group(2).strip()
-                        run2.text = f"{team_short} Fans are {percent}% more likely to spend on {brand} than the average NBA fan"
+                        run2.text = f"{team_short} fans are {percent}% more likely to spend on {brand} than the average NBA fan"
                     else:
                         run2.text = insight_text
                 else:
@@ -935,11 +948,11 @@ class CategorySlide(BaseSlide):
         table.columns[3].width = Inches(1.2)  # How likely (reduced from 1.7)
         table.columns[4].width = Inches(1.2)  # Purchases (reduced from 1.6)
 
-        # Headers
+        # Headers - UPDATED with consistent header
         headers = ['Rank (by\npercent of\nfans who\nspend)', 'Brand',
                    'Percent of\nFans Who\nSpend',
-                   'How likely\nfans are to\nspend vs.\nlocal gen pop',
-                   'Purchases\nPer Fan\n(vs. Local\nGen Pop)']
+                   'Likelihood to Spend\n(vs. Local Gen Pop)',
+                   'Purchases Per Fan\n(vs. Local Gen Pop)']
 
         for i, header in enumerate(headers):
             cell = table.cell(0, i)
@@ -956,8 +969,8 @@ class CategorySlide(BaseSlide):
 
             # Apply formatting to metric values
             table.cell(row_idx, 2).text = self._format_metric_value(row['Percent of Fans Who Spend'])
-            table.cell(row_idx, 3).text = self._format_metric_value(row['How likely fans are to spend vs. gen pop'])
-            table.cell(row_idx, 4).text = self._format_metric_value(row['Purchases Per Fan (vs. Gen Pop)'])
+            table.cell(row_idx, 3).text = self._format_metric_value(row.get('Likelihood to spend (vs. Local Gen Pop)', row.get('How likely fans are to spend vs. gen pop', '')))
+            table.cell(row_idx, 4).text = self._format_metric_value(row.get('Purchases Per Fan (vs. Gen Pop)', ''))
 
             # Format cells
             for col in range(5):
@@ -1100,7 +1113,7 @@ class CategorySlide(BaseSlide):
             # Remove trailing punctuation from brand name if any
             brand = brand.rstrip('.,;:')
 
-            return f"{team_short} fans make an average of {purchases} purchases per year at {brand}—more than any other top {category_name} brand"
+            return f"{team_short} fans make an average of {purchases} purchases per year at {brand}"
 
         # Fallback to original insight with general formatting
         return process_insight_text(insight)
