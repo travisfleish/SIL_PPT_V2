@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Test script for Fan Wheel visualization with molly.png logo
-Tests various scenarios including logo loading, data generation, and error handling
+Standalone test script for Fan Wheel visualization
+Can be run from anywhere - automatically sets up paths correctly
 """
 
+import os
 import pandas as pd
 from pathlib import Path
 import logging
@@ -11,12 +12,30 @@ import sys
 from PIL import Image
 import numpy as np
 
-# Add project root to path if needed
-project_root = Path(__file__).parent
-if project_root not in sys.path:
+# First, find and set up the project root
+script_path = Path(__file__).resolve()
+
+# Try to find PPT_Generator_SIL in the path
+project_root = None
+for parent in script_path.parents:
+    if parent.name == 'PPT_Generator_SIL':
+        project_root = parent
+        break
+
+if project_root is None:
+    print("Error: Could not find PPT_Generator_SIL project root")
+    sys.exit(1)
+
+# Change to project root directory and add to path
+os.chdir(project_root)
+if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from visualizations.fan_wheel import FanWheel, LogoManager
+print(f"Working from project root: {project_root}")
+
+# Now we can import properly
+from visualizations.fan_wheel import FanWheel
+from utils.logo_manager import LogoManager
 
 # Configure logging
 logging.basicConfig(
@@ -31,8 +50,8 @@ def generate_test_data():
     test_data = pd.DataFrame([
         {
             'COMMUNITY': 'Live Entertainment Seekers',
-            'MERCHANT': 'Southwest',
-            'behavior': 'Flys with\nSouthwest',
+            'MERCHANT': "Dave & Buster's",
+            'behavior': "Games at\nDave &\nBuster's",
             'PERC_INDEX': 571
         },
         {
@@ -43,8 +62,8 @@ def generate_test_data():
         },
         {
             'COMMUNITY': 'Travelers',
-            'MERCHANT': 'Ulta',
-            'behavior': 'Beauty at\nUlta',
+            'MERCHANT': 'Southwest',
+            'behavior': 'Flys with\nSouthwest',
             'PERC_INDEX': 462
         },
         {
@@ -55,8 +74,8 @@ def generate_test_data():
         },
         {
             'COMMUNITY': 'Beauty Enthusiasts',
-            'MERCHANT': 'Klarna',
-            'behavior': 'Pays\nwith\nKlarna',
+            'MERCHANT': "O'Reilly Auto Parts",
+            'behavior': "Auto parts\nat O'Reilly",
             'PERC_INDEX': 445
         },
         {
@@ -131,11 +150,12 @@ def test_logo_loading():
     """Test logo loading functionality"""
     print("\n=== Test 2: Logo Loading ===")
 
-    # Test logo manager
+    # Test logo manager from utils
     logo_manager = LogoManager()
 
-    # Test finding molly.png
+    # Test finding molly.png through various paths
     test_paths = [
+        Path('assets/logos/general/molly.png'),
         Path('assets/logos/molly.png'),
         Path('assets/molly.png'),
         Path('molly.png')
@@ -167,6 +187,12 @@ def test_logo_loading():
     available = logo_manager.list_available_logos()
     print(f"  Found {len(available)} merchant logos")
 
+    # Show first few available logos if any
+    if available:
+        print("  Sample logos available:")
+        for logo in available[:5]:
+            print(f"    - {logo}")
+
     return found
 
 
@@ -187,9 +213,16 @@ def test_custom_logo():
     wheel_data = generate_test_data()
     fan_wheel = FanWheel(team_config, enable_logos=True)
 
-    # Try to load molly.png manually
+    # Try to load molly.png manually from various locations
     custom_logo = None
-    for path in [Path('assets/logos/molly.png'), Path('assets/molly.png'), Path('molly.png')]:
+    test_paths = [
+        Path('assets/logos/general/molly.png'),
+        Path('assets/logos/molly.png'),
+        Path('assets/molly.png'),
+        Path('molly.png')
+    ]
+
+    for path in test_paths:
         if path.exists():
             try:
                 custom_logo = Image.open(path)
@@ -227,6 +260,7 @@ def test_logo_report():
     wheel_data = generate_test_data()
     fan_wheel = FanWheel(team_config, enable_logos=True)
 
+    # Test the logo report functionality
     report = fan_wheel.generate_logo_report(wheel_data)
 
     print(f"  Total merchants: {report['total_merchants']}")
@@ -249,7 +283,7 @@ def test_edge_cases():
     team_config = {
         'team_name': 'Edge Case Team',
         'team_name_short': 'Edge',
-        'colors': {}  # Missing colors
+        'colors': {}  # Missing colors - should use defaults
     }
 
     # Test with empty data
@@ -340,6 +374,63 @@ def test_different_teams():
     return success_count == len(teams)
 
 
+def test_logo_debugging():
+    """Test logo debugging functionality"""
+    print("\n=== Test 7: Logo Debugging ===")
+
+    team_config = {
+        'team_name': 'Debug Team',
+        'team_name_short': 'Debug',
+        'colors': {
+            'primary': '#000000',
+            'secondary': '#FFFFFF',
+            'accent': '#888888'
+        }
+    }
+
+    fan_wheel = FanWheel(team_config, enable_logos=True)
+
+    # Test debugging for merchants with special characters
+    test_merchants = ["Dave & Buster's", "O'Reilly Auto Parts", "Binny's", "McDonald's"]
+
+    for merchant in test_merchants:
+        print(f"\n  Debugging logo search for: {merchant}")
+        try:
+            fan_wheel.debug_merchant_logo(merchant)
+        except Exception as e:
+            print(f"  ✗ Debug failed: {e}")
+
+    return True
+
+
+def test_logo_validation():
+    """Test pre-validation of logos"""
+    print("\n=== Test 8: Logo Pre-validation ===")
+
+    team_config = {
+        'team_name': 'Validation Team',
+        'team_name_short': 'Valid',
+        'colors': {
+            'primary': '#000000',
+            'secondary': '#FFFFFF',
+            'accent': '#888888'
+        }
+    }
+
+    wheel_data = generate_test_data()
+    fan_wheel = FanWheel(team_config, enable_logos=True)
+
+    # Pre-validate logos
+    validation_report = fan_wheel.validate_logos(wheel_data)
+
+    print(f"  Validated {len(validation_report)} merchants:")
+    for merchant, has_logo in validation_report.items():
+        status = "✓" if has_logo else "✗"
+        print(f"    {status} {merchant}")
+
+    return True
+
+
 def run_all_tests():
     """Run all test cases"""
     print("=" * 60)
@@ -356,7 +447,9 @@ def run_all_tests():
         ("Custom Logo", test_custom_logo),
         ("Logo Report", test_logo_report),
         ("Edge Cases", test_edge_cases),
-        ("Multiple Teams", test_different_teams)
+        ("Multiple Teams", test_different_teams),
+        ("Logo Debugging", test_logo_debugging),
+        ("Logo Validation", test_logo_validation)
     ]
 
     results = []

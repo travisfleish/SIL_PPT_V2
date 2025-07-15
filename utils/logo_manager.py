@@ -127,6 +127,34 @@ class LogoManager:
         clean_name = re.sub(r'[^a-zA-Z0-9]', '', merchant_name.lower())
         variations.append(clean_name)
 
+        # CRITICAL FIX: Remove special chars but KEEP spaces, then replace with underscores
+        # This handles "O'Reilly Auto Parts" -> "oreilly_auto_parts"
+        no_special = re.sub(r"[^a-zA-Z0-9\s]", '', merchant_name.lower())  # Keep spaces!
+        variations.append(no_special.replace(' ', '_'))  # Then replace spaces with underscores
+        variations.append(no_special.replace(' ', '-'))  # And with hyphens
+        variations.append(no_special.replace(' ', ''))  # And remove spaces
+
+        # DAVE & BUSTER'S FIX: Remove only apostrophes but keep ampersands
+        # This handles "Dave & Buster's" -> "dave_&_busters"
+        only_apostrophes_removed = merchant_name
+        for char in ["'", "'", "'", "`"]:  # Only apostrophe variants, not ampersands
+            only_apostrophes_removed = only_apostrophes_removed.replace(char, "")
+        variations.append(only_apostrophes_removed.lower())
+        variations.append(only_apostrophes_removed.lower().replace(' ', '_'))  # "dave_&_busters"
+        variations.append(only_apostrophes_removed.lower().replace(' ', '-'))
+
+        # Handle different types of apostrophes and quotes
+        # Replace various apostrophe/quote types with standard apostrophe first
+        normalized = merchant_name
+        for char in ["'", "'", "'", "`", '"', '"', '"']:
+            normalized = normalized.replace(char, "'")
+
+        # Then generate variations without apostrophes
+        no_apostrophe = normalized.replace("'", "")
+        variations.append(no_apostrophe.lower())
+        variations.append(no_apostrophe.lower().replace(' ', '_'))
+        variations.append(no_apostrophe.lower().replace(' ', '-'))
+
         # Common abbreviations/variations
         name_mapping = {
             'mcdonalds': ['mcdonalds', 'mcd', 'mcdonald'],
@@ -138,12 +166,24 @@ class LogoManager:
             'binny\'s': ['binnys', 'binny', 'binnys_beverage'],
             'ulta': ['ulta', 'ulta_beauty'],
             'grubhub': ['grubhub', 'grub_hub'],
-            'wayfair': ['wayfair']
+            'wayfair': ['wayfair'],
+            # Add O'Reilly specific mappings
+            'oreilly': ['oreilly_auto_parts', 'oreillyautoparts', 'oreilly_auto'],
+            'o\'reilly': ['oreilly_auto_parts', 'oreillyautoparts', 'oreilly_auto'],
+            'oreillyauto': ['oreilly_auto_parts', 'oreillyautoparts'],
+            'oreillyautoparts': ['oreilly_auto_parts'],
+            # Add Dave & Buster's specific mappings
+            'dave & buster': ['dave_&_busters', 'dave_and_busters', 'daveandbusters', 'dave_busters'],
+            'dave&buster': ['dave_&_busters', 'dave_and_busters', 'daveandbusters'],
+            'davebusters': ['dave_&_busters', 'dave_and_busters', 'daveandbusters'],
         }
 
         merchant_lower = merchant_name.lower()
+        # Also check the version without special characters
+        merchant_clean = re.sub(r"[^a-zA-Z0-9\s]", '', merchant_lower)
+
         for key, aliases in name_mapping.items():
-            if key in merchant_lower:
+            if key in merchant_lower or key in merchant_clean:
                 variations.extend(aliases)
 
         # Remove duplicates while preserving order
@@ -201,8 +241,13 @@ class LogoManager:
                       size[0] - border_width, size[1] - border_width],
                      outline='#E0E0E0', width=border_width)
 
-        # Generate initials
-        initials = ''.join([word[0].upper() for word in merchant_name.split()[:2]])
+        # Generate initials - handle special characters
+        clean_name = re.sub(r"[^a-zA-Z0-9\s]", '', merchant_name)
+        initials = ''.join([word[0].upper() for word in clean_name.split()[:2] if word])
+
+        # Fallback if no initials
+        if not initials:
+            initials = merchant_name[:2].upper()
 
         # Calculate font size to fit
         font_size = min(size) // 3
@@ -255,3 +300,40 @@ class LogoManager:
             report[merchant] = logo_path is not None
 
         return report
+
+    def debug_search_names(self, merchant_name: str) -> None:
+        """
+        Debug helper to show what filenames are being searched for a merchant
+
+        Args:
+            merchant_name: Merchant name to debug
+        """
+        print(f"\nDebugging search for: '{merchant_name}'")
+        print(f"Encoded: {merchant_name.encode('utf-8')}")
+
+        search_names = self._generate_search_names(merchant_name)
+        print(f"\nGenerated {len(search_names)} search variations:")
+        for i, name in enumerate(search_names, 1):
+            print(f"  {i}. '{name}'")
+
+        # Check which files exist
+        print(f"\nChecking for files in: {self.logo_dir}")
+        found = False
+        for search_name in search_names:
+            for ext in self.supported_formats:
+                logo_path = self.logo_dir / f"{search_name}{ext}"
+                if logo_path.exists():
+                    print(f"  ✓ FOUND: {logo_path.name}")
+                    found = True
+                    break
+            if found:
+                break
+
+        if not found:
+            print("  ✗ No matching files found")
+
+            # Show similar files
+            print("\n  Similar files in directory:")
+            search_term = merchant_name.split()[0].lower()
+            for f in self.logo_dir.glob(f"*{search_term}*"):
+                print(f"    - {f.name}")

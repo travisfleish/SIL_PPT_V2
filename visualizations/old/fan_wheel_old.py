@@ -219,10 +219,42 @@ class FanWheel(BaseChart):
 
         # Logo settings
         self.enable_logos = enable_logos
-        self.logo_size = (110, 110)  # Size for logos in pixels
+        self.logo_size = (120, 120)  # INCREASED: Size for logos in pixels (was 110, 110)
 
         # Initialize logo manager if enabled
         self.logo_manager = LogoManager(logo_dir) if enable_logos else None
+
+        # Load arrow logo during initialization
+        self.arrow_logo = self._load_arrow_logo()
+
+    def _load_arrow_logo(self) -> Optional[Image.Image]:
+        """Load arrow logo during initialization"""
+        # Find project root
+        current_file = Path(__file__).resolve()
+        project_root = current_file
+        while project_root.parent != project_root and project_root.name != 'PPT_Generator_SIL':
+            project_root = project_root.parent
+
+        # Define potential arrow logo paths
+        arrow_paths = [
+            project_root / 'assets' / 'logos' / 'general' / 'arrow.png',
+            Path.cwd() / 'assets' / 'logos' / 'general' / 'arrow.png',
+            current_file.parent.parent / 'assets' / 'logos' / 'general' / 'arrow.png',
+        ]
+
+        for path in arrow_paths:
+            if path.exists():
+                try:
+                    arrow_logo = Image.open(path)
+                    if arrow_logo.mode != 'RGBA':
+                        arrow_logo = arrow_logo.convert('RGBA')
+                    logger.info(f"Successfully loaded arrow logo from {path}")
+                    return arrow_logo
+                except Exception as e:
+                    logger.warning(f"Failed to load arrow logo from {path}: {e}")
+
+        logger.warning("No arrow logo found, will use programmatic arrows")
+        return None
 
     def create(self, wheel_data: pd.DataFrame,
                output_path: Optional[Path] = None,
@@ -323,7 +355,62 @@ class FanWheel(BaseChart):
                     color='white', linewidth=8, zorder=15)
 
     def _add_arrows(self, ax, num_items: int, angle_step: float):
-        """Add directional arrows between segments"""
+        """Add directional arrows between segments using logo image"""
+        if self.arrow_logo is None:
+            # Use fallback programmatic arrows
+            self._add_arrows_fallback(ax, num_items, angle_step)
+            return
+
+        # Define arrow size
+        arrow_size_pixels = 50  # Smaller size for arrow to fit in circle
+
+        for i in range(num_items):
+            arrow_angle_deg = i * angle_step - 90
+            arrow_angle = np.deg2rad(arrow_angle_deg)
+
+            # Arrow position
+            arrow_r = 4.0
+            arrow_x = arrow_r * np.cos(arrow_angle)
+            arrow_y = arrow_r * np.sin(arrow_angle)
+
+            # Add white circle background FIRST
+            circle_bg = Circle((arrow_x, arrow_y), 0.3,
+                               facecolor='white',
+                               edgecolor='none',
+                               zorder=16)
+            ax.add_patch(circle_bg)
+
+            # Create a copy of the arrow logo and resize
+            arrow_copy = self.arrow_logo.copy()
+            arrow_copy.thumbnail((arrow_size_pixels, arrow_size_pixels), Image.Resampling.LANCZOS)
+
+            # Flip the arrow horizontally to change from counter-clockwise to clockwise
+            arrow_copy = arrow_copy.transpose(Image.FLIP_LEFT_RIGHT)
+
+            # Each arrow should point to the next segment in clockwise direction
+            # Your arrow points up (90 degrees) in the original image
+            # After flipping, we rotate to point tangentially clockwise
+            # Adding 30 degrees adjustment to make arrows point more horizontally
+            rotation_angle = 90 + arrow_angle_deg + 30
+
+            arrow_rotated = arrow_copy.rotate(rotation_angle, expand=True, fillcolor=(0, 0, 0, 0))
+
+            # Convert to numpy array
+            arrow_array = np.array(arrow_rotated)
+
+            # Create OffsetImage with smaller zoom to fit in circle
+            zoom_factor = 0.4  # Reduced to fit within white circle
+            imagebox = OffsetImage(arrow_array, zoom=zoom_factor)
+
+            # Add to plot
+            ab = AnnotationBbox(imagebox, (arrow_x, arrow_y),
+                                frameon=False,
+                                pad=0,
+                                zorder=17)
+            ax.add_artist(ab)
+
+    def _add_arrows_fallback(self, ax, num_items: int, angle_step: float):
+        """Original arrow implementation as fallback"""
         for i in range(num_items):
             arrow_angle_deg = i * angle_step - 90
             arrow_angle = np.deg2rad(arrow_angle_deg)
@@ -443,7 +530,7 @@ class FanWheel(BaseChart):
                 text_y_position = -.8  # Lower in the circle
                 ax.text(0, text_y_position, fan_text,
                         ha='center', va='center',
-                        fontsize=24,  # Smaller font to fit better
+                        fontsize=28,  # INCREASED: fontsize from 24 to 28
                         fontweight='bold',
                         color='white',
                         zorder=23,
@@ -463,7 +550,7 @@ class FanWheel(BaseChart):
         fan_text = f"THE {self.team_short.upper()} FAN"
         ax.text(0, 0, fan_text,
                 ha='center', va='center',
-                fontsize=16, fontweight='bold',
+                fontsize=20, fontweight='bold',  # INCREASED: fontsize from 16 to 20
                 color='white', zorder=22)
 
     def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float):
@@ -486,13 +573,14 @@ class FanWheel(BaseChart):
                 missing_logos.append(merchant_name)
 
             # Add behavior text
-            text_radius = (self.logo_radius + self.outer_radius) / 2
+            text_radius = self.outer_radius - 0.9
             text_x = text_radius * np.cos(angle_rad)
             text_y = text_radius * np.sin(angle_rad)
 
             ax.text(text_x, text_y, row['behavior'],
                     ha='center', va='center',
-                    fontsize=14, fontweight='bold',
+                    fontsize=18, fontweight='bold',  # INCREASED: fontsize from 14 to 18
+                    fontfamily='Red Hat Display',
                     color='white',
                     rotation=0,
                     linespacing=0.8,
@@ -547,7 +635,7 @@ class FanWheel(BaseChart):
         logo_array = np.array(logo_img)
 
         # Create OffsetImage
-        imagebox = OffsetImage(logo_array, zoom=0.5)  # Adjust zoom as needed
+        imagebox = OffsetImage(logo_array, zoom=0.7)  # INCREASED: zoom from 0.5 to 0.7
 
         # Create AnnotationBbox
         ab = AnnotationBbox(imagebox, (x, y),
@@ -561,7 +649,7 @@ class FanWheel(BaseChart):
     def _add_placeholder_logo(self, ax, merchant: str, x: float, y: float):
         """Add merchant logo placeholder - simple white circle (original method)"""
         # White circle placeholder
-        logo_bg = Circle((x, y), 0.55,
+        logo_bg = Circle((x, y), 0.65,  # INCREASED: radius from 0.55 to 0.65
                          facecolor='white',
                          edgecolor='#E0E0E0',  # Light gray border
                          linewidth=1,
@@ -572,7 +660,7 @@ class FanWheel(BaseChart):
         initials = ''.join([word[0].upper() for word in merchant.split()[:2]])
         ax.text(x, y, initials,
                 ha='center', va='center',
-                fontsize=12, fontweight='bold',
+                fontsize=16, fontweight='bold',  # INCREASED: fontsize from 12 to 16
                 color='#888888', zorder=6)
 
     def generate_logo_report(self, wheel_data: pd.DataFrame) -> Dict[str, any]:
