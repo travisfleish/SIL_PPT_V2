@@ -32,9 +32,9 @@ teams:
     league: "NBA"
     view_prefix: "V_UTAH_JAZZ_SIL"  # Has SIL in the prefix
     colors:
-      primary: "#1D428A"
-      secondary: "#FFD700"
-      accent: "#00275D"
+      primary: "#002B5C"      # Jazz Navy (official dark blue)
+      secondary: "#F9A01B"    # Jazz Gold (official yellow/gold)
+      accent: "#00471B"
     audience_name: "Utah Jazz Fans"
     comparison_population: "Local Gen Pop (Excl. Jazz)"
 

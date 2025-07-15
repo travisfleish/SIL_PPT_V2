@@ -350,7 +350,7 @@ class DemographicsProcessor:
         }
 
     def process_ethnicity(self) -> Dict[str, Any]:
-        """Process ethnicity distribution using ETHNIC_GROUP column - NULL-AWARE VERSION"""
+        """Process ethnicity distribution using ETHNIC_GROUP column - EXCLUDES LOCAL GEN POP DUE TO NULL VALUES"""
 
         # Check if ETHNIC_GROUP column exists
         if 'ETHNIC_GROUP' not in self.data.columns:
@@ -385,6 +385,22 @@ class DemographicsProcessor:
             if null_count > 0:
                 self.data = original_data
 
+            # CRITICAL: Filter out Local Gen Pop community due to null values
+            local_gen_pop_key = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
+
+            # Check if local gen pop has only Unknown/null ethnicity data
+            if local_gen_pop_key in raw_percentages:
+                gen_pop_data = raw_percentages[local_gen_pop_key]
+                # If all or most of the data is Unknown, exclude this community
+                unknown_percentage = gen_pop_data.get('Unknown', 0)
+                if unknown_percentage > 90:  # If more than 90% is Unknown/null
+                    logger.warning(
+                        f"Excluding '{local_gen_pop_key}' from ethnicity chart due to null values ({unknown_percentage:.1f}% unknown)")
+                    del raw_percentages[local_gen_pop_key]
+
+            # Filter communities list for this chart
+            ethnicity_communities = [c for c in self.communities if c in raw_percentages]
+
             # Aggregate data into standard categories
             aggregated = {}
             for community, data in raw_percentages.items():
@@ -409,13 +425,34 @@ class DemographicsProcessor:
                     else:
                         aggregated[community]['Other'] += percentage
 
+            # NEW: Normalize percentages to sum to 100% based on known ethnicities only
+            normalized = {}
+            for community, data in aggregated.items():
+                # Calculate total of known ethnicities
+                known_total = sum(data.values())
+
+                if known_total > 0:
+                    # Rebase all percentages to sum to 100%
+                    normalized[community] = {
+                        ethnicity: round(percentage / known_total * 100, 1)
+                        for ethnicity, percentage in data.items()
+                    }
+
+                    # Log the rebasing for transparency
+                    logger.info(f"{community}: Rebased ethnicity percentages from {known_total:.1f}% known to 100%")
+                else:
+                    # If no known ethnicities, keep zeros
+                    normalized[community] = data
+                    logger.warning(f"{community}: No known ethnicity data available")
+
             return {
                 'chart_type': 'grouped_bar',
                 'title': 'Ethnicity',
                 'categories': self.ETHNICITY_ORDER,
-                'communities': self.communities,
-                'data': aggregated,
-                'insights': self._generate_ethnicity_insights(aggregated)
+                'communities': ethnicity_communities,  # Use filtered communities list
+                'data': normalized,  # Use normalized data instead of aggregated
+                'insights': self._generate_ethnicity_insights(normalized),
+                'note': 'Percentages based on known ethnicities only. Local Gen Pop excluded due to insufficient data.'
             }
 
         except Exception as e:

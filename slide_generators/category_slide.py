@@ -431,7 +431,7 @@ class CategorySlide(BaseSlide):
             p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
             p.text = f"• {insight}"  # Changed from f"{i+1}. {insight}"
             p.font.name = self.default_font
-            p.font.size = Pt(11)
+            p.font.size = Pt(12)
             p.line_spacing = 1.2
 
         # Add NBA comparison section if there are NBA insights
@@ -461,7 +461,7 @@ class CategorySlide(BaseSlide):
                 p = nba_text_frame.add_paragraph() if i > 0 else nba_text_frame.paragraphs[0]
                 p.text = f"• {insight}"  # Changed from numbered
                 p.font.name = self.default_font
-                p.font.size = Pt(11)
+                p.font.size = Pt(12)
                 p.line_spacing = 1.2
 
     def _add_category_table(self, slide, results: Dict[str, Any]):
@@ -791,7 +791,7 @@ class CategorySlide(BaseSlide):
         """Add brand-specific insights with updated formatting to match reference"""
         # Top Brand Insights section
         insights_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(2.8),
+            Inches(0.5), Inches(2.6),
             Inches(4), Inches(0.3)
         )
         insights_title.text_frame.text = "Top Brand Insights"
@@ -802,7 +802,7 @@ class CategorySlide(BaseSlide):
 
         # Insights box - extended width to be closer to logos/table
         insights_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(3.2),
+            Inches(0.7), Inches(3.0),
             Inches(5.5), Inches(1.6)  # Extended width from 4.5 to 5.5
         )
 
@@ -816,7 +816,7 @@ class CategorySlide(BaseSlide):
         # Format insights based on reference image pattern
         for i, insight in enumerate(merchant_insights[:4]):
             p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
-            p.line_spacing = 1.0
+            p.line_spacing = 1.2
 
             # Determine which type of insight this is and format accordingly
             if i == 0:  # First insight - Highest % of Fans
@@ -824,7 +824,7 @@ class CategorySlide(BaseSlide):
                 run1 = p.add_run()
                 run1.text = "• Highest % of Fans: "
                 run1.font.name = self.default_font
-                run1.font.size = Pt(11)  # Increased from 10 to match Top Brand Target
+                run1.font.size = Pt(12)  # Increased from 10 to match Top Brand Target
                 run1.font.bold = True
 
                 # Add the rest of the insight
@@ -840,7 +840,7 @@ class CategorySlide(BaseSlide):
                     formatted_insight = process_insight_text(insight)
                     run2.text = formatted_insight.replace("• ", "")
                 run2.font.name = self.default_font
-                run2.font.size = Pt(11)  # Match Top Brand Target font size
+                run2.font.size = Pt(12)  # Match Top Brand Target font size
                 run2.font.bold = False
 
             elif i == 1:  # Second insight - Most Purchases per Fan
@@ -848,7 +848,7 @@ class CategorySlide(BaseSlide):
                 run1 = p.add_run()
                 run1.text = "• Most Purchases per Fan: "
                 run1.font.name = self.default_font
-                run1.font.size = Pt(11)
+                run1.font.size = Pt(12)
                 run1.font.bold = True
 
                 # Add the rest of the insight
@@ -864,7 +864,7 @@ class CategorySlide(BaseSlide):
                     formatted_insight = process_insight_text(insight)
                     run2.text = formatted_insight.replace("• ", "")
                 run2.font.name = self.default_font
-                run2.font.size = Pt(11)
+                run2.font.size = Pt(12)
                 run2.font.bold = False
 
             elif i == 2:  # Third insight - Highest Spend per Fan
@@ -872,7 +872,7 @@ class CategorySlide(BaseSlide):
                 run1 = p.add_run()
                 run1.text = "• Highest Spend per Fan: "
                 run1.font.name = self.default_font
-                run1.font.size = Pt(11)
+                run1.font.size = Pt(12)
                 run1.font.bold = True
 
                 # Add the rest of the insight
@@ -886,7 +886,7 @@ class CategorySlide(BaseSlide):
                     insight_text = insight_text.replace(f"{team_name} fans", f"{team_short} fans")
                 run2.text = insight_text
                 run2.font.name = self.default_font
-                run2.font.size = Pt(11)
+                run2.font.size = Pt(12)
                 run2.font.bold = False
 
             elif i == 3:  # Fourth insight - NBA/League comparison
@@ -894,7 +894,7 @@ class CategorySlide(BaseSlide):
                 run1 = p.add_run()
                 run1.text = f"• Highest % of Fans Index vs NBA: "
                 run1.font.name = self.default_font
-                run1.font.size = Pt(11)
+                run1.font.size = Pt(12)
                 run1.font.bold = True
 
                 # Add the rest of the insight
@@ -917,7 +917,7 @@ class CategorySlide(BaseSlide):
                 else:
                     run2.text = insight_text
                 run2.font.name = self.default_font
-                run2.font.size = Pt(11)
+                run2.font.size = Pt(12)
                 run2.font.bold = False
 
     def _add_brand_table(self, slide, merchant_stats: Tuple[pd.DataFrame, List[str]]):
@@ -983,10 +983,10 @@ class CategorySlide(BaseSlide):
 
         # Top Brand Target header
         target_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(5.0),
+            Inches(0.5), Inches(5.1),
             Inches(4), Inches(0.3)
         )
-        target_title.text_frame.text = "Top Brand Target"
+        target_title.text_frame.text = "Hot Brand Target"
         p = target_title.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(14)
@@ -994,7 +994,7 @@ class CategorySlide(BaseSlide):
 
         # Recommendation content
         rec_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(5.4),
+            Inches(0.7), Inches(5.5),
             Inches(5.5), Inches(1.2)  # Extended width to match insights box
         )
 
@@ -1014,14 +1014,14 @@ class CategorySlide(BaseSlide):
         p1 = text_frame.paragraphs[0]
         p1.text = f"• The {team_name} should target {merchant_name} for a sponsorship based on having the highest composite index of {composite_index}"
         p1.font.name = self.default_font
-        p1.font.size = Pt(11)
+        p1.font.size = Pt(12)
         p1.line_spacing = 1.2
 
         # Second bullet - standardized explanation with proper indentation
         p2 = text_frame.add_paragraph()
         p2.text = "• The composite index indicates a brand with significant likelihood for more fans to be spending more frequently, and at a higher spend per fan vs. other brands"
         p2.font.name = self.default_font
-        p2.font.size = Pt(11)
+        p2.font.size = Pt(12)
         p2.line_spacing = 1.2
         # Set both left indent and first line indent to ensure entire paragraph is indented
         p2.left_indent = Inches(0.25)  # Indent entire paragraph
@@ -1068,13 +1068,18 @@ class CategorySlide(BaseSlide):
             paragraph.font.size = Pt(12) if small else Pt(12)  # Consistent data font size
             paragraph.alignment = PP_ALIGN.CENTER
 
-            # UPDATED color coding with EQUAL handling
+            # UPDATED color coding with EQUAL handling and bold for green
             if 'More' in cell.text or 'more' in cell.text:
                 paragraph.font.color.rgb = self.colors['positive']  # Green
+                paragraph.font.bold = True  # ADD THIS LINE to make green text bold
             elif 'Less' in cell.text or 'less' in cell.text or 'fewer' in cell.text:
                 paragraph.font.color.rgb = self.colors['negative']  # Red
+                paragraph.font.bold = False  # Keep red text not bold
             elif 'EQUAL' in cell.text or 'Equal' in cell.text:
                 paragraph.font.color.rgb = self.colors['equal']  # Dark yellow
+                paragraph.font.bold = False  # Keep yellow text not bold
+            else:
+                paragraph.font.bold = False  # Default: not bold
 
         # Vertical alignment
         cell.vertical_anchor = MSO_ANCHOR.MIDDLE

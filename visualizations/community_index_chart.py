@@ -149,14 +149,14 @@ class CommunityIndexChart:
             ax.text(box_x_pos + box_width / 2, y_pos,
                     f"{pct_value:.1f}%",
                     ha='center', va='center',
-                    fontweight='bold', fontsize=11,
+                    fontweight='bold', fontsize=13,
                     fontfamily=self.font_family,
                     zorder=11)
 
         # Customize the plot with Red Hat Display font
         ax.set_yticks(y_positions)
         ax.set_yticklabels(data['Community'], fontsize=15, fontweight='bold', fontfamily=self.font_family)
-        ax.set_xlabel('Percent Fan Audience', fontsize=13, fontweight='bold', fontfamily=self.font_family)
+        ax.set_xlabel('Likelihood To Be In Community (Index vs. Local Gen Pop)', fontsize=13, fontweight='bold', fontfamily=self.font_family)
         ax.set_xlim(0, max_value)
 
         # Add x-axis labels at specific intervals with bold font and Red Hat Display
@@ -183,18 +183,17 @@ class CommunityIndexChart:
         # Add legend at bottom with more space and matched font size
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor=self.background_color, alpha=0.8, label='% Team Fans'),  # Changed from '% Audience'
-            Patch(facecolor=self.bar_color, label='Team Fan Index')  # Changed from '% Audience Index'
+            Patch(facecolor=self.background_color, alpha=0.8, label='% Fans'),  # Changed from '% Audience'
+            Patch(facecolor=self.bar_color, label='Index vs. Local Gen Pop')  # Changed from '% Audience Index'
         ]
         legend = ax.legend(handles=legend_elements,
                            loc='lower center',
-                           bbox_to_anchor=(0.5, -0.20),  # Changed from -0.15 to -0.20 for more space
+                           bbox_to_anchor=(0.5, -0.25),  # Changed from -0.15 to -0.20 for more space
                            ncol=2,
                            frameon=True,
                            fancybox=True,
                            shadow=False,
-                           fontsize=15,
-                           prop={'family': self.font_family, 'weight': 'bold'})
+                           prop={'family': self.font_family, 'weight': 'bold', 'size': 15})
 
         # Adjust layout
         plt.tight_layout()

@@ -205,10 +205,10 @@ class DemographicsSlide:
             ('income_chart', 2.2, 1.1, 4.8, 2.5),  # Original position
             ('occupation_chart', 7.2, 1.1, 5.6, 2.5),  # Original position
 
-            # Bottom row - Original positions
-            ('ethnicity_chart', 0.5, 4.2, 4.5, 2.5),  # Aligns with top row start
-            ('generation_chart', 5.2, 4.2, 4.5, 2.5),
-            ('children_chart', 9.8, 4.2, 3.0, 2.5)  # Aligns with top row end
+            # Bottom row - Ethnicity chart is 2.8" tall but placed as if 2.5" to maintain alignment
+            ('ethnicity_chart', 0.5, 4.2, 4.5, 2.5),  # Will bleed 0.3" below its space
+            ('generation_chart', 5.2, 4.2, 4.5, 2.5),  # Original height
+            ('children_chart', 9.8, 4.2, 3.0, 2.5)  # Original height
         ]
 
         for chart_name, left, top, width, height in chart_positions:

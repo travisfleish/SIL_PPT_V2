@@ -28,16 +28,53 @@ class DemographicCharts:
         self.fig_dpi = 100  # Lower DPI prevents auto-scaling
 
         # Font sizes adjusted for small PowerPoint display dimensions
-        self.font_size = 8
-        self.title_size = 10
-        self.label_size = 6  # Bar value labels (the percentages on bars)
-        self.axis_label_size = 8  # Axis titles
-        self.tick_label_size = 6  # Axis tick labels
-        self.pie_text_size = 8  # Pie chart percentages
-        self.legend_size = 7
+        self.font_size = 10
+        self.title_size = 12
+        self.label_size = 8  # Bar value labels (the percentages on bars)
+        self.axis_label_size = 10  # Axis titles
+        self.tick_label_size = 8  # Axis tick labels
+        self.pie_text_size = 10  # Pie chart percentages
+        self.legend_size = 9
 
-        # Font family
-        self.font_family = 'Arial'  # More reliable than Red Hat Display
+        # Font family - try Overpass Light first, fallback to Arial
+        try:
+            # Check if Overpass Light is available
+            import matplotlib.font_manager as fm
+
+            # Get all available font names
+            available_fonts = sorted(set([f.name for f in fm.fontManager.ttflist]))
+
+            # Debug: Print available fonts that contain "Overpass"
+            overpass_fonts = [f for f in available_fonts if 'Overpass' in f.lower()]
+            if overpass_fonts:
+                print(f"Found Overpass fonts: {overpass_fonts}")
+
+            # Try different variations of Overpass
+            if 'Overpass Light' in available_fonts:
+                self.font_family = 'Overpass Light'
+                print("Using: Overpass Light")
+            elif 'Overpass-Light' in available_fonts:
+                self.font_family = 'Overpass-Light'
+                print("Using: Overpass-Light")
+            elif 'Overpass' in available_fonts:
+                self.font_family = 'Overpass'
+                # Try to use light weight
+                plt.rcParams['font.weight'] = 'light'
+                print("Using: Overpass (with light weight)")
+            else:
+                # Fallback to Arial if Overpass not found
+                self.font_family = 'Arial'
+                print(
+                    f"Warning: Overpass font not found in system. Available fonts containing 'over': {[f for f in available_fonts if 'over' in f.lower()][:5]}")
+                print("Using Arial as fallback. To use Overpass Light:")
+                print("1. Download from: https://fonts.google.com/specimen/Overpass")
+                print("2. Install the font on your system")
+                print("3. Clear matplotlib cache: import matplotlib; matplotlib.font_manager._rebuild()")
+                print("4. Restart your Python environment")
+        except Exception as e:
+            self.font_family = 'Arial'  # Fallback
+            print(f"Font detection error: {e}")
+            print("Using Arial as fallback")
 
         # Chart colors
         self.community_colors = [
@@ -49,6 +86,11 @@ class DemographicCharts:
         # CRITICAL: Disable all auto-layout
         plt.rcParams['figure.autolayout'] = False
         plt.rcParams['axes.autolimit_mode'] = 'data'
+
+        # Configure font settings
+        plt.rcParams['font.family'] = self.font_family
+        if 'Overpass' in self.font_family:
+            plt.rcParams['font.weight'] = 'light'
 
     def _format_income_label(self, label: str) -> str:
         """Format income labels to be extremely concise for small charts"""
@@ -236,18 +278,18 @@ class DemographicCharts:
                         ha='center', va='bottom',
                         fontsize=self.label_size,
                         fontfamily=self.font_family,
-                        fontweight='normal',
+                        fontweight='bold',  # Bold for visibility
                         clip_on=False)
 
         # Set labels with explicit font settings
         ax.set_xlabel('', fontsize=self.axis_label_size,
-                      fontfamily=self.font_family, fontweight='normal')
+                      fontfamily=self.font_family, fontweight='bold')
         ax.set_ylabel(ylabel, fontsize=self.axis_label_size,
-                      fontfamily=self.font_family, fontweight='normal')
+                      fontfamily=self.font_family, fontweight='bold')
 
         # Title only if requested
         if title:
-            ax.set_title(title, fontsize=self.title_size, fontweight='normal',
+            ax.set_title(title, fontsize=self.title_size, fontweight='bold',
                          pad=10, fontfamily=self.font_family)
 
         # Format labels based on chart type before setting
@@ -262,12 +304,12 @@ class DemographicCharts:
 
         # Adjust font size based on number of categories and chart width
         if n_groups > 8:
-            x_label_size = 5  # Very small for many categories
+            x_label_size = 7  # Very small for many categories
             rotation = 45  # Force rotation for crowded labels
         elif n_groups > 6:
-            x_label_size = 6  # Smaller for many categories
+            x_label_size = 8  # Smaller for many categories
         else:
-            x_label_size = 7  # Slightly larger for fewer categories
+            x_label_size = 9  # Slightly larger for fewer categories
 
         ax.set_xticklabels(formatted_labels, rotation=rotation,
                            ha='right' if rotation else 'center',
@@ -396,12 +438,12 @@ class DemographicCharts:
         female_center = chart_center + label_offset
 
         ax.text(male_center, top_y, 'Male',
-                ha='center', va='bottom', fontweight='bold',  # Changed to bold
+                ha='center', va='bottom', fontweight='bold',  # Bold
                 fontsize=self.axis_label_size + 1, fontfamily=self.font_family,  # Slightly larger
                 color='black')
 
         ax.text(female_center, top_y, 'Female',
-                ha='center', va='bottom', fontweight='bold',  # Changed to bold
+                ha='center', va='bottom', fontweight='bold',  # Bold
                 fontsize=self.axis_label_size + 1, fontfamily=self.font_family,  # Slightly larger
                 color='black')
 
