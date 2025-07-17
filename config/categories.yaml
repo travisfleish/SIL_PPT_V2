@@ -58,6 +58,14 @@ allowed_for_custom:
   - "Telcom"
   - "Travel"
 
+# Custom subcategory name overrides
+# These override the default behavior of just stripping the category prefix
+subcategory_name_overrides:
+  "Education Resources - Adults": "Adult Education"
+  "Sportstainment - Ski & Ski Resorts": "Ski Resorts"
+  "Sportstainment - Golf & Golf Resorts": "Golf Resorts"
+  "Sportstainment - Tennis & Pickleball": "Pickleball & Racket Sports"
+
 # Detailed category definitions
 categories:
   restaurants:
@@ -223,6 +231,57 @@ categories:
           display_name: "Virtual Health"
           key_in_data: "Health - Virtual Health"
 
+  # NEW: Athletic category with renamed display name
+  athletic:
+    display_name: "Athletic Goods & Gears"
+    slide_title: "Athletic Goods & Gears Sponsor Analysis"
+    category_names_in_data:
+      - "Athletic"
+    subcategories:
+      include:
+        - name: "Athletic - Goods"
+          display_name: "Goods"
+          key_in_data: "Athletic - Goods"
+        - name: "Athletic - Gear"
+          display_name: "Gear"
+          key_in_data: "Athletic - Gear"
+
+  # NEW: Education Resources category (for completeness)
+  education_resources:
+    display_name: "Education Resources"
+    slide_title: "Education Resources Sponsor Analysis"
+    category_names_in_data:
+      - "Education Resources"
+    subcategories:
+      include:
+        - name: "Education Resources - Adolescents & Children"
+          display_name: "Adolescents & Children"
+          key_in_data: "Education Resources - Adolescents & Children"
+        - name: "Education Resources - Adults"
+          display_name: "Adult Education"  # Will be overridden by subcategory_name_overrides
+          key_in_data: "Education Resources - Adults"
+
+  # NEW: Sportstainment category (for completeness)
+  sportstainment:
+    display_name: "Sportstainment"
+    slide_title: "Sportstainment Sponsor Analysis"
+    category_names_in_data:
+      - "Sportstainment"
+    subcategories:
+      include:
+        - name: "Sportstainment - Ski & Ski Resorts"
+          display_name: "Ski Resorts"  # Will be overridden by subcategory_name_overrides
+          key_in_data: "Sportstainment - Ski & Ski Resorts"
+        - name: "Sportstainment - Golf & Golf Resorts"
+          display_name: "Golf Resorts"  # Will be overridden by subcategory_name_overrides
+          key_in_data: "Sportstainment - Golf & Golf Resorts"
+        - name: "Sportstainment - Tennis & Pickleball"
+          display_name: "Pickleball & Racket Sports"  # Will be overridden by subcategory_name_overrides
+          key_in_data: "Sportstainment - Tennis & Pickleball"
+        - name: "Sportstainment - Indoor Entertainment"
+          display_name: "Indoor Entertainment"
+          key_in_data: "Sportstainment - Indoor Entertainment"
+
 # Categories to exclude when selecting custom categories
 excluded_from_custom:
   - "Telcom"  # Note: It's "Telcom" not "Telecom" in the data
@@ -261,3 +320,5 @@ slide_settings:
 # 3. "Telcom" is misspelled in the data (not "Telecom")
 # 4. Some excluded categories might be subcategories (e.g., "Home - Utilities")
 # 5. Banks are excluded from Finance subcategories per business requirement
+# 6. Athletic category renamed to "Athletic Goods & Gears" for display
+# 7. Subcategory overrides handle special renaming cases

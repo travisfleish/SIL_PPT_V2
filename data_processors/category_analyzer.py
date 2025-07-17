@@ -6,6 +6,7 @@ ENHANCED with OpenAI-powered merchant name standardization
 UPDATED to use allowed_for_custom list for custom category selection
 UPDATED with consistent column names for slide compatibility
 UPDATED to use LAST_FULL_YEAR views for specific insights
+UPDATED with subcategory name override support
 """
 
 import pandas as pd
@@ -113,6 +114,9 @@ class CategoryAnalyzer:
         self.categories = self.config['categories']
         self.excluded_custom = self.config['excluded_from_custom']
         self.allowed_custom = self.config.get('allowed_for_custom', [])  # NEW: Get allowed list
+
+        # NEW: Load subcategory name overrides
+        self.subcategory_overrides = self.config.get('subcategory_name_overrides', {})
 
         # Validation thresholds
         self.max_reasonable_index = 1000  # 1000% = 10x more likely
@@ -273,7 +277,7 @@ class CategoryAnalyzer:
         string_cols = df.select_dtypes(include=['object']).columns
         for col in string_cols:
             if col in df.columns:
-                df[col] = df[col].astype(str).str.strip()
+                df.loc[:, col] = df[col].astype(str).str.strip()
 
         # Remove rows with null audiences
         if 'AUDIENCE' in df.columns:
@@ -936,7 +940,11 @@ class CategoryAnalyzer:
         return ((value1 - value2) / value2) * 100
 
     def _format_subcategory_name(self, subcategory: str, category_config: Dict[str, Any]) -> str:
-        """Format subcategory name for display"""
+        """Format subcategory name for display with custom overrides"""
+        # UPDATED: First check if there's a custom override
+        if subcategory in self.subcategory_overrides:
+            return self.subcategory_overrides[subcategory]
+
         # For custom categories, just clean up the name
         if category_config.get('is_custom', False):
             # Remove category prefix if it exists
@@ -945,10 +953,11 @@ class CategoryAnalyzer:
                 return subcategory.replace(f"{category_name} - ", "")
             return subcategory
 
-        # For fixed categories, use the existing logic
-        for cat_name in category_config.get('category_names_in_data', []):
-            if subcategory.startswith(f"{cat_name} - "):
-                return subcategory.replace(f"{cat_name} - ", "")
+        # For fixed categories, strip the prefix by looking for " - "
+        if " - " in subcategory:
+            # Get everything after the first " - "
+            return subcategory.split(" - ", 1)[1]
+
         return subcategory
 
     def get_custom_categories(self,
@@ -1054,20 +1063,30 @@ class CategoryAnalyzer:
         Returns:
             Category configuration similar to what's in category_config.yaml
         """
-        # Generate a reasonable slide title
+        # First, check if we have a predefined config for this category
+        # Try the lowercase version as a key
+        category_key = category_name.lower().replace(' ', '_').replace('-', '_')
+
+        if category_key in self.categories:
+            # Use the predefined configuration
+            predefined_config = self.categories[category_key].copy()
+            predefined_config['is_custom'] = True  # Mark it as custom for processing
+            logger.info(f"Using predefined config for custom category: {category_name}")
+            return predefined_config
+
+        # Otherwise, generate a default configuration
+        logger.info(f"Generating default config for custom category: {category_name}")
         slide_title = f"{category_name} Sponsor Analysis"
 
-        # Create the config
         config = {
             'display_name': category_name,
             'slide_title': slide_title,
             'category_names_in_data': [category_name],
             'subcategories': {
-                # Empty for custom categories - we'll use all subcategories from data
                 'include': [],
                 'exclude': []
             },
-            'is_custom': True  # This flag is crucial!
+            'is_custom': True
         }
 
         return config

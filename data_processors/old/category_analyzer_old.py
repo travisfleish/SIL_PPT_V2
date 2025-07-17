@@ -5,6 +5,7 @@ Generates insights and recommendations for sponsorship opportunities
 ENHANCED with OpenAI-powered merchant name standardization
 UPDATED to use allowed_for_custom list for custom category selection
 UPDATED with consistent column names for slide compatibility
+UPDATED to use LAST_FULL_YEAR views for specific insights
 """
 
 import pandas as pd
@@ -167,6 +168,9 @@ class CategoryAnalyzer:
                          category_df: pd.DataFrame,
                          subcategory_df: pd.DataFrame,
                          merchant_df: pd.DataFrame,
+                         # NEW: Add optional DataFrames for LAST_FULL_YEAR
+                         subcategory_last_year_df: pd.DataFrame = None,
+                         merchant_last_year_df: pd.DataFrame = None,
                          validate: bool = True) -> Dict[str, Any]:
         """
         Analyze a specific category using multiple data sources with merchant name standardization
@@ -176,30 +180,38 @@ class CategoryAnalyzer:
             category_df: Data from CATEGORY_INDEXING_ALL_TIME view
             subcategory_df: Data from SUBCATEGORY_INDEXING_ALL_TIME view
             merchant_df: Data from MERCHANT_INDEXING_ALL_TIME view
+            subcategory_last_year_df: Data from SUBCATEGORY_INDEXING_LAST_FULL_YEAR view (NEW)
+            merchant_last_year_df: Data from MERCHANT_INDEXING_LAST_FULL_YEAR view (NEW)
             validate: Whether to run validation checks
 
         Returns:
             Complete analysis results including metrics, insights, and recommendations
         """
-        # STANDARDIZE MERCHANT NAMES FIRST
-        if not merchant_df.empty and 'MERCHANT' in merchant_df.columns:
-            merchant_df = self.standardize_merchant_data(merchant_df)
-
         # Get category configuration
         category_config = self.categories.get(category_key)
         if not category_config:
             raise ValueError(f"Unknown category: {category_key}")
 
         # Clean data - TRIM all string columns and remove nulls
-        for df in [category_df, subcategory_df, merchant_df]:
+        for df in [category_df, subcategory_df, merchant_df, subcategory_last_year_df, merchant_last_year_df]:
             if df is not None and not df.empty:
                 self._clean_dataframe(df)
+
+        # STANDARDIZE MERCHANT NAMES FIRST
+        if not merchant_df.empty and 'MERCHANT' in merchant_df.columns:
+            merchant_df = self.standardize_merchant_data(merchant_df)
+
+        # Standardize LAST_FULL_YEAR merchant data if provided
+        if merchant_last_year_df is not None and not merchant_last_year_df.empty and 'MERCHANT' in merchant_last_year_df.columns:
+            merchant_last_year_df = self.standardize_merchant_data(merchant_last_year_df)
 
         # Store raw data for validation (AFTER standardization)
         self.raw_data = {
             'category': category_df,
             'subcategory': subcategory_df,
-            'merchant': merchant_df  # This now has standardized names
+            'merchant': merchant_df,
+            'subcategory_last_year': subcategory_last_year_df,  # NEW
+            'merchant_last_year': merchant_last_year_df  # NEW
         }
 
         # 1. Category-level analysis
@@ -215,17 +227,21 @@ class CategoryAnalyzer:
         subcategory_stats = self._get_subcategory_stats(subcategory_df, category_config)
 
         # 3. Generate insights with proper data sources
+        # Pass LAST_FULL_YEAR data for specific insights
         insights = self._generate_insights(
             category_config, category_metrics, subcategory_stats,
-            category_df, subcategory_df
+            category_df, subcategory_df,
+            subcategory_last_year_df  # NEW: Pass LAST_FULL_YEAR data
         )
 
         # 4. Merchant analysis (now with standardized names)
         merchant_stats = self._get_merchant_stats(merchant_df)
 
         # 5. Generate merchant insights (now with standardized names)
+        # Pass LAST_FULL_YEAR merchant data
         merchant_insights = self._generate_merchant_insights(
-            merchant_stats, merchant_df
+            merchant_stats, merchant_df,
+            merchant_last_year_df  # NEW: Pass LAST_FULL_YEAR data
         )
 
         # 6. Get sponsorship recommendation (now with standardized names)
@@ -451,7 +467,8 @@ class CategoryAnalyzer:
                            metrics: CategoryMetrics,
                            subcategory_stats: pd.DataFrame,
                            category_df: pd.DataFrame,
-                           subcategory_df: pd.DataFrame) -> List[str]:
+                           subcategory_df: pd.DataFrame,
+                           subcategory_last_year_df: pd.DataFrame = None) -> List[str]:
         """Generate category insights following template patterns"""
         insights = []
 
@@ -474,8 +491,12 @@ class CategoryAnalyzer:
             top_sub = subcategory_stats.iloc[0]
             self._add_subcategory_insight(insights, top_sub)
 
-        # 4. Highest spending subcategory
-        self._add_highest_spend_subcategory_insight(insights, subcategory_df)
+        # 4. Highest spending subcategory - NOW USES LAST_FULL_YEAR if available
+        if subcategory_last_year_df is not None and not subcategory_last_year_df.empty:
+            self._add_highest_spend_subcategory_insight(insights, subcategory_last_year_df)
+        else:
+            # Fallback to ALL_TIME if LAST_FULL_YEAR not provided
+            self._add_highest_spend_subcategory_insight(insights, subcategory_df)
 
         # 5. NBA/League comparison - use subcategory data
         nba_insight = self._get_league_comparison_subcategory(subcategory_df, category_config)
@@ -547,7 +568,7 @@ class CategoryAnalyzer:
 
     def _get_league_comparison_subcategory(self, subcategory_df: pd.DataFrame,
                                            category_config: Dict[str, Any]) -> Optional[str]:
-        """Find subcategory where team most over-indexes vs NBA Fans within current category"""
+        """Find subcategory where team most over-indexes vs NBA Fans within current category across ALL indices"""
         if subcategory_df.empty:
             return None
 
@@ -570,26 +591,80 @@ class CategoryAnalyzer:
         if nba_comp.empty:
             return None
 
-        # Find subcategory with highest PERC_INDEX (most over-indexed)
-        best_sub = nba_comp.nlargest(1, 'PERC_INDEX').iloc[0]
+        # Define the indices to check
+        index_columns = ['PERC_INDEX', 'SPC_INDEX', 'SPP_INDEX', 'PPC_INDEX', 'COMPOSITE_INDEX']
 
-        # KEEP THE SUBTRACTION - This gives us "% MORE likely"
-        index_diff = float(best_sub['PERC_INDEX']) - 100  # 430 - 100 = 330% MORE
+        # Find the maximum value across all indices and subcategories
+        max_value = 0
+        best_index_name = None
+        best_subcategory = None
+        best_row = None
+
+        for _, row in nba_comp.iterrows():
+            for index_col in index_columns:
+                if index_col in row and pd.notna(row[index_col]):
+                    value = float(row[index_col])
+                    if value > max_value:
+                        max_value = value
+                        best_index_name = index_col
+                        best_subcategory = row['SUBCATEGORY']
+                        best_row = row
+
+        # If no significant value found
+        if best_row is None or max_value <= 100:  # 100 means no difference
+            return None
+
+        # Calculate the difference (subtract 100 to get "% MORE")
+        index_diff = max_value - 100
 
         # Only report if significant (>5%)
-        if index_diff > self.min_significant_difference:
-            # Format the subcategory name for display
-            subcategory_name = self._format_subcategory_name(
-                best_sub['SUBCATEGORY'],
-                category_config
-            )
+        if index_diff <= self.min_significant_difference:
+            return None
 
+        # Format the subcategory name for display
+        subcategory_name = self._format_subcategory_name(
+            best_subcategory,
+            category_config
+        )
+
+        # Map index names to more readable descriptions
+        index_descriptions = {
+            'PERC_INDEX': 'likely to spend',
+            'SPC_INDEX': 'spending per customer',
+            'SPP_INDEX': 'spending per purchase',
+            'PPC_INDEX': 'purchase frequency',
+            'COMPOSITE_INDEX': 'overall engagement'
+        }
+
+        # Get the description for the winning index
+        metric_description = index_descriptions.get(best_index_name, 'engagement')
+
+        # Generate insight based on which index was highest
+        if best_index_name == 'PERC_INDEX':
             return (
                 f"{self.team_name} fans are {index_diff:.0f}% more likely "
                 f"to spend on {subcategory_name} when compared to the NBA average"
             )
-
-        return None
+        elif best_index_name == 'SPC_INDEX':
+            return (
+                f"{self.team_name} fans have {index_diff:.0f}% higher spending per customer "
+                f"on {subcategory_name} when compared to the NBA average"
+            )
+        elif best_index_name == 'SPP_INDEX':
+            return (
+                f"{self.team_name} fans spend {index_diff:.0f}% more per purchase "
+                f"on {subcategory_name} when compared to the NBA average"
+            )
+        elif best_index_name == 'PPC_INDEX':
+            return (
+                f"{self.team_name} fans make {index_diff:.0f}% more purchases "
+                f"of {subcategory_name} when compared to the NBA average"
+            )
+        else:  # COMPOSITE_INDEX
+            return (
+                f"{self.team_name} fans show {index_diff:.0f}% higher overall engagement "
+                f"with {subcategory_name} when compared to the NBA average"
+            )
 
     def _get_standardized_name_from_table(self, merchant_name: str, merchant_table: pd.DataFrame) -> str:
         """
@@ -632,7 +707,8 @@ class CategoryAnalyzer:
         return merchant_name
 
     def _generate_merchant_insights(self, merchant_stats: Tuple[pd.DataFrame, List[str]],
-                                    merchant_df: pd.DataFrame) -> List[str]:
+                                    merchant_df: pd.DataFrame,
+                                    merchant_last_year_df: pd.DataFrame = None) -> List[str]:
         """
         FIXED: Generate merchant-specific insights ensuring consistent standardized names
         """
@@ -649,8 +725,12 @@ class CategoryAnalyzer:
             f"spent at {top_merchant['Brand']}"  # USE Brand from table (standardized)
         )
 
-        # 2. Find merchant with highest PPC - USE STANDARDIZED NAMES CONSISTENTLY
-        highest_ppc_merchant = self._find_highest_ppc_merchant(merchant_df, top_merchants)
+        # 2. Find merchant with highest PPC - NOW USES LAST_FULL_YEAR if available
+        if merchant_last_year_df is not None and not merchant_last_year_df.empty:
+            highest_ppc_merchant = self._find_highest_ppc_merchant(merchant_last_year_df, top_merchants)
+        else:
+            highest_ppc_merchant = self._find_highest_ppc_merchant(merchant_df, top_merchants)
+
         if highest_ppc_merchant:
             # GET STANDARDIZED NAME FROM TABLE instead of raw data
             standardized_name = self._get_standardized_name_from_table(
@@ -662,8 +742,12 @@ class CategoryAnalyzer:
                 f"purchases per year at {standardized_name}"
             )
 
-        # 3. Find merchant with highest SPC - USE STANDARDIZED NAMES CONSISTENTLY
-        highest_spc_merchant = self._find_highest_spc_merchant(merchant_df, top_merchants)
+        # 3. Find merchant with highest SPC - NOW USES LAST_FULL_YEAR if available
+        if merchant_last_year_df is not None and not merchant_last_year_df.empty:
+            highest_spc_merchant = self._find_highest_spc_merchant(merchant_last_year_df, top_merchants)
+        else:
+            highest_spc_merchant = self._find_highest_spc_merchant(merchant_df, top_merchants)
+
         if highest_spc_merchant:
             spc_value = highest_spc_merchant['spc']
             if spc_value >= 1000:
@@ -681,7 +765,7 @@ class CategoryAnalyzer:
                 f"on {standardized_name} per year"
             )
 
-        # 4. Best NBA/League comparison - USE STANDARDIZED NAMES CONSISTENTLY
+        # 4. Best NBA/League comparison - continues to use ALL_TIME data
         best_nba_merchant = self._find_best_nba_comparison(merchant_df, top_merchants)
         if best_nba_merchant:
             # GET STANDARDIZED NAME FROM TABLE instead of raw data

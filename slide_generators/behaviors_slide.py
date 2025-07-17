@@ -196,7 +196,7 @@ class BehaviorsSlide(BaseSlide):
         if insight_length <= 100:
             font_size = Pt(18)  # Large for short insights
         elif insight_length <= 140:
-            font_size = Pt(16)  # Standard size
+            font_size = Pt(14)  # Standard size
         elif insight_length <= 160:
             font_size = Pt(14)  # Smaller for longer insights
         else:
@@ -205,7 +205,7 @@ class BehaviorsSlide(BaseSlide):
         logger.info(f"Insight length: {insight_length} chars, using font size: {font_size.pt}pt")
 
         text_box = slide.shapes.add_textbox(
-            Inches(0.4), Inches(1.0),  # Moved up from 1.2" to 0.8"
+            Inches(0.4), Inches(1.1),  # Moved up from 1.2" to 0.8"
             Inches(6.5), Inches(0.8)  # Reduced height to contain text
         )
         text_box.text_frame.text = insight

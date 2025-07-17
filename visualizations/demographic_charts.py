@@ -3,6 +3,7 @@
 Fixed demographic visualization with proper text scaling and correct aspect ratios
 Matches PowerPoint placeholder dimensions exactly
 UPDATED: Handles ethnicity charts with fewer communities when Local Gen Pop has null values
+FIXED: Community-based color mapping ensures correct colors regardless of data ordering
 """
 
 import matplotlib.pyplot as plt
@@ -22,7 +23,14 @@ class DemographicCharts:
         self.colors = team_colors or {
             'primary': '#002244',
             'secondary': '#FFB612',
-            'accent': '#8B8B8B'
+            'accent': '#00471B'  # CHANGED: Use green instead of gray for NBA fans
+        }
+
+        # CRITICAL: Community-based color mapping - fixed order
+        self.community_color_map = {
+            'primary': self.colors['primary'],  # Blue - for team fans
+            'secondary': self.colors['secondary'],  # Yellow - for local gen pop
+            'accent': self.colors['accent']  # Green - for league fans
         }
 
         # CRITICAL: Higher DPI but with explicit size control
@@ -77,11 +85,11 @@ class DemographicCharts:
             print(f"Font detection error: {e}")
             print("Using Arial as fallback")
 
-        # Chart colors
+        # FIXED: Ensure we have all three colors in correct order
         self.community_colors = [
-            self.colors['primary'],
-            self.colors['secondary'],
-            self.colors['accent']
+            self.colors['primary'],  # Blue for team fans
+            self.colors['secondary'],  # Yellow for local gen pop
+            self.colors['accent']  # Green for league fans
         ]
 
         # CRITICAL: Disable all auto-layout
@@ -92,6 +100,61 @@ class DemographicCharts:
         plt.rcParams['font.family'] = self.font_family
         if 'Overpass' in self.font_family:
             plt.rcParams['font.weight'] = 'light'
+
+    def _get_community_color(self, community_name: str) -> str:
+        """
+        Map community names to appropriate colors based on content, not position
+
+        Args:
+            community_name: Name of the community (e.g., "Utah Jazz Fans", "Local Gen Pop", "NBA Fans")
+
+        Returns:
+            Hex color code for the community
+        """
+        community_name = str(community_name).lower()
+
+        # Team fans (specific team name) -> Primary color (blue)
+        if any(team in community_name for team in ['jazz fans', 'cowboys fans', 'lakers fans']):
+            if 'nba' not in community_name and 'nfl' not in community_name:  # Exclude league-wide fans
+                return self.community_color_map['primary']
+
+        # Local general population -> Secondary color (yellow)
+        if 'local gen pop' in community_name or 'gen pop' in community_name:
+            return self.community_color_map['secondary']
+
+        # League fans (NBA, NFL, etc.) -> Accent color (green)
+        if any(league in community_name for league in ['nba fans', 'nfl fans', 'mlb fans', 'nhl fans']):
+            return self.community_color_map['accent']
+
+        # Fallback - if we can't identify, use order-based assignment
+        print(f"Warning: Could not identify community type for '{community_name}', using fallback colors")
+        return self.community_color_map['primary']  # Default to primary
+
+    def _get_gender_colors(self, communities: List[str]) -> Tuple[str, str]:
+        """
+        Get colors for gender chart based on community types
+        Gender chart has stacked bars, not separate communities, so we use male/female colors
+
+        Returns:
+            Tuple of (male_color, female_color)
+        """
+        # For gender charts, we use consistent colors regardless of communities
+        # Male = Primary (blue), Female = depends on which non-team community is present
+        male_color = self.community_color_map['primary']  # Always blue for male
+
+        # Determine female color based on what communities are present
+        has_local_gen_pop = any('local gen pop' in str(comm).lower() for comm in communities)
+        has_league_fans = any('nba fans' in str(comm).lower() or 'nfl fans' in str(comm).lower()
+                              for comm in communities)
+
+        if has_league_fans:
+            female_color = self.community_color_map['accent']  # Green for female
+        elif has_local_gen_pop:
+            female_color = self.community_color_map['secondary']  # Yellow for female
+        else:
+            female_color = self.community_color_map['secondary']  # Default to yellow
+
+        return male_color, female_color
 
     def _format_income_label(self, label: str) -> str:
         """Format income labels to be extremely concise for small charts"""
@@ -236,7 +299,7 @@ class DemographicCharts:
                                  show_legend: bool = False,
                                  chart_type: str = None,
                                  bar_width: float = None) -> plt.Figure:  # Added bar_width parameter
-        """Create grouped bar chart with fixed text sizing and smart label formatting"""
+        """Create grouped bar chart with FIXED community-based color mapping"""
 
         # Create figure with explicit size and positioning
         fig = plt.figure(figsize=figsize, dpi=self.fig_dpi)
@@ -256,9 +319,12 @@ class DemographicCharts:
 
         indices = np.arange(n_groups)
 
-        # Create bars and track values for each group
+        # FIXED: Create bars with community-based color mapping
         bar_groups = []
-        for i, (community, color) in enumerate(zip(data.columns, self.community_colors)):
+        for i, community in enumerate(data.columns):
+            # Get color based on community name, not position
+            color = self._get_community_color(community)
+
             positions = indices + (i - n_bars / 2 + 0.5) * bar_width
             bars = ax.bar(positions, data[community], bar_width,
                           label=community, color=color, alpha=0.8)
@@ -354,7 +420,7 @@ class DemographicCharts:
     def create_gender_chart(self, data: Dict[str, Dict[str, float]],
                             title: str = 'Gender',
                             figsize: Tuple[float, float] = (1.5, 2.5)) -> plt.Figure:
-        """Create horizontal stacked bars for gender distribution - ALREADY CORRECT SIZE"""
+        """Create horizontal stacked bars for gender distribution - FIXED COLOR MAPPING"""
         # Set matplotlib parameters for better rendering
         plt.rcParams['text.antialiased'] = True
         plt.rcParams['axes.linewidth'] = 0.8
@@ -373,9 +439,8 @@ class DemographicCharts:
         bar_height = 0.6
         y_positions = np.arange(n_communities)
 
-        # Use consistent colors for all bars
-        male_color = self.community_colors[0]  # Primary color (blue)
-        female_color = self.community_colors[1]  # Secondary color (yellow)
+        # FIXED: Get colors based on community analysis, not fixed assignment
+        male_color, female_color = self._get_gender_colors(communities)
 
         # Define edge properties for crisp rendering (without alpha)
         edge_props = dict(linewidth=0.5, edgecolor='#666666')  # Gray edge for subtlety
@@ -401,12 +466,12 @@ class DemographicCharts:
             male_pct = values.get('Male', 0)
             female_pct = values.get('Female', 0)
 
-            # Draw stacked horizontal bar with consistent colors and edges
+            # Draw stacked horizontal bar with FIXED colors
             # Male portion (blue)
             ax.barh(y_positions[idx], male_pct, bar_height,
                     left=0, color=male_color, alpha=0.8, **edge_props)
 
-            # Female portion (yellow)
+            # Female portion (green if NBA fans present, yellow otherwise)
             ax.barh(y_positions[idx], female_pct, bar_height,
                     left=male_pct, color=female_color, alpha=0.8, **edge_props)
 
@@ -415,7 +480,7 @@ class DemographicCharts:
                 male_positions.append(male_pct / 2)
                 female_positions.append(male_pct + female_pct / 2)
 
-            # Add percentage labels
+            # Add percentage labels with appropriate text colors
             if male_pct > 5:
                 ax.text(male_pct / 2, y_positions[idx], f'{int(male_pct)}%',
                         ha='center', va='center', fontweight='bold',
@@ -423,9 +488,11 @@ class DemographicCharts:
                         fontfamily=self.font_family)
 
             if female_pct > 5:
+                # Use white text on green, black text on yellow
+                text_color = 'white' if female_color == self.community_color_map['accent'] else 'black'
                 ax.text(male_pct + female_pct / 2, y_positions[idx], f'{int(female_pct)}%',
                         ha='center', va='center', fontweight='bold',
-                        color='black', fontsize=self.label_size,
+                        color=text_color, fontsize=self.label_size,
                         fontfamily=self.font_family)
 
             # Add community label below each bar
