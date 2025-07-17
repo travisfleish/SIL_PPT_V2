@@ -981,20 +981,80 @@ class CategorySlide(BaseSlide):
         if not recommendation:
             return
 
-        # Top Brand Target header
+        # Top Brand Target header with colon
         target_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(5.1),
-            Inches(4), Inches(0.3)
+            Inches(0.5), Inches(5.2),
+            Inches(2.0), Inches(0.3)  # Wider to accommodate full text
         )
-        target_title.text_frame.text = "Hot Brand Target"
+        target_title.text_frame.text = "Hot Brand Target:"
         p = target_title.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
         p.font.size = Pt(14)
         p.font.bold = True
 
-        # Recommendation content
+        # Add brand logo next to "Hot Brand Target:" text
+        merchant_name = recommendation.get('merchant', 'Brand')
+        logo_size = Inches(0.5)  # Small logo size
+        logo_x = Inches(2.4)  # Shifted right to avoid text overlap
+        logo_y = Inches(5.125)  # Vertically centered with text
+
+        # Try to get logo from LogoManager
+        logo_image = self.logo_manager.get_logo(merchant_name, size=(60, 60))
+
+        if logo_image:
+            # Check if logo has colored background
+            has_colored_bg = self._has_colored_background(logo_image)
+
+            # Convert PIL Image to bytes for PowerPoint
+            image_stream = io.BytesIO()
+            logo_image.save(image_stream, format='PNG')
+            image_stream.seek(0)
+
+            try:
+                if has_colored_bg:
+                    # For colored background logos, add directly
+                    pic = slide.shapes.add_picture(
+                        image_stream,
+                        logo_x, logo_y,
+                        logo_size, logo_size
+                    )
+                else:
+                    # For white/transparent background logos, add with circle border
+                    circle = slide.shapes.add_shape(
+                        MSO_SHAPE.OVAL,
+                        logo_x, logo_y,
+                        logo_size, logo_size
+                    )
+                    circle.fill.solid()
+                    circle.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                    circle.line.color.rgb = RGBColor(200, 200, 200)
+                    circle.line.width = Pt(0.5)
+
+                    # Reset stream position
+                    image_stream.seek(0)
+
+                    # Add logo slightly smaller to fit in circle
+                    logo_display_size = Inches(0.45)
+                    offset = (logo_size - logo_display_size) / 2
+                    pic = slide.shapes.add_picture(
+                        image_stream,
+                        logo_x + offset,
+                        logo_y + offset,
+                        logo_display_size, logo_display_size
+                    )
+
+                    # Ensure logo is on top
+                    slide.shapes._spTree.remove(pic._element)
+                    slide.shapes._spTree.append(pic._element)
+
+            except Exception as e:
+                logger.error(f"Failed to add logo for {merchant_name}: {e}")
+        else:
+            logger.info(f"No logo found for Hot Brand Target: {merchant_name}")
+
+        # Recommendation content - moved down to create space after logo
         rec_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(5.5),
+            Inches(0.7), Inches(5.7),  # Moved down from 5.5 to create spacing
             Inches(5.5), Inches(1.2)  # Extended width to match insights box
         )
 
@@ -1003,18 +1063,36 @@ class CategorySlide(BaseSlide):
 
         # UPDATED: Standardized recommendation format with composite index
         team_name = team_config.get('team_name', 'Team')
-        merchant_name = recommendation.get('merchant', 'Brand')
         composite_index_raw = recommendation.get('composite_index', 0)
         try:
             composite_index = int(round(float(composite_index_raw)))
         except (ValueError, TypeError):
             composite_index = 'N/A'
 
-        # First bullet - main recommendation with composite index
+        # First bullet - main recommendation with BOLD brand name
         p1 = text_frame.paragraphs[0]
-        p1.text = f"• The {team_name} should target {merchant_name} for a sponsorship based on having the highest composite index of {composite_index}"
-        p1.font.name = self.default_font
-        p1.font.size = Pt(12)
+
+        # Add the beginning of the sentence
+        run1 = p1.add_run()
+        run1.text = f"• The {team_name} should target "
+        run1.font.name = self.default_font
+        run1.font.size = Pt(12)
+        run1.font.bold = False
+
+        # Add the brand name in bold
+        run2 = p1.add_run()
+        run2.text = merchant_name
+        run2.font.name = self.default_font
+        run2.font.size = Pt(12)
+        run2.font.bold = True
+
+        # Add the rest of the sentence
+        run3 = p1.add_run()
+        run3.text = f" for a sponsorship based on having the highest composite index of {composite_index}"
+        run3.font.name = self.default_font
+        run3.font.size = Pt(12)
+        run3.font.bold = False
+
         p1.line_spacing = 1.2
 
         # Second bullet - standardized explanation with proper indentation

@@ -2,6 +2,7 @@
 """
 Fixed demographic visualization with proper text scaling and correct aspect ratios
 Matches PowerPoint placeholder dimensions exactly
+UPDATED: Handles ethnicity charts with fewer communities when Local Gen Pop has null values
 """
 
 import matplotlib.pyplot as plt
@@ -30,9 +31,9 @@ class DemographicCharts:
         # Font sizes adjusted for small PowerPoint display dimensions
         self.font_size = 10
         self.title_size = 12
-        self.label_size = 8  # Bar value labels (the percentages on bars)
+        self.label_size = 10  # Bar value labels (the percentages on bars)
         self.axis_label_size = 10  # Axis titles
-        self.tick_label_size = 8  # Axis tick labels
+        self.tick_label_size = 10  # Axis tick labels
         self.pie_text_size = 10  # Pie chart percentages
         self.legend_size = 9
 
@@ -153,7 +154,7 @@ class DemographicCharts:
 
         # Handle specific generation mappings
         generation_map = {
-            'Millennials and Gen Z': 'Millennials & Gen Z',
+            'Millennials and Gen Z': 'Millennials/Gen Z',
             'Generation X': 'Gen X',
             'Baby Boomers': 'Boomers',
             'Post-WWII': 'Post-WWII',
@@ -189,7 +190,7 @@ class DemographicCharts:
         label = str(label).strip()
 
         ethnicity_map = {
-            'African American': 'African American',
+            'African American': 'Afr. American',  # Split into two lines
             'Hispanic': 'Hispanic',
             'White': 'White',
             'Asian': 'Asian',
@@ -233,7 +234,8 @@ class DemographicCharts:
                                  figsize: Tuple[float, float] = (4.5, 2.5),  # Default to match PPT
                                  rotation: int = 0,
                                  show_legend: bool = False,
-                                 chart_type: str = None) -> plt.Figure:
+                                 chart_type: str = None,
+                                 bar_width: float = None) -> plt.Figure:  # Added bar_width parameter
         """Create grouped bar chart with fixed text sizing and smart label formatting"""
 
         # Create figure with explicit size and positioning
@@ -247,7 +249,11 @@ class DemographicCharts:
 
         n_groups = len(data.index)
         n_bars = len(data.columns)
-        bar_width = 0.15  # Further reduced for more spacing between groups
+
+        # Use custom bar_width if provided, otherwise use default
+        if bar_width is None:
+            bar_width = 0.15  # Default
+
         indices = np.arange(n_groups)
 
         # Create bars and track values for each group
@@ -467,9 +473,15 @@ class DemographicCharts:
         return fig
 
     def create_ethnicity_chart(self, data: pd.DataFrame) -> plt.Figure:
-        """Create ethnicity grouped bar chart with correct aspect ratio"""
-        # PowerPoint size: 4.5" x 2.5" = 1.8 aspect ratio
-        return self.create_grouped_bar_chart(data, chart_type='ethnicity', figsize=(4.5, 2.5))
+        """Create ethnicity grouped bar chart with correct aspect ratio - ALWAYS same width as other charts"""
+        # PowerPoint size: 4.5" x 2.8" (increased height to accommodate two-line label)
+        # Keep standard width but increase height for the two-line "African\nAmerican" label
+        fig = self.create_grouped_bar_chart(data, chart_type='ethnicity', figsize=(4.5, 2.5))
+
+        # Adjust bottom margin to accommodate the two-line label
+        fig.subplots_adjust(bottom=0.22)  # Slightly more bottom margin
+
+        return fig
 
     def create_generation_chart(self, data: pd.DataFrame) -> plt.Figure:
         """Create generation chart with correct aspect ratio"""

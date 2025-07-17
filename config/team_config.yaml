@@ -1,26 +1,33 @@
 # config/team_config.yaml
 
 # Global view patterns - these are consistent across all teams
+
 view_patterns:
+  # Existing patterns
   community_all_time: "{prefix}_COMMUNITY_INDEXING_ALL_TIME"
   community_snapshot: "{prefix}_COMMUNITY_INDEXING_SNAPSHOT"
   community_yoy: "{prefix}_COMMUNITY_INDEXING_YOY"
+  community_last_full_year: "{prefix}_COMMUNITY_INDEXING_LAST_FULL_YEAR"  # NEW
 
   category_all_time: "{prefix}_CATEGORY_INDEXING_ALL_TIME"
   category_snapshot: "{prefix}_CATEGORY_INDEXING_SNAPSHOT"
   category_yoy: "{prefix}_CATEGORY_INDEXING_YOY"
+  category_last_full_year: "{prefix}_CATEGORY_INDEXING_LAST_FULL_YEAR"  # NEW
 
   subcategory_all_time: "{prefix}_SUBCATEGORY_INDEXING_ALL_TIME"
   subcategory_snapshot: "{prefix}_SUBCATEGORY_INDEXING_SNAPSHOT"
   subcategory_yoy: "{prefix}_SUBCATEGORY_INDEXING_YOY"
+  subcategory_last_full_year: "{prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR"  # NEW
 
   merchant_all_time: "{prefix}_MERCHANT_INDEXING_ALL_TIME"
   merchant_snapshot: "{prefix}_MERCHANT_INDEXING_SNAPSHOT"
   merchant_yoy: "{prefix}_MERCHANT_INDEXING_YOY"
+  merchant_last_full_year: "{prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR"  # NEW
 
   community_merchant_all_time: "{prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
   community_merchant_snapshot: "{prefix}_COMMUNITY_MERCHANT_INDEXING_SNAPSHOT"
   community_merchant_yoy: "{prefix}_COMMUNITY_MERCHANT_INDEXING_YOY"
+  community_merchant_last_full_year: "{prefix}_COMMUNITY_MERCHANT_INDEXING_LAST_FULL_YEAR"  # NEW
 
   demographics: "{prefix}_DEMOGRAPHICS_DIST"
 

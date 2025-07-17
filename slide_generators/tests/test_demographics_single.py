@@ -2,6 +2,7 @@
 """
 Test script for the fixed demographics slide and charts
 Tests the removal of redundant titles, legends, and fixes the KEY text visibility
+ENHANCED: Added comprehensive font debugging
 """
 
 import sys
@@ -19,10 +20,192 @@ from visualizations.demographic_charts import DemographicCharts
 from slide_generators.demographics_slide import DemographicsSlide
 from utils.team_config_manager import TeamConfigManager
 
+# Import matplotlib for debugging
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+
+
+def debug_font_system():
+    """Debug the font system and available fonts"""
+    print("\n" + "=" * 70)
+    print("FONT SYSTEM DEBUG")
+    print("=" * 70)
+
+    # 1. Check matplotlib version
+    print(f"\n1. Matplotlib version: {matplotlib.__version__}")
+
+    # 2. Check current font settings
+    print("\n2. Current matplotlib font settings:")
+    font_settings = [
+        'font.family', 'font.weight', 'font.size',
+        'axes.labelweight', 'axes.titleweight',
+        'figure.titleweight', 'figure.labelweight'
+    ]
+    for setting in font_settings:
+        value = matplotlib.rcParams.get(setting, 'NOT SET')
+        print(f"   {setting}: {value}")
+
+    # 3. Check available Overpass fonts
+    print("\n3. Available Overpass fonts:")
+    overpass_fonts = []
+    for font in fm.fontManager.ttflist:
+        if 'overpass' in font.name.lower():
+            overpass_fonts.append({
+                'name': font.name,
+                'weight': font.weight,
+                'style': font.style,
+                'variant': font.variant,
+                'stretch': font.stretch,
+                'fname': font.fname
+            })
+
+    if overpass_fonts:
+        for font in sorted(overpass_fonts, key=lambda x: x['weight'], reverse=True):
+            print(f"   - {font['name']}")
+            print(f"     Weight: {font['weight']} ({'bold' if font['weight'] >= 700 else 'regular'})")
+            print(f"     Style: {font['style']}")
+            print(f"     Path: {font['fname']}")
+    else:
+        print("   ❌ No Overpass fonts found!")
+
+    # 4. Check available bold fonts
+    print("\n4. Available bold fonts (weight >= 700):")
+    bold_fonts = []
+    for font in fm.fontManager.ttflist:
+        if font.weight >= 700:
+            bold_fonts.append(f"{font.name} (weight: {font.weight})")
+
+    # Show first 10 bold fonts
+    for font in sorted(bold_fonts)[:10]:
+        print(f"   - {font}")
+
+    # 5. Test if Arial Black is available
+    print("\n5. Checking for Arial Black:")
+    arial_black_found = False
+    for font in fm.fontManager.ttflist:
+        if 'arial black' in font.name.lower():
+            print(f"   ✅ Found: {font.name} (weight: {font.weight})")
+            arial_black_found = True
+    if not arial_black_found:
+        print("   ❌ Arial Black not found")
+
+    # 6. Font cache location
+    print("\n6. Font cache info:")
+    cache_dir = Path.home() / '.matplotlib'
+    if cache_dir.exists():
+        cache_files = list(cache_dir.glob('fontlist-*.json'))
+        if cache_files:
+            for cache_file in cache_files:
+                print(f"   - {cache_file}")
+                print(f"     Size: {cache_file.stat().st_size / 1024:.1f} KB")
+                print(f"     Modified: {datetime.fromtimestamp(cache_file.stat().st_mtime)}")
+        else:
+            print("   No font cache files found")
+    else:
+        print("   Cache directory does not exist")
+
+    return overpass_fonts, bold_fonts
+
+
+def create_font_test_chart(output_dir: Path):
+    """Create a test chart to verify font rendering"""
+    print("\n7. Creating font test chart...")
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6))
+
+    # Test different font specifications
+    test_configs = [
+        {'family': 'Overpass', 'weight': 'bold', 'label': 'Overpass Bold'},
+        {'family': 'Overpass', 'weight': 'normal', 'label': 'Overpass Normal'},
+        {'family': 'Arial', 'weight': 'bold', 'label': 'Arial Bold'},
+        {'family': 'Arial Black', 'weight': 'normal', 'label': 'Arial Black'},
+    ]
+
+    # Test on first axis
+    ax1.set_title('Font Weight Test', fontsize=14, fontweight='bold')
+    y_pos = 0.8
+    for config in test_configs:
+        try:
+            ax1.text(0.1, y_pos, config['label'] + ':',
+                     fontfamily=config['family'], fontweight='normal', fontsize=12)
+            ax1.text(0.5, y_pos, 'Sample Text 123',
+                     fontfamily=config['family'], fontweight=config['weight'], fontsize=12)
+            y_pos -= 0.2
+        except:
+            ax1.text(0.5, y_pos, f"Failed to render {config['family']}",
+                     fontsize=10, color='red')
+            y_pos -= 0.2
+
+    ax1.set_xlim(0, 1)
+    ax1.set_ylim(0, 1)
+    ax1.axis('off')
+
+    # Test current matplotlib settings
+    ax2.set_title('Current Settings Test', fontsize=14, fontweight='bold')
+    ax2.text(0.5, 0.8, 'Default Text (should be bold)', ha='center', fontsize=12)
+    ax2.text(0.5, 0.6, f"Font: {plt.rcParams['font.family']}", ha='center', fontsize=10)
+    ax2.text(0.5, 0.4, f"Weight: {plt.rcParams['font.weight']}", ha='center', fontsize=10)
+
+    # Add sample bar chart
+    ax2_inset = fig.add_axes([0.2, 0.05, 0.6, 0.25])
+    ax2_inset.bar(['A', 'B', 'C'], [10, 20, 15])
+    ax2_inset.set_ylabel('Values')
+    ax2_inset.set_title('Sample Bar Chart')
+
+    ax2.set_xlim(0, 1)
+    ax2.set_ylim(0, 1)
+    ax2.axis('off')
+
+    # Save test chart
+    test_path = output_dir / 'font_test_chart.png'
+    fig.savefig(test_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    print(f"   ✅ Font test chart saved: {test_path}")
+    return test_path
+
+
+def inspect_generated_chart(fig, chart_name: str):
+    """Inspect a generated chart for font properties"""
+    print(f"\n   Inspecting {chart_name} chart:")
+
+    axes = fig.get_axes()
+    for i, ax in enumerate(axes):
+        print(f"   Axis {i}:")
+
+        # Check title
+        title = ax.get_title()
+        if title:
+            print(f"     Title: '{title}' (weight: {ax.title.get_weight()})")
+
+        # Check axis labels
+        xlabel = ax.get_xlabel()
+        ylabel = ax.get_ylabel()
+        if xlabel:
+            print(f"     X-label: '{xlabel}' (weight: {ax.xaxis.label.get_weight()})")
+        if ylabel:
+            print(f"     Y-label: '{ylabel}' (weight: {ax.yaxis.label.get_weight()})")
+
+        # Check tick labels
+        xtick_labels = ax.get_xticklabels()
+        if xtick_labels:
+            first_label = xtick_labels[0] if xtick_labels else None
+            if first_label:
+                print(f"     X-tick weight: {first_label.get_weight()}")
+                print(f"     X-tick font: {first_label.get_fontfamily()}")
+
+        # Check text objects
+        texts = ax.texts
+        if texts:
+            print(f"     Text objects: {len(texts)}")
+            for j, text in enumerate(texts[:3]):  # First 3 texts
+                print(f"       Text {j}: '{text.get_text()[:20]}...' (weight: {text.get_weight()})")
+
 
 def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only: bool = False):
     """
-    Test the fixed demographics implementation
+    Test the fixed demographics implementation with enhanced font debugging
 
     Args:
         team_key: Team to test with
@@ -30,13 +213,17 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
     """
 
     print("\n" + "=" * 70)
-    print("FIXED DEMOGRAPHICS SLIDE TEST")
+    print("FIXED DEMOGRAPHICS SLIDE TEST - WITH FONT DEBUGGING")
     print("=" * 70)
     print("Testing fixes for:")
     print("  ✓ Removed redundant chart titles")
     print("  ✓ Removed individual chart legends")
     print("  ✓ Fixed KEY text visibility (black on white)")
+    print("  🔍 ENHANCED: Font weight debugging")
     print("=" * 70)
+
+    # Run font system debug first
+    overpass_fonts, bold_fonts = debug_font_system()
 
     try:
         # 1. Setup
@@ -52,6 +239,9 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
         output_dir = Path(f"test_fixed_demographics_{team_key}_{timestamp}")
         output_dir.mkdir(exist_ok=True)
         print(f"   Output directory: {output_dir}")
+
+        # Create font test chart
+        create_font_test_chart(output_dir)
 
         # 3. Fetch and process data
         print("\n2. Fetching demographic data...")
@@ -82,21 +272,35 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
         print("   - NO titles (black headers on slide provide context)")
         print("   - NO legends (KEY box provides legend)")
         print("   - Clean, minimal appearance")
+        print("   - DEBUGGING: Font weights")
+
+        # Check matplotlib settings before chart creation
+        print("\n   Matplotlib settings before chart creation:")
+        print(f"   - font.family: {matplotlib.rcParams['font.family']}")
+        print(f"   - font.weight: {matplotlib.rcParams['font.weight']}")
 
         charter = DemographicCharts(team_colors=team_config.get('colors'))
+
+        # Check what font the charter is using
+        print(f"\n   DemographicCharts font settings:")
+        print(f"   - font_family: {charter.font_family}")
+        print(f"   - matplotlib font.family: {plt.rcParams['font.family']}")
+        print(f"   - matplotlib font.weight: {plt.rcParams['font.weight']}")
+
         charts = charter.create_all_demographic_charts(
             demographic_data,
             output_dir=output_dir
         )
 
-        print(f"   ✅ Generated {len(charts)} charts")
+        print(f"\n   ✅ Generated {len(charts)} charts")
         print("   Charts created:")
-        for chart_name in charts.keys():
+        for chart_name, fig in charts.items():
             regular_path = output_dir / f'{chart_name}_chart.png'
             hires_path = output_dir / f'{chart_name}_chart_hires.png'
             print(f"   - {chart_name}")
-            print(f"     Regular: {regular_path}")
-            print(f"     Hi-res:  {hires_path}")
+
+            # Inspect the chart for font properties
+            inspect_generated_chart(fig, chart_name)
 
         # 6. Test chart appearance
         print("\n5. Verifying chart fixes...")
@@ -147,10 +351,24 @@ def test_fixed_demographics_slide(team_key: str = 'utah_jazz', save_charts_only:
             print("2. Verify charts have clean appearance (no titles/legends)")
             print("3. Check that KEY box text is visible (black on white)")
             print("4. Confirm black header bars provide chart context")
+            print("5. CHECK font_test_chart.png for font rendering")
 
         print("\nFiles created:")
         for file in sorted(output_dir.glob('*')):
             print(f"  - {file.name}")
+
+        # Final font recommendation
+        print("\n" + "=" * 70)
+        print("FONT RECOMMENDATIONS")
+        print("=" * 70)
+        if not overpass_fonts or all(f['weight'] < 700 for f in overpass_fonts):
+            print("⚠️  No bold Overpass variant found!")
+            print("Recommendations:")
+            print("1. Install Overpass Bold from: https://fonts.google.com/specimen/Overpass")
+            print("2. Or use Arial Black for guaranteed bold text")
+            print("3. Or use Helvetica Neue Bold on macOS")
+        else:
+            print("✅ Bold Overpass variants found - ensure matplotlib is using them")
 
         return output_dir
 
@@ -250,6 +468,7 @@ def quick_test():
     if result:
         print(f"\n✅ Test completed! Check: {result}")
         print("💡 Open the PowerPoint to verify the fixes")
+        print("🔍 Check font_test_chart.png for font debugging")
     else:
         print("\n❌ Test failed")
 
@@ -279,7 +498,7 @@ def main():
 
 if __name__ == "__main__":
     # Default behavior - run full test
-    print("🎯 DEMOGRAPHICS FIXES TEST")
+    print("🎯 DEMOGRAPHICS FIXES TEST - ENHANCED WITH FONT DEBUGGING")
     print("Run with --help for options")
 
     # Run default test

@@ -75,14 +75,17 @@ class CommunityIndexChart:
         # Sort data by Audience_Pct descending
         data = data.sort_values('Audience_Pct', ascending=True)  # Ascending for bottom-to-top display
 
-        # Create figure
+        # Create figure with dual x-axes
         fig, ax = plt.subplots(figsize=(10, 6))
         fig.patch.set_facecolor('white')
         ax.set_facecolor('white')
 
+        # Create top axis for percentage
+        ax2 = ax.twiny()
+
         # Set up the plot
         y_positions = np.arange(len(data))
-        max_value = 700  # Fixed scale as shown in reference
+        max_value = 700  # Fixed scale for bottom axis
 
         # Draw gray bars representing the % Team Fans (PERC_AUDIENCE)
         # Check if values are in decimal format (0-1) or percentage format (0-100)
@@ -99,80 +102,60 @@ class CommunityIndexChart:
                             color=self.background_color,
                             height=0.6,
                             alpha=0.8,
-                            label='% Team Fans')  # Changed from '% Audience'
+                            label='% Team Fans')
 
         # Draw blue bars representing the Team Fan Index - as thin lines
         blue_bars = ax.barh(y_positions,
                             data['Composite_Index'],
                             color=self.bar_color,
                             height=0.08,  # Very thin height for line effect
-                            label='Team Fan Index')  # Changed from '% Audience Index'
+                            label='Team Fan Index')
 
         # Add vertical reference line at x=100 (where index = 1.0)
         ax.axvline(x=100, color='#808080', linestyle='-', linewidth=1.5, alpha=0.6, zorder=1)
 
-        # Add percentage labels in yellow boxes at the end of gray bars
-        for i, (idx, row) in enumerate(data.iterrows()):
-            # Convert to percentage if needed
-            if data['Audience_Pct'].max() <= 1.0:
-                pct_value = row['Audience_Pct'] * 100
-            else:
-                pct_value = row['Audience_Pct']
-
-            # Position for the yellow box - at the end of the gray bar (% Team Fans)
-            x_pos = pct_value * (max_value / 100)  # Scale to match x-axis
-            y_pos = y_positions[i]
-
-            # Create yellow box
-            box_width = 60
-            box_height = 0.6  # Match the height of gray bars
-
-            # Check if the yellow box would extend beyond the chart
-            # If the box would be cut off (x_pos + box_width > max_value),
-            # position it inside the gray bar instead
-            if (x_pos + box_width - 5) > max_value:
-                # Position the box inside the gray bar, anchored from the right edge
-                box_x_pos = max_value - box_width - 5
-            else:
-                # Normal positioning - at the end of the gray bar
-                box_x_pos = x_pos - 5
-
-            # Add yellow rectangle
-            rect = Rectangle((box_x_pos, y_pos - box_height / 2),
-                             box_width, box_height,
-                             facecolor=self.highlight_color,
-                             edgecolor='none',
-                             zorder=10)
-            ax.add_patch(rect)
-
-            # Add percentage text - show PERC_AUDIENCE with font
-            ax.text(box_x_pos + box_width / 2, y_pos,
-                    f"{pct_value:.1f}%",
-                    ha='center', va='center',
-                    fontweight='bold', fontsize=13,
-                    fontfamily=self.font_family,
-                    zorder=11)
-
-        # Customize the plot with Red Hat Display font
+        # Customize the bottom plot (Index) with blue color
         ax.set_yticks(y_positions)
         ax.set_yticklabels(data['Community'], fontsize=15, fontweight='bold', fontfamily=self.font_family)
-        ax.set_xlabel('Likelihood To Be In Community (Index vs. Local Gen Pop)', fontsize=13, fontweight='bold', fontfamily=self.font_family)
+        ax.set_xlabel('Likelihood To Be In Community (Index vs. Local Gen Pop)',
+                      fontsize=13, fontweight='bold', fontfamily=self.font_family, color=self.bar_color)
         ax.set_xlim(0, max_value)
 
-        # Add x-axis labels at specific intervals with bold font and Red Hat Display
+        # Set bottom x-axis ticks and labels with blue color
         ax.set_xticks([0, 100, 200, 300, 400, 500, 600, 700])
-        ax.tick_params(axis='x', labelsize=15, labelbottom=True)
+        ax.tick_params(axis='x', labelsize=15, labelbottom=True, colors=self.bar_color)
         for label in ax.get_xticklabels():
             label.set_fontweight('bold')
             label.set_fontfamily(self.font_family)
+            label.set_color(self.bar_color)
 
-        # Remove top and right spines
+        # Color the bottom x-axis spine blue
+        ax.spines['bottom'].set_color(self.bar_color)
+        ax.spines['bottom'].set_linewidth(2)
+
+        # Configure top axis for percentage with gray color
+        ax2.set_xlim(0, 100)
+        ax2.set_xticks([0, 20, 40, 60, 80, 100])
+        ax2.set_xticklabels(['0%', '20%', '40%', '60%', '80%', '100%'])
+        ax2.tick_params(axis='x', labelsize=15, colors=self.background_color)
+        for label in ax2.get_xticklabels():
+            label.set_fontweight('bold')
+            label.set_fontfamily(self.font_family)
+            label.set_color(self.background_color)
+
+        # Color the top x-axis spine gray
+        ax2.spines['top'].set_color(self.background_color)
+        ax2.spines['top'].set_linewidth(2)
+
+        # Remove other spines
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.spines['bottom'].set_visible(False)
+        ax2.spines['left'].set_visible(False)
         ax.spines['left'].set_visible(True)
-        ax.spines['bottom'].set_visible(True)
 
-        # Add grid
+        # Add grid on bottom axis
         ax.grid(True, axis='x', alpha=0.3, linestyle='-', linewidth=0.5)
         ax.set_axisbelow(True)
 
@@ -183,12 +166,12 @@ class CommunityIndexChart:
         # Add legend at bottom with more space and matched font size
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor=self.background_color, alpha=0.8, label='% Fans'),  # Changed from '% Audience'
-            Patch(facecolor=self.bar_color, label='Index vs. Local Gen Pop')  # Changed from '% Audience Index'
+            Patch(facecolor=self.background_color, alpha=0.8, label='% Fans'),
+            Patch(facecolor=self.bar_color, label='Index vs. Local Gen Pop')
         ]
         legend = ax.legend(handles=legend_elements,
                            loc='lower center',
-                           bbox_to_anchor=(0.5, -0.25),  # Changed from -0.15 to -0.20 for more space
+                           bbox_to_anchor=(0.5, -0.25),
                            ncol=2,
                            frameon=True,
                            fancybox=True,

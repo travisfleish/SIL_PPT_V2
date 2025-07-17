@@ -4,6 +4,7 @@ Category analyzer that processes spending data by category
 Generates insights and recommendations for sponsorship opportunities
 ENHANCED with OpenAI-powered merchant name standardization
 UPDATED to use allowed_for_custom list for custom category selection
+UPDATED with consistent column names for slide compatibility
 """
 
 import pandas as pd
@@ -378,10 +379,10 @@ class CategoryAnalyzer:
             results.append({
                 'Subcategory': subcategory_name,
                 'Percent of Fans Who Spend': f"{percent_fans:.0f}%",
-                'How likely fans are to spend vs. gen pop':
+                'Likelihood to spend (vs. Local Gen Pop)':  # UPDATED to match slide header
                     f"{abs(percent_likely):.0f}% {'More' if percent_likely > 0 else 'Less'}",
-                'Purchases per fan vs. gen pop':
-                    f"{abs(percent_purch):.0f}% {'more' if percent_purch > 0 else 'Less'}"
+                'Purchases Per Fan (vs. Gen Pop)':
+                    f"{abs(percent_purch):.0f}% {'More' if percent_purch > 0 else 'Less'}"
             })
 
         return pd.DataFrame(results)
@@ -427,7 +428,7 @@ class CategoryAnalyzer:
                 results.append({
                     'Brand': merchant,  # Now using standardized names
                     'Percent of Fans Who Spend': f"{percent_fans:.1f}%",
-                    'How likely fans are to spend vs. gen pop':
+                    'Likelihood to spend (vs. Local Gen Pop)':  # UPDATED to match slide header
                         f"{abs(percent_likely):.0f}% {'More' if percent_likely >= 0 else 'Less'}",
                     'Purchases Per Fan (vs. Gen Pop)':
                         f"{abs(ppc_diff):.0f}% {'More' if ppc_diff >= 0 else 'Less'}"
@@ -439,7 +440,7 @@ class CategoryAnalyzer:
 
             # Reorder columns
             cols = ['Rank', 'Brand', 'Percent of Fans Who Spend',
-                    'How likely fans are to spend vs. gen pop',
+                    'Likelihood to spend (vs. Local Gen Pop)',  # UPDATED
                     'Purchases Per Fan (vs. Gen Pop)']
 
             return merchant_df[cols], top_5_merchants
@@ -485,7 +486,8 @@ class CategoryAnalyzer:
 
     def _add_subcategory_insight(self, insights: List[str], top_sub: pd.Series):
         """Add subcategory insight with validation"""
-        likelihood_text = top_sub['How likely fans are to spend vs. gen pop']
+        # UPDATED to use new column name
+        likelihood_text = top_sub['Likelihood to spend (vs. Local Gen Pop)']
 
         if '% More' in likelihood_text:
             try:
@@ -503,7 +505,7 @@ class CategoryAnalyzer:
                     )
                 else:
                     insights.append(
-                        f"{self.team_short} Fans are {likelihood_text} likely to spend on "
+                        f"{self.team_short} fans are {likelihood_text} likely to spend on "
                         f"{top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
             except (ValueError, IndexError) as e:
@@ -872,14 +874,6 @@ class CategoryAnalyzer:
         """
         Get custom categories based on composite index
         UPDATED to use allowed_for_custom list
-
-        Args:
-            category_df: DataFrame from CATEGORY_INDEXING_ALL_TIME view
-            is_womens_team: Whether this is a women's team
-            existing_categories: List of category keys already included (fixed categories)
-
-        Returns:
-            List of category configurations for custom categories
         """
         # Get config
         custom_config = self.config.get('custom_category_config', {})
@@ -893,9 +887,10 @@ class CategoryAnalyzer:
                               else self.config['fixed_categories']['mens_teams'])
             existing_categories = existing_fixed
 
-        # Filter for team fans
+        # Filter for team fans AND the correct comparison population
         team_data = category_df[
             (category_df['AUDIENCE'] == self.audience_name) &
+            (category_df['COMPARISON_POPULATION'] == self.comparison_pop) &  # ADD THIS LINE!
             (category_df['PERC_AUDIENCE'] >= min_audience)
             ]
 

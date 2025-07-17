@@ -127,8 +127,18 @@ class CommunityIndexChart:
             box_width = 60
             box_height = 0.6  # Match the height of gray bars
 
+            # Check if the yellow box would extend beyond the chart
+            # If the box would be cut off (x_pos + box_width > max_value),
+            # position it inside the gray bar instead
+            if (x_pos + box_width - 5) > max_value:
+                # Position the box inside the gray bar, anchored from the right edge
+                box_x_pos = max_value - box_width - 5
+            else:
+                # Normal positioning - at the end of the gray bar
+                box_x_pos = x_pos - 5
+
             # Add yellow rectangle
-            rect = Rectangle((x_pos - 5, y_pos - box_height / 2),
+            rect = Rectangle((box_x_pos, y_pos - box_height / 2),
                              box_width, box_height,
                              facecolor=self.highlight_color,
                              edgecolor='none',
@@ -136,17 +146,17 @@ class CommunityIndexChart:
             ax.add_patch(rect)
 
             # Add percentage text - show PERC_AUDIENCE with font
-            ax.text(x_pos + box_width / 2 - 5, y_pos,
+            ax.text(box_x_pos + box_width / 2, y_pos,
                     f"{pct_value:.1f}%",
                     ha='center', va='center',
-                    fontweight='bold', fontsize=11,
+                    fontweight='bold', fontsize=13,
                     fontfamily=self.font_family,
                     zorder=11)
 
         # Customize the plot with Red Hat Display font
         ax.set_yticks(y_positions)
         ax.set_yticklabels(data['Community'], fontsize=15, fontweight='bold', fontfamily=self.font_family)
-        ax.set_xlabel('Percent Fan Audience', fontsize=13, fontweight='bold', fontfamily=self.font_family)
+        ax.set_xlabel('Likelihood To Be In Community (Index vs. Local Gen Pop)', fontsize=13, fontweight='bold', fontfamily=self.font_family)
         ax.set_xlim(0, max_value)
 
         # Add x-axis labels at specific intervals with bold font and Red Hat Display
@@ -173,18 +183,17 @@ class CommunityIndexChart:
         # Add legend at bottom with more space and matched font size
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor=self.background_color, alpha=0.8, label='% Team Fans'),  # Changed from '% Audience'
-            Patch(facecolor=self.bar_color, label='Team Fan Index')  # Changed from '% Audience Index'
+            Patch(facecolor=self.background_color, alpha=0.8, label='% Fans'),  # Changed from '% Audience'
+            Patch(facecolor=self.bar_color, label='Index vs. Local Gen Pop')  # Changed from '% Audience Index'
         ]
         legend = ax.legend(handles=legend_elements,
                            loc='lower center',
-                           bbox_to_anchor=(0.5, -0.20),  # Changed from -0.15 to -0.20 for more space
+                           bbox_to_anchor=(0.5, -0.25),  # Changed from -0.15 to -0.20 for more space
                            ncol=2,
                            frameon=True,
                            fancybox=True,
                            shadow=False,
-                           fontsize=15,
-                           prop={'family': self.font_family, 'weight': 'bold'})
+                           prop={'family': self.font_family, 'weight': 'bold', 'size': 15})
 
         # Adjust layout
         plt.tight_layout()

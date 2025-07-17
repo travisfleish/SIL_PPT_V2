@@ -87,7 +87,7 @@ class TitleSlide(BaseSlide):
             paragraph.font.name = self.default_font  # Red Hat Display
             paragraph.font.size = Pt(48)
             paragraph.font.bold = True
-            paragraph.font.italic = True
+            paragraph.font.italic = False
             paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
             paragraph.alignment = PP_ALIGN.CENTER
 
@@ -104,7 +104,7 @@ class TitleSlide(BaseSlide):
         for paragraph in desc_box.text_frame.paragraphs:
             paragraph.font.name = self.default_font  # Red Hat Display
             paragraph.font.size = Pt(18)
-            paragraph.font.italic = True
+            paragraph.font.italic = False
             paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text
             paragraph.alignment = PP_ALIGN.CENTER
 

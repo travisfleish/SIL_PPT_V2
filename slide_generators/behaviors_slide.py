@@ -205,7 +205,7 @@ class BehaviorsSlide(BaseSlide):
         logger.info(f"Insight length: {insight_length} chars, using font size: {font_size.pt}pt")
 
         text_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(1.0),  # Moved up from 1.2" to 0.8"
+            Inches(0.4), Inches(1.0),  # Moved up from 1.2" to 0.8"
             Inches(6.5), Inches(0.8)  # Reduced height to contain text
         )
         text_box.text_frame.text = insight
@@ -251,7 +251,7 @@ class BehaviorsSlide(BaseSlide):
 
     def _add_community_chart(self, slide, image_path: Path):
         """Add community index chart - LEFT side, 6.5" WIDTH"""
-        left = Inches(0.5)  # Left margin
+        left = Inches(0.4)  # Left margin
         top = Inches(2.4)  # Below title
         width = Inches(6.5)  # 6.5" width
 
@@ -268,20 +268,22 @@ class BehaviorsSlide(BaseSlide):
     def _add_chart_explanation(self, slide):
         """Add explanation text below community chart - CENTERED with 6.5" chart"""
         explanation_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(6.4),  # Match chart left position
-            Inches(6.5), Inches(0.8)  # Match chart width
+            Inches(0.3), Inches(6.4),  # Match chart left position
+            Inches(7.2), Inches(0.8)  # Match chart width
         )
         explanation_text = (
             "The top ten fan communities are ranked according to a composite index score "
             "of likelihood to purchase, likelihood to make more purchases per fan versus "
-            "the local general population, and likelihood to spend more per fan."
+            "the local general population, and likelihood to spend more per fan. The chart "
+            "on the right illustrates the top brands (by % fans purchasing) within each of "
+            "the top ten communities."
         )
         explanation_box.text_frame.text = explanation_text
         explanation_box.text_frame.word_wrap = True
 
         p = explanation_box.text_frame.paragraphs[0]
         p.font.name = self.default_font
-        p.font.size = Pt(8)
+        p.font.size = Pt(10)
         p.alignment = PP_ALIGN.CENTER  # CENTER aligned
         p.line_spacing = 1.2
 

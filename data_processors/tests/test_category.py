@@ -1,409 +1,327 @@
-# test_merchant_insights_real.py
 """
-Test script for revised merchant insights generation using real Snowflake data
-Validates the data-driven selection logic for brand insights
+Category Selection Diagnostic Script
+Analyzes which categories are selected for custom categories and why
+Shows the full filtering process step by step
 """
 
-import sys
-from pathlib import Path
 import pandas as pd
-from datetime import datetime
-import json
-
-# Add parent directories to path
-sys.path.append(str(Path(__file__).parent.parent))
-sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from data_processors.category_analyzer import CategoryAnalyzer
-from data_processors.snowflake_connector import query_to_dataframe, test_connection
-from utils.team_config_manager import TeamConfigManager
+import yaml
+from pathlib import Path
+from typing import Dict, List, Tuple
 import logging
 
-logging.basicConfig(level=logging.INFO)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
 
-def analyze_merchant_metrics(merchant_df: pd.DataFrame, analyzer: CategoryAnalyzer) -> dict:
-    """
-    Analyze merchant data to identify which merchants should win each metric
+class CategoryDiagnostic:
+    """Diagnostic tool for understanding category selection"""
 
-    Returns:
-        Dictionary with expected winners for each metric
-    """
-    # Filter for team fans
-    team_data = merchant_df[merchant_df['AUDIENCE'] == analyzer.audience_name]
+    def __init__(self, config_path: Path = None):
+        """Initialize with config"""
+        if config_path is None:
+            config_path = Path('config/categories.yaml')
 
-    if team_data.empty:
-        return {}
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
 
-    # Get top 5 merchants by audience percentage
-    top_5_merchants = (team_data
-                       .sort_values('PERC_AUDIENCE', ascending=False)
-                       .drop_duplicates('MERCHANT')
-                       .head(5)['MERCHANT'].tolist())
+        self.categories = self.config['categories']
+        self.excluded_custom = self.config['excluded_from_custom']
+        self.allowed_custom = self.config.get('allowed_for_custom', [])
+        self.fixed_categories = self.config['fixed_categories']
 
-    # Initialize tracking variables
-    metrics_analysis = {
-        'top_by_audience': {'merchant': None, 'value': 0},
-        'highest_ppc': {'merchant': None, 'value': 0},
-        'highest_spc': {'merchant': None, 'value': 0},
-        'highest_composite': {'merchant': None, 'value': 0},
-        'best_nba_index': {'merchant': None, 'value': 0, 'diff': 0}
-    }
+    def analyze_category_selection(self,
+                                   category_df: pd.DataFrame,
+                                   team_name: str,
+                                   team_short: str,
+                                   is_womens_team: bool = False) -> Dict[str, any]:
+        """
+        Analyze the category selection process step by step
 
-    # Analyze each top 5 merchant
-    for i, merchant in enumerate(top_5_merchants):
-        # Get data for this merchant
-        m_data = team_data[team_data['MERCHANT'] == merchant].iloc[0]
+        Args:
+            category_df: DataFrame from CATEGORY_INDEXING_ALL_TIME view
+            team_name: Full team name (e.g., "Utah Jazz")
+            team_short: Short team name (e.g., "Jazz")
+            is_womens_team: Whether this is a women's team
 
-        # Track top by audience (should be first merchant)
-        if i == 0:
-            metrics_analysis['top_by_audience'] = {
-                'merchant': merchant,
-                'value': float(m_data['PERC_AUDIENCE']) * 100
-            }
+        Returns:
+            Dictionary with diagnostic information
+        """
+        audience_name = f"{team_name} Fans"
+        comparison_pop = f"Local Gen Pop (Excl. {team_short})"
 
-        # Check PPC
-        ppc_value = float(m_data.get('PPC', 0))
-        if ppc_value > metrics_analysis['highest_ppc']['value']:
-            metrics_analysis['highest_ppc'] = {
-                'merchant': merchant,
-                'value': ppc_value
-            }
+        # Get config
+        custom_config = self.config.get('custom_category_config', {})
+        n_categories = (custom_config.get('womens_teams', {}).get('count', 2) if is_womens_team
+                        else custom_config.get('mens_teams', {}).get('count', 4))
+        min_audience = custom_config.get('min_audience_pct', 0.20)
 
-        # Check SPC
-        spc_value = float(m_data.get('SPC', 0))
-        if spc_value > metrics_analysis['highest_spc']['value']:
-            metrics_analysis['highest_spc'] = {
-                'merchant': merchant,
-                'value': spc_value
-            }
+        # Get fixed categories being used
+        fixed_cat_keys = (self.fixed_categories['womens_teams'] if is_womens_team
+                          else self.fixed_categories['mens_teams'])
 
-        # Check Composite Index
-        composite_value = float(m_data.get('COMPOSITE_INDEX', 0))
-        if composite_value > metrics_analysis['highest_composite']['value']:
-            metrics_analysis['highest_composite'] = {
-                'merchant': merchant,
-                'value': composite_value
-            }
+        # Get category names from fixed categories
+        category_names_from_fixed = []
+        for cat_key in fixed_cat_keys:
+            if cat_key in self.categories:
+                category_names_from_fixed.extend(
+                    self.categories[cat_key].get('category_names_in_data', [])
+                )
 
-        # Check NBA/League comparison
-        nba_data = merchant_df[
-            (merchant_df['MERCHANT'] == merchant) &
-            (merchant_df['AUDIENCE'] == analyzer.audience_name) &
-            (merchant_df['COMPARISON_POPULATION'] == analyzer.league_fans)
-            ]
+        # Step 1: Get all team data
+        all_team_data = category_df[category_df['AUDIENCE'] == audience_name].copy()
 
-        if not nba_data.empty:
-            perc_index = float(nba_data.iloc[0].get('PERC_INDEX', 100))
-            index_diff = perc_index - 100
+        # Step 2: Filter by audience threshold
+        audience_filtered = all_team_data[
+            all_team_data['PERC_AUDIENCE'] >= min_audience
+        ].copy()
 
-            if index_diff > metrics_analysis['best_nba_index']['diff']:
-                metrics_analysis['best_nba_index'] = {
-                    'merchant': merchant,
-                    'value': perc_index,
-                    'diff': index_diff
-                }
-
-    return metrics_analysis
-
-
-def test_category_merchants(team_key: str = 'utah_jazz', category_key: str = 'auto'):
-    """
-    Test merchant insights for a specific team and category
-
-    Args:
-        team_key: Team identifier
-        category_key: Category to test
-    """
-    print(f"\n{'=' * 80}")
-    print(f"TESTING MERCHANT INSIGHTS: {team_key} - {category_key}")
-    print(f"{'=' * 80}")
-
-    # Test connection
-    print("\n1. Testing Snowflake connection...")
-    if not test_connection():
-        print("❌ Failed to connect to Snowflake")
-        return None
-    print("✅ Connected to Snowflake")
-
-    # Get team configuration
-    print("\n2. Loading team configuration...")
-    config_manager = TeamConfigManager()
-    team_config = config_manager.get_team_config(team_key)
-    view_prefix = team_config['view_prefix']
-    print(f"✅ Team: {team_config['team_name']}")
-    print(f"   View prefix: {view_prefix}")
-
-    # Initialize analyzer
-    print("\n3. Initializing CategoryAnalyzer...")
-    analyzer = CategoryAnalyzer(
-        team_name=team_config['team_name'],
-        team_short=team_config['team_name_short'],
-        league=team_config['league']
-    )
-
-    # Get category configuration
-    category_config = analyzer.categories.get(category_key)
-    if not category_config:
-        print(f"❌ Unknown category: {category_key}")
-        return None
-
-    # Build category filter
-    category_names = category_config.get('category_names_in_data', [])
-    category_list = ','.join([f"'{c}'" for c in category_names])
-    category_where = f"CATEGORY IN ({category_list})"
-
-    # Load merchant data
-    print(f"\n4. Loading merchant data for {category_config['display_name']}...")
-    merchant_query = f"""
-    SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
-    WHERE {category_where}
-    ORDER BY AUDIENCE, MERCHANT, COMPARISON_POPULATION
-    """
-
-    try:
-        merchant_df = query_to_dataframe(merchant_query)
-        print(f"✅ Loaded {len(merchant_df)} merchant records")
-    except Exception as e:
-        print(f"❌ Failed to load merchant data: {str(e)}")
-        return None
-
-    # Create minimal dataframes for other required data
-    category_df = pd.DataFrame()
-    subcategory_df = pd.DataFrame()
-
-    # Analyze expected metrics
-    print("\n5. Analyzing merchant metrics...")
-    expected_metrics = analyze_merchant_metrics(merchant_df, analyzer)
-
-    if expected_metrics:
-        print("\nExpected Winners by Metric:")
-        print("-" * 60)
-        print(f"Top by Audience %: {expected_metrics['top_by_audience']['merchant']} "
-              f"({expected_metrics['top_by_audience']['value']:.1f}%)")
-        print(f"Highest PPC: {expected_metrics['highest_ppc']['merchant']} "
-              f"({expected_metrics['highest_ppc']['value']:.1f} purchases)")
-        print(f"Highest SPC: {expected_metrics['highest_spc']['merchant']} "
-              f"(${expected_metrics['highest_spc']['value']:.2f})")
-        print(f"Best {analyzer.league} Index: {expected_metrics['best_nba_index']['merchant']} "
-              f"({expected_metrics['best_nba_index']['diff']:.0f}% more likely)")
-        print(f"Highest Composite: {expected_metrics['highest_composite']['merchant']} "
-              f"({expected_metrics['highest_composite']['value']:.0f})")
-
-    # Run the analysis
-    print("\n6. Running category analysis...")
-    try:
-        results = analyzer.analyze_category(
-            category_key=category_key,
-            category_df=category_df,
-            subcategory_df=subcategory_df,
-            merchant_df=merchant_df,
-            validate=False
-        )
-        print("✅ Analysis completed successfully")
-    except Exception as e:
-        print(f"❌ Analysis failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-    # Display and validate results
-    print(f"\n{'=' * 60}")
-    print("GENERATED MERCHANT INSIGHTS:")
-    print(f"{'=' * 60}")
-
-    validation_results = []
-
-    for i, insight in enumerate(results['merchant_insights'], 1):
-        print(f"\nInsight {i}: {insight}")
-
-        # Validate each insight
-        validation = {'insight_num': i, 'text': insight, 'valid': False, 'issue': None}
-
-        if i == 1:
-            # Should show top merchant by audience
-            expected = expected_metrics['top_by_audience']['merchant']
-            expected_pct = f"{expected_metrics['top_by_audience']['value']:.0f}%"
-            if expected in insight and expected_pct in insight:
-                print(f"   ✅ Correct: Shows {expected} with {expected_pct}")
-                validation['valid'] = True
-            else:
-                print(f"   ❌ Expected: {expected} with {expected_pct}")
-                validation['issue'] = f"Expected {expected} with {expected_pct}"
-
-        elif i == 2:
-            # Should show highest PPC merchant
-            expected = expected_metrics['highest_ppc']['merchant']
-            expected_ppc = int(expected_metrics['highest_ppc']['value'])
-            if expected in insight and (
-                    f"{expected_ppc} purchases" in insight or
-                    f"{expected_ppc} purchase" in insight
-            ):
-                print(f"   ✅ Correct: Shows {expected} with highest PPC")
-                validation['valid'] = True
-            else:
-                print(f"   ❌ Expected: {expected} with {expected_ppc} purchases")
-                validation['issue'] = f"Expected {expected} with {expected_ppc} purchases"
-
-        elif i == 3:
-            # Should show highest SPC merchant
-            expected = expected_metrics['highest_spc']['merchant']
-            expected_spc = expected_metrics['highest_spc']['value']
-            if expected in insight and f"${expected_spc:.2f}" in insight:
-                print(f"   ✅ Correct: Shows {expected} with highest SPC")
-                validation['valid'] = True
-            else:
-                print(f"   ❌ Expected: {expected} with ${expected_spc:.2f}")
-                validation['issue'] = f"Expected {expected} with ${expected_spc:.2f}"
-
-        elif i == 4:
-            # Should show best NBA/League comparison
-            expected = expected_metrics['best_nba_index']['merchant']
-            expected_diff = int(expected_metrics['best_nba_index']['diff'])
-            if expected in insight and f"{expected_diff}% more likely" in insight:
-                print(f"   ✅ Correct: Shows {expected} with best league comparison")
-                validation['valid'] = True
-            else:
-                print(f"   ❌ Expected: {expected} {expected_diff}% more likely")
-                validation['issue'] = f"Expected {expected} {expected_diff}% more likely"
-
-        validation_results.append(validation)
-
-    # Check sponsorship recommendation
-    print(f"\n{'=' * 60}")
-    print("SPONSORSHIP RECOMMENDATION:")
-    print(f"{'=' * 60}")
-
-    rec = results.get('recommendation')
-    rec_validation = {'valid': False, 'issue': None}
-
-    if rec:
-        print(f"\nTarget: {rec['merchant']}")
-        print(f"Composite Index: {rec['composite_index']:.0f}")
-        print(f"\nMain: {rec['explanation']}")
-        print(f"Sub-bullet: {rec['sub_explanation']}")
-
-        # Validate recommendation
-        expected_merchant = expected_metrics['highest_composite']['merchant']
-        expected_index = expected_metrics['highest_composite']['value']
-
-        if (rec['merchant'] == expected_merchant and
-                abs(rec['composite_index'] - expected_index) < 1):
-            print(f"\n✅ Correct: Recommends {expected_merchant} with highest composite index")
-            rec_validation['valid'] = True
+        # Step 3: Apply allowed list filter (if exists)
+        if self.allowed_custom:
+            allowed_filtered = audience_filtered[
+                audience_filtered['CATEGORY'].isin(self.allowed_custom)
+            ].copy()
         else:
-            print(f"\n❌ Expected: {expected_merchant} with index {expected_index:.0f}")
-            rec_validation['issue'] = f"Expected {expected_merchant} with index {expected_index:.0f}"
-    else:
-        print("\n❌ No recommendation generated")
-        rec_validation['issue'] = "No recommendation generated"
+            allowed_filtered = audience_filtered.copy()
 
-    # Summary
-    print(f"\n{'=' * 60}")
-    print("VALIDATION SUMMARY:")
-    print(f"{'=' * 60}")
+        # Step 4: Apply excluded list filter
+        excluded_filtered = allowed_filtered[
+            ~allowed_filtered['CATEGORY'].isin(self.excluded_custom)
+        ].copy()
 
-    valid_insights = sum(1 for v in validation_results if v['valid'])
-    total_insights = len(validation_results)
+        # Step 5: Remove fixed categories
+        final_filtered = excluded_filtered[
+            ~excluded_filtered['CATEGORY'].isin(category_names_from_fixed)
+        ].copy()
 
-    print(f"\nInsights: {valid_insights}/{total_insights} valid")
-    print(f"Recommendation: {'✅ Valid' if rec_validation['valid'] else '❌ Invalid'}")
+        # Step 6: Get top N by composite index
+        top_categories = final_filtered.nlargest(n_categories, 'COMPOSITE_INDEX')
 
-    if valid_insights == total_insights and rec_validation['valid']:
-        print(f"\n✅ ALL TESTS PASSED!")
-    else:
-        print(f"\n❌ Some tests failed - review issues above")
-
-    return {
-        'team': team_key,
-        'category': category_key,
-        'validation_results': validation_results,
-        'recommendation_validation': rec_validation,
-        'expected_metrics': expected_metrics,
-        'generated_insights': results.get('merchant_insights', []),
-        'generated_recommendation': rec
-    }
-
-
-def test_multiple_categories(team_key: str = 'utah_jazz'):
-    """Test multiple categories for a team"""
-    print(f"\n{'=' * 80}")
-    print(f"COMPREHENSIVE TEST: {team_key}")
-    print(f"{'=' * 80}")
-
-    # Test fixed categories
-    test_categories = ['restaurants', 'auto', 'athleisure', 'finance']
-    all_results = {}
-
-    for category in test_categories:
-        results = test_category_merchants(team_key, category)
-        if results:
-            all_results[category] = results
-
-    # Summary report
-    print(f"\n{'=' * 80}")
-    print("OVERALL TEST SUMMARY:")
-    print(f"{'=' * 80}")
-
-    for category, results in all_results.items():
-        valid_insights = sum(1 for v in results['validation_results'] if v['valid'])
-        total_insights = len(results['validation_results'])
-        rec_valid = results['recommendation_validation']['valid']
-
-        status = "✅ PASS" if valid_insights == total_insights and rec_valid else "❌ FAIL"
-        print(f"\n{category.upper()}: {status}")
-        print(f"  - Insights: {valid_insights}/{total_insights} valid")
-        print(f"  - Recommendation: {'Valid' if rec_valid else 'Invalid'}")
-
-    # Save detailed results
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_file = f"merchant_insights_test_{team_key}_{timestamp}.json"
-
-    # Convert results to serializable format
-    serializable_results = {}
-    for category, results in all_results.items():
-        serializable_results[category] = {
-            'validation_summary': {
-                'insights_valid': sum(1 for v in results['validation_results'] if v['valid']),
-                'insights_total': len(results['validation_results']),
-                'recommendation_valid': results['recommendation_validation']['valid']
+        # Create diagnostic report
+        diagnostic = {
+            'team_info': {
+                'team_name': team_name,
+                'is_womens_team': is_womens_team,
+                'target_custom_categories': n_categories,
+                'min_audience_pct': min_audience
             },
-            'expected_winners': {
-                metric: {
-                    'merchant': data['merchant'],
-                    'value': float(data['value']) if data['merchant'] else None
-                }
-                for metric, data in results['expected_metrics'].items()
+            'fixed_categories': {
+                'keys_used': fixed_cat_keys,
+                'category_names_in_data': category_names_from_fixed
             },
-            'generated_insights': results['generated_insights'],
-            'issues': [
-                v['issue'] for v in results['validation_results']
-                if not v['valid'] and v['issue']
-            ]
+            'filtering_steps': {
+                'step1_all_team_data': self._summarize_dataframe(all_team_data),
+                'step2_audience_filtered': self._summarize_dataframe(audience_filtered),
+                'step3_allowed_filtered': self._summarize_dataframe(allowed_filtered),
+                'step4_excluded_filtered': self._summarize_dataframe(excluded_filtered),
+                'step5_final_filtered': self._summarize_dataframe(final_filtered),
+                'step6_top_selected': self._summarize_dataframe(top_categories)
+            },
+            'filter_lists': {
+                'allowed_custom': self.allowed_custom,
+                'excluded_custom': self.excluded_custom
+            },
+            'categories_removed_at_each_step': {
+                'removed_by_audience': self._get_removed_categories(all_team_data, audience_filtered),
+                'removed_by_allowed': self._get_removed_categories(audience_filtered, allowed_filtered),
+                'removed_by_excluded': self._get_removed_categories(allowed_filtered, excluded_filtered),
+                'removed_by_fixed': self._get_removed_categories(excluded_filtered, final_filtered)
+            },
+            'final_selection': self._get_final_selection_details(top_categories)
         }
 
-    with open(output_file, 'w') as f:
-        json.dump(serializable_results, f, indent=2)
+        return diagnostic
 
-    print(f"\n📄 Detailed results saved to: {output_file}")
+    def _summarize_dataframe(self, df: pd.DataFrame) -> Dict[str, any]:
+        """Summarize a dataframe for diagnostic purposes"""
+        if df.empty:
+            return {
+                'count': 0,
+                'categories': []
+            }
+
+        # Sort by composite index for better visibility
+        df_sorted = df.sort_values('COMPOSITE_INDEX', ascending=False)
+
+        return {
+            'count': len(df),
+            'categories': df_sorted[['CATEGORY', 'COMPOSITE_INDEX', 'PERC_AUDIENCE']].to_dict('records')
+        }
+
+    def _get_removed_categories(self, before_df: pd.DataFrame, after_df: pd.DataFrame) -> List[str]:
+        """Get categories that were removed in a filtering step"""
+        before_cats = set(before_df['CATEGORY'].unique()) if not before_df.empty else set()
+        after_cats = set(after_df['CATEGORY'].unique()) if not after_df.empty else set()
+        return sorted(list(before_cats - after_cats))
+
+    def _get_final_selection_details(self, top_categories: pd.DataFrame) -> List[Dict[str, any]]:
+        """Get detailed info about final selected categories"""
+        if top_categories.empty:
+            return []
+
+        details = []
+        for idx, (_, row) in enumerate(top_categories.iterrows(), 1):
+            details.append({
+                'rank': idx,
+                'category': row['CATEGORY'],
+                'composite_index': float(row['COMPOSITE_INDEX']),
+                'perc_audience': float(row['PERC_AUDIENCE']),
+                'perc_index': float(row['PERC_INDEX']),
+                'would_be_slide_title': f"{row['CATEGORY']} Sponsor Analysis"
+            })
+
+        return details
+
+    def print_diagnostic_report(self, diagnostic: Dict[str, any]):
+        """Print a formatted diagnostic report"""
+        print("\n" + "="*80)
+        print("CATEGORY SELECTION DIAGNOSTIC REPORT")
+        print("="*80)
+
+        # Team info
+        print("\n📋 TEAM INFORMATION:")
+        info = diagnostic['team_info']
+        print(f"  Team: {info['team_name']}")
+        print(f"  Type: {'Womens' if info['is_womens_team'] else 'Mens'} Team")
+        print(f"  Target Custom Categories: {info['target_custom_categories']}")
+        print(f"  Min Audience %: {info['min_audience_pct']*100:.0f}%")
+
+        # Fixed categories
+        print("\n📌 FIXED CATEGORIES IN USE:")
+        fixed = diagnostic['fixed_categories']
+        print(f"  Category Keys: {', '.join(fixed['keys_used'])}")
+        print(f"  Data Names: {', '.join(fixed['category_names_in_data'])}")
+
+        # Filtering process
+        print("\n🔍 FILTERING PROCESS:")
+        steps = diagnostic['filtering_steps']
+
+        for step_name, step_data in steps.items():
+            step_display = step_name.replace('_', ' ').title()
+            print(f"\n  {step_display}: {step_data['count']} categories")
+
+            if step_data['count'] > 0 and step_data['count'] <= 15:
+                # Show all categories if 15 or fewer
+                print(f"    {'Category':<40} {'Composite Index':>15} {'Audience %':>12}")
+                print(f"    {'-'*40} {'-'*15} {'-'*12}")
+                for cat in step_data['categories']:
+                    cat_name = cat['CATEGORY'][:38] + '..' if len(cat['CATEGORY']) > 40 else cat['CATEGORY']
+                    comp_idx = cat['COMPOSITE_INDEX']
+                    aud_pct = cat['PERC_AUDIENCE'] * 100
+                    print(f"    {cat_name:<40} {comp_idx:>15.1f} {aud_pct:>12.1f}")
+
+        # Categories removed at each step
+        print("\n❌ CATEGORIES REMOVED AT EACH STEP:")
+        removed = diagnostic['categories_removed_at_each_step']
+        for step, cats in removed.items():
+            if cats:
+                print(f"\n  {step.replace('_', ' ').title()}:")
+                for cat in cats:
+                    print(f"    - {cat}")
+
+        # Filter lists
+        print("\n📝 FILTER LISTS:")
+        filters = diagnostic['filter_lists']
+
+        print("\n  Allowed Categories:")
+        if filters['allowed_custom']:
+            for cat in filters['allowed_custom']:
+                print(f"    ✓ {cat}")
+        else:
+            print("    (No allowed list - all categories allowed)")
+
+        print("\n  Excluded Categories:")
+        for cat in filters['excluded_custom']:
+            print(f"    ✗ {cat}")
+
+        # Final selection
+        print("\n🎯 FINAL CUSTOM CATEGORY SELECTION:")
+        final = diagnostic['final_selection']
+        if final:
+            for cat in final:
+                print(f"\n  #{cat['rank']}: {cat['category']}")
+                print(f"     Composite Index: {cat['composite_index']:.1f}")
+                print(f"     Audience %: {cat['perc_audience']*100:.1f}%")
+                print(f"     Index vs Gen Pop: {cat['perc_index']:.0f}")
+                print(f"     Slide Title: '{cat['would_be_slide_title']}'")
+        else:
+            print("  ⚠️  NO CATEGORIES SELECTED!")
+
+        print("\n" + "="*80)
 
 
-def main():
-    """Main test function"""
-    print("\n🧪 MERCHANT INSIGHTS VALIDATION TEST")
-    print("Testing data-driven merchant selection logic")
-    print("=" * 80)
+def run_diagnostic(snowflake_connection, team_name: str, team_short: str,
+                   league: str = "NBA", is_womens_team: bool = False):
+    """
+    Run the diagnostic on actual data
 
-    # Test single category
-    test_category_merchants('utah_jazz', 'auto')
+    Args:
+        snowflake_connection: Active Snowflake connection
+        team_name: Full team name (e.g., "Utah Jazz")
+        team_short: Short team name (e.g., "Jazz")
+        league: League name (default "NBA")
+        is_womens_team: Whether this is a women's team
+    """
+    # Create diagnostic tool
+    diagnostic = CategoryDiagnostic()
 
-    # Test multiple categories
-    # test_multiple_categories('utah_jazz')
+    # Build view name
+    view_prefix = team_name.upper().replace(' ', '_')
+    view_name = f"V_{view_prefix}_SIL_CATEGORY_INDEXING_ALL_TIME"
 
-    # Test other teams if available
-    # test_category_merchants('dallas_cowboys', 'restaurants')
+    print(f"\n🔄 Loading data from: {view_name}")
+
+    # Query the data
+    query = f"""
+    SELECT 
+        AUDIENCE,
+        CATEGORY,
+        COMPARISON_POPULATION,
+        PERC_AUDIENCE,
+        PERC_INDEX,
+        COMPOSITE_INDEX,
+        PPC,
+        COMPARISON_PPC,
+        SPC,
+        AUDIENCE_COUNT,
+        AUDIENCE_TOTAL_SPEND
+    FROM SIL__TB_OTT_TEST.SC_TWINBRAINAI.{view_name}
+    WHERE AUDIENCE = '{team_name} Fans'
+    """
+
+    try:
+        category_df = pd.read_sql(query, snowflake_connection)
+        print(f"✅ Loaded {len(category_df)} rows")
+
+        # Run diagnostic
+        diagnostic_report = diagnostic.analyze_category_selection(
+            category_df, team_name, team_short, is_womens_team
+        )
+
+        # Print report
+        diagnostic.print_diagnostic_report(diagnostic_report)
+
+        # Also save to file
+        import json
+        output_file = f"category_diagnostic_{team_name.replace(' ', '_').lower()}.json"
+        with open(output_file, 'w') as f:
+            json.dump(diagnostic_report, f, indent=2, default=str)
+        print(f"\n💾 Full diagnostic saved to: {output_file}")
+
+    except Exception as e:
+        print(f"\n❌ Error running diagnostic: {e}")
+        raise
 
 
+# Example usage
 if __name__ == "__main__":
-    main()
+    # You would call this with your Snowflake connection
+    # run_diagnostic(conn, "Utah Jazz", "Jazz", "NBA", False)
+
+    # For testing without Snowflake, you can create sample data:
+    print("\n📊 DIAGNOSTIC TOOL READY")
+    print("Call run_diagnostic() with your Snowflake connection to analyze category selection")
+    print("\nExample:")
+    print("  run_diagnostic(conn, 'Utah Jazz', 'Jazz', 'NBA', False)")
+    print("  run_diagnostic(conn, 'Dallas Cowboys', 'Cowboys', 'NFL', False)")

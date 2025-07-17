@@ -103,10 +103,7 @@ categories:
     category_names_in_data:
       - "Finance"
     subcategories:
-      include:  # Keep all 4 subcategories
-        - name: "Finance - Banks"
-          display_name: "Banks"
-          key_in_data: "Finance - Banks"
+      include:  # Banks removed, keeping only 3 subcategories
         - name: "Finance - Buy Now Pay Later (BNPL)"
           display_name: "Buy Now Pay Later (BNPL)"
           key_in_data: "Finance - Buy Now Pay Later (BNPL)"
@@ -116,6 +113,8 @@ categories:
         - name: "Finance - Payment Wallets & Money Transfers"
           display_name: "Payment Wallets & Money Transfers"
           key_in_data: "Finance - Payment Wallets & Money Transfers"
+      exclude:
+        - "Finance - Banks"  # Explicitly excluded as per new requirement
 
   gambling:
     display_name: "Gambling"
@@ -261,3 +260,4 @@ slide_settings:
 # 2. Parts & Services needs to combine "Auto - Auto Parts" and "Auto - Auto Service"
 # 3. "Telcom" is misspelled in the data (not "Telecom")
 # 4. Some excluded categories might be subcategories (e.g., "Home - Utilities")
+# 5. Banks are excluded from Finance subcategories per business requirement
