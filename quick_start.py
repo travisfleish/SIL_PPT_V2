@@ -7,7 +7,7 @@ Simplified interface for rapid testing and development
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional  # Add this import!
+from typing import List, Optional
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent))
@@ -25,7 +25,7 @@ def quick_generate(team_key: str = 'utah_jazz', categories_only: Optional[List[s
         team_key: Team to generate for
         categories_only: Optional list of specific categories to generate
     """
-    print("\n🚀 QUICK START - PowerPoint Generator")
+    print(f"\n🚀 QUICK START - PowerPoint Generator for {team_key}")
     print("=" * 50)
 
     # Test connection
@@ -77,6 +77,60 @@ def quick_generate(team_key: str = 'utah_jazz', categories_only: Optional[List[s
         import traceback
         traceback.print_exc()
         return None
+
+
+def quick_generate_multiple(team_keys: List[str], categories_only: Optional[List[str]] = None):
+    """
+    Generate reports for multiple teams in sequence
+
+    Args:
+        team_keys: List of team keys to generate for
+        categories_only: Optional list of specific categories to generate
+    """
+    print(f"\n🚀 MULTI-TEAM GENERATION - {len(team_keys)} teams")
+    print("=" * 50)
+
+    results = {}
+    successful = 0
+    failed = 0
+
+    for i, team_key in enumerate(team_keys, 1):
+        print(f"\n\n{'=' * 50}")
+        print(f"📊 Team {i}/{len(team_keys)}: {team_key.upper()}")
+        print(f"{'=' * 50}")
+
+        result = quick_generate(team_key, categories_only)
+        results[team_key] = result
+
+        if result:
+            successful += 1
+        else:
+            failed += 1
+
+    # Summary
+    print(f"\n\n{'=' * 50}")
+    print("📈 GENERATION SUMMARY")
+    print(f"{'=' * 50}")
+    print(f"✅ Successful: {successful}")
+    print(f"❌ Failed: {failed}")
+    print(f"\nResults:")
+    for team, path in results.items():
+        status = "✅" if path else "❌"
+        team_name = team.replace('_', ' ').title()
+        if path:
+            print(f"  {status} {team_name}: {path.name}")
+        else:
+            print(f"  {status} {team_name}: Generation failed")
+
+    return results
+
+
+def generate_jazz_and_panthers():
+    """
+    Convenience function to generate for Utah Jazz and Carolina Panthers
+    """
+    print("\n🏀🏈 Generating for Utah Jazz and Carolina Panthers")
+    return quick_generate_multiple(['utah_jazz', 'carolina_panthers'])
 
 
 def test_single_slide(slide_type: str, team_key: str = 'utah_jazz'):
@@ -156,9 +210,12 @@ def interactive_mode():
         print("\nOptions:")
         print("1. Generate full report (Utah Jazz)")
         print("2. Generate full report (Dallas Cowboys)")
-        print("3. Test single slide")
-        print("4. List available teams")
-        print("5. Test connection only")
+        print("3. Generate full report (Carolina Panthers)")
+        print("4. Generate for Jazz AND Panthers")
+        print("5. Generate for all configured teams")
+        print("6. Test single slide")
+        print("7. List available teams")
+        print("8. Test connection only")
         print("0. Exit")
 
         choice = input("\nSelect option: ").strip()
@@ -173,18 +230,31 @@ def interactive_mode():
             quick_generate('dallas_cowboys')
 
         elif choice == '3':
-            slide_type = input("Slide type (demographics/behaviors/category:NAME): ").strip()
-            test_single_slide(slide_type)
+            quick_generate('carolina_panthers')
 
         elif choice == '4':
+            generate_jazz_and_panthers()
+
+        elif choice == '5':
+            config = TeamConfigManager()
+            all_teams = config.list_teams()
+            print(f"\nGenerating for all {len(all_teams)} configured teams...")
+            quick_generate_multiple(all_teams)
+
+        elif choice == '6':
+            slide_type = input("Slide type (demographics/behaviors/category:NAME): ").strip()
+            team_key = input("Team key (utah_jazz/dallas_cowboys/carolina_panthers): ").strip()
+            test_single_slide(slide_type, team_key)
+
+        elif choice == '7':
             config = TeamConfigManager()
             teams = config.list_teams()
             print("\nAvailable teams:")
             for team in teams:
                 team_config = config.get_team_config(team)
-                print(f"  • {team}: {team_config['team_name']}")
+                print(f"  • {team}: {team_config['team_name']} ({team_config['league']})")
 
-        elif choice == '5':
+        elif choice == '8':
             if test_connection():
                 print("✅ Connection successful!")
             else:
@@ -200,16 +270,33 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='Quick PowerPoint generation for testing')
-    parser.add_argument('team', nargs='?', default='utah_jazz', help='Team key')
+    parser.add_argument('team', nargs='?', help='Team key(s) - can be comma-separated for multiple teams')
     parser.add_argument('--interactive', '-i', action='store_true', help='Interactive mode')
     parser.add_argument('--slide', help='Test single slide type')
     parser.add_argument('--categories', nargs='+', help='Specific categories to generate')
+    parser.add_argument('--jazz-panthers', action='store_true', help='Generate for Utah Jazz and Carolina Panthers')
+    parser.add_argument('--all', action='store_true', help='Generate for all configured teams')
 
     args = parser.parse_args()
 
     if args.interactive:
         interactive_mode()
+    elif args.jazz_panthers:
+        generate_jazz_and_panthers()
+    elif args.all:
+        config = TeamConfigManager()
+        all_teams = config.list_teams()
+        quick_generate_multiple(all_teams)
     elif args.slide:
-        test_single_slide(args.slide, args.team)
+        team_key = args.team if args.team else 'utah_jazz'
+        test_single_slide(args.slide, team_key)
+    elif args.team:
+        # Check if multiple teams specified
+        if ',' in args.team:
+            teams = [t.strip() for t in args.team.split(',')]
+            quick_generate_multiple(teams, args.categories)
+        else:
+            quick_generate(args.team, args.categories)
     else:
-        quick_generate(args.team, args.categories)
+        # Default: run for both Jazz and Panthers
+        generate_jazz_and_panthers()

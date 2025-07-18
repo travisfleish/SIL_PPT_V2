@@ -56,3 +56,15 @@ teams:
       accent: "#FFFFFF"
     audience_name: "Dallas Cowboys Fans"
     comparison_population: "Local Gen Pop (Excl. Dallas Cowboys Fans)"
+
+  carolina_panthers:
+    team_name: "Carolina Panthers"
+    team_name_short: "Panthers"
+    league: "NFL"
+    view_prefix: "V_CAROLINA_PANTHERS_SIL"  # Following NFL pattern (no SIL)
+    colors:
+      primary: "#0085CA"      # Panthers Blue (official)
+      secondary: "#101820"    # Black (official)
+      accent: "#BFC0BF"       # Silver (official)
+    audience_name: "Carolina Panthers Fans"
+    comparison_population: "Local Gen Pop (Excl. Carolina Panthers Fans)"
