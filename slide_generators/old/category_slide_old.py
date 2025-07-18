@@ -45,6 +45,25 @@ def format_percentage_no_decimal(value):
     return f"{int(round(num))}%"
 
 
+def format_percent_of_fans(value):
+    """Format 'Percent of Fans Who Spend' column with <5% for small values"""
+    if isinstance(value, str):
+        # Extract number from string like "4.5%"
+        try:
+            num = float(value.replace('%', '').strip())
+        except:
+            return value
+    else:
+        num = float(value)
+
+    # If less than 5%, return "<5%"
+    if num < 5:
+        return "<5%"
+
+    # Otherwise, round to nearest whole number
+    return f"{int(round(num))}%"
+
+
 def format_currency_no_cents(value):
     """Format currency without cents and with commas"""
     if isinstance(value, str):
@@ -347,10 +366,10 @@ class CategorySlide(BaseSlide):
         # Determine width based on title type
         if "Top" in title and "Brands for" in title:
             # Brand slide - title should end where brand table starts
-            width = Inches(5.333)  # Table starts at 5.833, so stop just before
+            width = Inches(5.3)  # Table starts at 5.833, so stop just before
         elif "Category Analysis:" in title:
             # Category slide - title should end where category table starts
-            width = Inches(5.7)  # Table starts at 6.2, so stop just before
+            width = Inches(5.3)  # Table starts at 6.2, so stop just before
         else:
             # Default width for other slides
             width = Inches(12.333)
@@ -379,13 +398,14 @@ class CategorySlide(BaseSlide):
         else:
             text_frame.text = title
 
-        # Format all paragraphs (handles both single and multi-line titles)
+        # Format all paragraphs with working bold+italic font
         for paragraph in text_frame.paragraphs:
-            paragraph.font.name = self.default_font
-            paragraph.font.size = Pt(32)
-            paragraph.font.bold = True
-            paragraph.font.italic = True
-            paragraph.font.color.rgb = RGBColor(0, 0, 0)
+            for run in paragraph.runs:
+                run.font.name = "Red Hat Display"  # Use base font name
+                run.font.size = Pt(28)
+                run.font.bold = True
+                run.font.italic = True  # Now this works!
+                run.font.color.rgb = RGBColor(0, 0, 0)
             paragraph.line_spacing = 1.0  # Adjust line spacing if needed
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
@@ -503,8 +523,10 @@ class CategorySlide(BaseSlide):
         category_name = results.get('display_name', 'Category')
         table.cell(1, 0).text = category_name
 
-        # Apply formatting to the metric values
-        table.cell(1, 1).text = self._format_metric_value(metrics.format_percent_fans())
+        # UPDATED: Use format_percent_of_fans for "Percent of Fans Who Spend"
+        percent_value = metrics.format_percent_fans()
+        table.cell(1, 1).text = format_percent_of_fans(percent_value)
+
         table.cell(1, 2).text = self._format_metric_value(metrics.format_likelihood())
         table.cell(1, 3).text = self._format_metric_value(metrics.format_purchases())
 
@@ -556,9 +578,12 @@ class CategorySlide(BaseSlide):
             subcategory_text = row['Subcategory']
             table.cell(row_idx, 0).text = subcategory_text
 
-            # Apply formatting to metric values
-            table.cell(row_idx, 1).text = self._format_metric_value(row['Percent of Fans Who Spend'])
-            table.cell(row_idx, 2).text = self._format_metric_value(row.get('Likelihood to spend (vs. Local Gen Pop)', row.get('Likelihood to spend vs. gen pop', '')))
+            # UPDATED: Use format_percent_of_fans for "Percent of Fans Who Spend"
+            percent_fans = row['Percent of Fans Who Spend']
+            table.cell(row_idx, 1).text = format_percent_of_fans(percent_fans)
+
+            table.cell(row_idx, 2).text = self._format_metric_value(
+                row.get('Likelihood to spend (vs. Local Gen Pop)', row.get('Likelihood to spend vs. gen pop', '')))
             table.cell(row_idx, 3).text = self._format_metric_value(row.get('Purchases Per Fan (vs. Gen Pop)', ''))
 
             # Format cells
@@ -833,7 +858,8 @@ class CategorySlide(BaseSlide):
                 if not merchant_df.empty:
                     top_brand = merchant_df.iloc[0]['Brand']
                     percent = merchant_df.iloc[0]['Percent of Fans Who Spend']
-                    formatted_percent = self._format_metric_value(percent)
+                    # UPDATED: Use format_percent_of_fans here too
+                    formatted_percent = format_percent_of_fans(percent)
                     run2.text = f"{formatted_percent} of {team_name} fans spend at {top_brand}"
                 else:
                     # Fallback to formatting the existing insight
@@ -967,9 +993,13 @@ class CategorySlide(BaseSlide):
             table.cell(row_idx, 0).text = str(row['Rank'])
             table.cell(row_idx, 1).text = row['Brand']
 
-            # Apply formatting to metric values
-            table.cell(row_idx, 2).text = self._format_metric_value(row['Percent of Fans Who Spend'])
-            table.cell(row_idx, 3).text = self._format_metric_value(row.get('Likelihood to spend (vs. Local Gen Pop)', row.get('How likely fans are to spend vs. gen pop', '')))
+            # UPDATED: Use format_percent_of_fans for "Percent of Fans Who Spend"
+            table.cell(row_idx, 2).text = format_percent_of_fans(row['Percent of Fans Who Spend'])
+
+            table.cell(row_idx, 3).text = self._format_metric_value(row.get('Likelihood to spend (vs. Local Gen Pop)',
+                                                                            row.get(
+                                                                                'How likely fans are to spend vs. gen pop',
+                                                                                '')))
             table.cell(row_idx, 4).text = self._format_metric_value(row.get('Purchases Per Fan (vs. Gen Pop)', ''))
 
             # Format cells
@@ -983,7 +1013,7 @@ class CategorySlide(BaseSlide):
 
         # Top Brand Target header with colon
         target_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(5.2),
+            Inches(0.5), Inches(5.0),
             Inches(2.0), Inches(0.3)  # Wider to accommodate full text
         )
         target_title.text_frame.text = "Hot Brand Target:"
@@ -996,7 +1026,7 @@ class CategorySlide(BaseSlide):
         merchant_name = recommendation.get('merchant', 'Brand')
         logo_size = Inches(0.5)  # Small logo size
         logo_x = Inches(2.4)  # Shifted right to avoid text overlap
-        logo_y = Inches(5.125)  # Vertically centered with text
+        logo_y = Inches(4.925)  # Vertically centered with text
 
         # Try to get logo from LogoManager
         logo_image = self.logo_manager.get_logo(merchant_name, size=(60, 60))
@@ -1054,7 +1084,7 @@ class CategorySlide(BaseSlide):
 
         # Recommendation content - moved down to create space after logo
         rec_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(5.7),  # Moved down from 5.5 to create spacing
+            Inches(0.7), Inches(5.5),  # Moved down from 5.5 to create spacing
             Inches(5.5), Inches(1.2)  # Extended width to match insights box
         )
 

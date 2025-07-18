@@ -960,36 +960,87 @@ class CategoryAnalyzer:
 
         return subcategory
 
+    def _verify_merchant_threshold(self, category_name: str, merchant_df: pd.DataFrame, threshold: float) -> bool:
+        """
+        Check if any merchant in category meets audience threshold
+
+        Args:
+            category_name: Category name to check
+            merchant_df: DataFrame with merchant data
+            threshold: Minimum PERC_AUDIENCE threshold (e.g., 0.10 for 10%)
+
+        Returns:
+            True if at least one merchant meets threshold, False otherwise
+        """
+        if merchant_df.empty:
+            return False
+
+        # FIXED: Strip whitespace from both the input category name and the DataFrame values
+        category_name_clean = category_name.strip()
+
+        # Filter for merchants in this category for team fans
+        # Strip whitespace from CATEGORY column values for comparison
+        category_merchants = merchant_df[
+            (merchant_df['AUDIENCE'] == self.audience_name) &
+            (merchant_df['CATEGORY'].str.strip() == category_name_clean)
+            ]
+
+        if category_merchants.empty:
+            logger.debug(f"No merchants found for category '{category_name}' (cleaned: '{category_name_clean}') "
+                         f"and audience '{self.audience_name}'")
+            return False
+
+        # Check if any merchant has audience percentage above threshold
+        max_merchant_audience = category_merchants['PERC_AUDIENCE'].max()
+
+        # Log the result for debugging
+        if max_merchant_audience >= threshold:
+            top_merchant = category_merchants.loc[category_merchants['PERC_AUDIENCE'].idxmax()]
+            logger.info(f"  ✓ Category '{category_name}' has merchant '{top_merchant['MERCHANT']}' "
+                        f"with {max_merchant_audience * 100:.1f}% audience")
+
+        return max_merchant_audience >= threshold
+
     def get_custom_categories(self,
                               category_df: pd.DataFrame,
+                              merchant_df: pd.DataFrame,  # NEW: Add merchant data
                               is_womens_team: bool = False,
                               existing_categories: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
-        Get custom categories based on composite index
-        UPDATED to use allowed_for_custom list
+        Get custom categories using tiered selection approach
+        - Established categories (slots 1-3): 20% category + 10% merchant thresholds
+        - Emerging category (slot 4, men's only): 10% category, no merchant requirement
+
+        Args:
+            category_df: DataFrame with category-level data
+            merchant_df: DataFrame with merchant-level data for verification
+            is_womens_team: Whether this is a women's team
+            existing_categories: List of already-selected category keys
+
+        Returns:
+            List of selected custom categories with metadata
         """
-        # Get config
+        # Get configuration
         custom_config = self.config.get('custom_category_config', {})
-        n_categories = (custom_config.get('womens_teams', {}).get('count', 2) if is_womens_team
-                        else custom_config.get('mens_teams', {}).get('count', 4))
-        min_audience = custom_config.get('min_audience_pct', 0.20)
+        team_config = custom_config.get('womens_teams' if is_womens_team else 'mens_teams', {})
+
+        # Get tier-specific settings
+        established_config = team_config.get('established_categories', {})
+        emerging_config = team_config.get('emerging_category', {})
+
+        # Extract thresholds
+        established_count = established_config.get('count', 3 if not is_womens_team else 2)
+        established_cat_threshold = established_config.get('min_audience_pct', 0.20)
+        established_merch_threshold = established_config.get('min_merchant_audience_pct', 0.10)
+
+        emerging_count = emerging_config.get('count', 1 if not is_womens_team else 0)
+        emerging_cat_threshold = emerging_config.get('min_audience_pct', 0.10)
 
         # Default existing categories if not provided
         if existing_categories is None:
             existing_fixed = (self.config['fixed_categories']['womens_teams'] if is_womens_team
                               else self.config['fixed_categories']['mens_teams'])
             existing_categories = existing_fixed
-
-        # Filter for team fans AND the correct comparison population
-        team_data = category_df[
-            (category_df['AUDIENCE'] == self.audience_name) &
-            (category_df['COMPARISON_POPULATION'] == self.comparison_pop) &  # ADD THIS LINE!
-            (category_df['PERC_AUDIENCE'] >= min_audience)
-            ]
-
-        if team_data.empty:
-            logger.warning("No category data found for custom category selection")
-            return []
 
         # Get category names already used in fixed categories
         category_names_to_exclude = []
@@ -999,59 +1050,100 @@ class CategoryAnalyzer:
                     self.categories[cat_key].get('category_names_in_data', [])
                 )
 
-        # UPDATED LOGIC: Filter using BOTH allowed and excluded lists
-        # Start with allowed categories
-        available_categories = team_data[
-            team_data['CATEGORY'].isin(self.allowed_custom)
-        ]
+        # Base filter: team fans with correct comparison population
+        base_filter = (
+                (category_df['AUDIENCE'] == self.audience_name) &
+                (category_df['COMPARISON_POPULATION'] == self.comparison_pop)
+        )
 
-        # Then remove excluded categories
-        available_categories = available_categories[
-            ~available_categories['CATEGORY'].isin(self.excluded_custom)
-        ]
+        # PASS 1: Find established categories (high thresholds + merchant verification)
+        established_candidates = category_df[
+            base_filter &
+            (category_df['PERC_AUDIENCE'] >= established_cat_threshold) &
+            (category_df['CATEGORY'].isin(self.allowed_custom)) &
+            (~category_df['CATEGORY'].isin(self.excluded_custom)) &
+            (~category_df['CATEGORY'].isin(category_names_to_exclude))
+            ].copy()
 
-        # Finally remove already-used fixed categories
-        available_categories = available_categories[
-            ~available_categories['CATEGORY'].isin(category_names_to_exclude)
-        ]
+        # Verify merchant threshold for each candidate
+        established_categories = []
 
-        if available_categories.empty:
-            logger.warning("No available categories after filtering")
-            return []
+        if not established_candidates.empty:
+            # Sort by composite index
+            established_candidates = established_candidates.sort_values('COMPOSITE_INDEX', ascending=False)
 
-        # Log filtering results for debugging
-        logger.info(f"Custom category selection:")
-        logger.info(f"  - Started with {len(team_data)} categories meeting audience threshold")
-        logger.info(
-            f"  - After allowed list filter: {len(team_data[team_data['CATEGORY'].isin(self.allowed_custom)])} categories")
-        logger.info(f"  - After exclusion filter: {len(available_categories)} categories available")
+            for _, row in established_candidates.iterrows():
+                if len(established_categories) >= established_count:
+                    break
 
-        # Get top N by composite index
-        top_categories = available_categories.nlargest(n_categories, 'COMPOSITE_INDEX')
+                category_name = row['CATEGORY']
 
-        # Convert to list of category info
-        custom_categories = []
-        for _, row in top_categories.iterrows():
-            category_name = row['CATEGORY']
+                # Verify at least one merchant meets threshold
+                if self._verify_merchant_threshold(category_name, merchant_df, established_merch_threshold):
+                    category_info = {
+                        'category_key': category_name.lower().replace(' ', '_').replace('-', '_'),
+                        'display_name': category_name,
+                        'category_names_in_data': [category_name],
+                        'composite_index': float(row['COMPOSITE_INDEX']),
+                        'audience_pct': float(row['PERC_AUDIENCE']),
+                        'perc_index': float(row['PERC_INDEX']),
+                        'is_custom': True,
+                        'is_emerging': False  # NEW: Mark as established
+                    }
+                    established_categories.append(category_info)
+                    logger.info(f"✓ Selected established category: {category_name} "
+                                f"(composite: {category_info['composite_index']:.1f}, "
+                                f"audience: {category_info['audience_pct'] * 100:.1f}%)")
+                else:
+                    logger.info(
+                        f"✗ Skipped {category_name} - no merchant meets {established_merch_threshold * 100:.0f}% threshold")
 
-            # Create a dynamic category config
-            category_info = {
-                'category_key': category_name.lower().replace(' ', '_').replace('-', '_'),
-                'display_name': category_name,
-                'category_names_in_data': [category_name],
-                'composite_index': float(row['COMPOSITE_INDEX']),
-                'audience_pct': float(row['PERC_AUDIENCE']),
-                'perc_index': float(row['PERC_INDEX']),
-                'is_custom': True
-            }
+        # PASS 2: Find emerging category (relaxed thresholds, no merchant requirement)
+        emerging_categories = []
 
-            custom_categories.append(category_info)
+        if emerging_count > 0 and not is_womens_team:
+            # Get categories already selected as established
+            selected_category_names = [cat['display_name'] for cat in established_categories]
 
-        logger.info(f"Selected {len(custom_categories)} custom categories:")
-        for cat in custom_categories:
-            logger.info(f"  - {cat['display_name']} (composite index: {cat['composite_index']:.1f})")
+            emerging_candidates = category_df[
+                base_filter &
+                (category_df['PERC_AUDIENCE'] >= emerging_cat_threshold) &
+                (category_df['CATEGORY'].isin(self.allowed_custom)) &
+                (~category_df['CATEGORY'].isin(self.excluded_custom)) &
+                (~category_df['CATEGORY'].isin(category_names_to_exclude)) &
+                (~category_df['CATEGORY'].isin(selected_category_names))  # Exclude already selected
+                ].copy()
 
-        return custom_categories
+            if not emerging_candidates.empty:
+                # Get the highest composite index category
+                top_emerging = emerging_candidates.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+                category_name = top_emerging['CATEGORY']
+
+                category_info = {
+                    'category_key': category_name.lower().replace(' ', '_').replace('-', '_'),
+                    'display_name': category_name,
+                    'category_names_in_data': [category_name],
+                    'composite_index': float(top_emerging['COMPOSITE_INDEX']),
+                    'audience_pct': float(top_emerging['PERC_AUDIENCE']),
+                    'perc_index': float(top_emerging['PERC_INDEX']),
+                    'is_custom': True,
+                    'is_emerging': True  # NEW: Mark as emerging
+                }
+                emerging_categories.append(category_info)
+                logger.info(f"★ Selected emerging category: {category_name} "
+                            f"(composite: {category_info['composite_index']:.1f}, "
+                            f"audience: {category_info['audience_pct'] * 100:.1f}%)")
+
+        # Combine results
+        all_custom_categories = established_categories + emerging_categories
+
+        # Log summary
+        logger.info(f"\nCustom category selection complete:")
+        logger.info(f"  - Established categories: {len(established_categories)}")
+        logger.info(f"  - Emerging categories: {len(emerging_categories)}")
+        logger.info(f"  - Total selected: {len(all_custom_categories)}")
+
+        return all_custom_categories
 
     def create_custom_category_config(self, category_name: str) -> Dict[str, Any]:
         """

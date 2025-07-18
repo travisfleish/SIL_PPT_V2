@@ -338,8 +338,49 @@ class PowerPointBuilder:
             # Create new slide using the static layout
             slide = self.presentation.slides.add_slide(static_layout)
 
-            # The content should already be in the layout, but we can add any dynamic content here if needed
-            # For now, just use the layout as-is since it contains your static content
+            # Add header to "How To Use This Report" slide (layout 13)
+            if layout_index == 13:
+                from pptx.enum.shapes import MSO_SHAPE
+                from pptx.util import Inches, Pt
+                from pptx.dml.color import RGBColor
+                from pptx.enum.text import PP_ALIGN
+
+                # Header background rectangle
+                header_rect = slide.shapes.add_shape(
+                    MSO_SHAPE.RECTANGLE,
+                    Inches(0), Inches(0),
+                    Inches(13.333), Inches(0.5)  # Full 16:9 width
+                )
+
+                # Header styling
+                header_rect.fill.solid()
+                header_rect.fill.fore_color.rgb = RGBColor(240, 240, 240)  # Light gray
+                header_rect.line.color.rgb = RGBColor(200, 200, 200)  # Border gray
+                header_rect.line.width = Pt(0.5)
+
+                # Team name text (left side)
+                team_text = slide.shapes.add_textbox(
+                    Inches(0.2), Inches(0.1),
+                    Inches(3), Inches(0.3)
+                )
+                team_text.text_frame.text = "Sponsorship Insights Report"
+                team_p = team_text.text_frame.paragraphs[0]
+                team_p.font.name = self.presentation_font
+                team_p.font.size = Pt(14)
+                team_p.font.bold = True
+                team_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
+
+                # Header title text (right side)
+                title_text = slide.shapes.add_textbox(
+                    Inches(6.5), Inches(0.1),
+                    Inches(6.633), Inches(0.3)
+                )
+                title_text.text_frame.text = "How To Use This Report"
+                title_p = title_text.text_frame.paragraphs[0]
+                title_p.font.name = self.presentation_font
+                title_p.font.size = Pt(14)
+                title_p.alignment = PP_ALIGN.RIGHT
+                title_p.font.color.rgb = RGBColor(0, 0, 0)  # Dark gray
 
             # Track the slide
             self.slides_created.append(slide_name)

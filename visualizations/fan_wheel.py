@@ -385,6 +385,8 @@ class FanWheel(BaseChart):
 
     def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float):
         """Add logos and behavior text to each segment"""
+        from textwrap import wrap
+
         missing_logos = []
 
         for i, (_, row) in enumerate(wheel_data.iterrows()):
@@ -402,19 +404,71 @@ class FanWheel(BaseChart):
             if not logo_added:
                 missing_logos.append(merchant_name)
 
-            # Add behavior text
+            # Add behavior text with proper word wrapping
             text_radius = self.outer_radius - 0.9
             text_x = text_radius * np.cos(angle_rad)
             text_y = text_radius * np.sin(angle_rad)
 
-            ax.text(text_x, text_y, row['behavior'],
+            # Wrap the behavior text to fit in the wedge
+            behavior_text = row['behavior']
+
+            # IMPROVED WRAPPING LOGIC
+            # Count words instead of characters for better wrapping decisions
+            word_count = len(behavior_text.split())
+
+            if word_count >= 4 or len(behavior_text) > 20:
+                # 4+ words or long text should wrap to 3 lines
+                # Use width=10 to force more aggressive wrapping
+                wrapped_text = '\n'.join(wrap(behavior_text,
+                                              width=10,
+                                              break_long_words=False))
+            elif word_count == 3 or len(behavior_text) > 12:
+                # 3 words or medium text should wrap to 2-3 lines
+                # Use width=11 for moderate wrapping
+                wrapped_text = '\n'.join(wrap(behavior_text,
+                                              width=11,
+                                              break_long_words=False))
+            else:
+                # 1-2 words or very short text can stay on one line
+                wrapped_text = behavior_text
+
+            # Additional check: if we still only got 2 lines but text is long,
+            # try again with tighter width
+            lines = wrapped_text.split('\n')
+            if len(lines) == 2 and len(behavior_text) > 18:
+                wrapped_text = '\n'.join(wrap(behavior_text,
+                                              width=9,
+                                              break_long_words=False))
+
+            ax.text(text_x, text_y, wrapped_text,
                     ha='center', va='center',
-                    fontsize=18, fontweight='bold',  # INCREASED: fontsize from 14 to 18
+                    fontsize=22,
+                    fontweight='bold',
                     fontfamily='Red Hat Display',
                     color='white',
                     rotation=0,
-                    linespacing=0.8,
+                    linespacing=0.9,
                     zorder=7)
+
+        # Log missing logos for debugging
+        if missing_logos and self.enable_logos:
+            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
+
+        # Log missing logos for debugging
+        if missing_logos and self.enable_logos:
+            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
+
+        # Log missing logos for debugging
+        if missing_logos and self.enable_logos:
+            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
+
+        # Log missing logos for debugging
+        if missing_logos and self.enable_logos:
+            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
+
+        # Log missing logos for debugging
+        if missing_logos and self.enable_logos:
+            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
 
         # Log missing logos for debugging
         if missing_logos and self.enable_logos:

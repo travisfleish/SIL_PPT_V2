@@ -3,6 +3,7 @@
 Main PowerPoint builder that orchestrates the entire presentation generation
 Combines all slide generators to create the complete sponsorship insights report
 UPDATED: Added demographic overview slide with AI insights
+UPDATED: Added support for emerging categories with tiered selection
 """
 
 import logging
@@ -179,7 +180,7 @@ class PowerPointBuilder:
         3. Demographic Overview with AI insights (NEW - using layout 11)
         4. Demographics slide with charts
         5. Behaviors slide
-        6-N. Category slides
+        6-N. Category slides (fixed + custom/emerging)
         N+1. "Sports Innovation Lab" branding (using layout 14)
 
         Args:
@@ -499,7 +500,10 @@ class PowerPointBuilder:
             self._create_category_slide(category_key, is_custom=False)
 
     def _create_custom_category_slides(self, custom_count: Optional[int] = None):
-        """Create slides for custom categories"""
+        """
+        Create slides for custom categories using tiered selection
+        Now includes both established and emerging categories
+        """
         logger.info("Creating custom category slides...")
 
         # Determine number of custom categories
@@ -507,28 +511,65 @@ class PowerPointBuilder:
         if custom_count is None:
             custom_count = 2 if is_womens_team else 4
 
-        # Get all category data for selection
+        # Get all data needed for custom category selection
         try:
+            # Load category data
             category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
             all_category_df = query_to_dataframe(category_query)
 
-            # Get custom categories
+            # NEW: Load merchant data for verification
+            merchant_query = f"SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME"
+            all_merchant_df = query_to_dataframe(merchant_query)
+
+            # Get existing fixed categories
+            fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+            if is_womens_team:
+                fixed_categories.extend(['beauty', 'health'])
+
+            # Get custom categories using the new tiered selection
             custom_categories = self.category_analyzer.get_custom_categories(
                 category_df=all_category_df,
-                is_womens_team=is_womens_team
+                merchant_df=all_merchant_df,  # NEW: Pass merchant data
+                is_womens_team=is_womens_team,
+                existing_categories=fixed_categories
             )
+
+            # Log the selected categories
+            logger.info(f"Selected {len(custom_categories)} custom categories:")
+            for i, cat in enumerate(custom_categories):
+                emerging_tag = " [EMERGING]" if cat.get('is_emerging', False) else " [ESTABLISHED]"
+                logger.info(f"  {i + 1}. {cat['display_name']}{emerging_tag} "
+                            f"(audience: {cat.get('audience_pct', 0) * 100:.1f}%, "
+                            f"composite: {cat.get('composite_index', 0):.1f})")
 
             # Create slides for each custom category
             for i, custom_cat in enumerate(custom_categories[:custom_count]):
                 category_name = custom_cat['display_name']
-                logger.info(f"Creating custom category slide {i + 1}: {category_name}")
-                self._create_category_slide(category_name, is_custom=True)
+                is_emerging = custom_cat.get('is_emerging', False)
+
+                logger.info(f"Creating custom category slide {i + 1}: {category_name} "
+                            f"{'[EMERGING]' if is_emerging else '[ESTABLISHED]'}")
+
+                # Pass the custom category info to create the slide
+                self._create_category_slide(
+                    category_key=category_name,
+                    is_custom=True,
+                    custom_cat_info=custom_cat  # NEW: Pass the full category info
+                )
 
         except Exception as e:
             logger.error(f"Error creating custom category slides: {str(e)}")
 
-    def _create_category_slide(self, category_key: str, is_custom: bool = False):
-        """Create slides for a single category"""
+    def _create_category_slide(self, category_key: str, is_custom: bool = False,
+                               custom_cat_info: Optional[Dict[str, Any]] = None):
+        """
+        Create slides for a single category
+
+        Args:
+            category_key: Category identifier
+            is_custom: Whether this is a custom category
+            custom_cat_info: Full category info including is_emerging flag
+        """
         try:
             logger.info(f"Creating slides for {category_key} {'[CUSTOM]' if is_custom else '[FIXED]'}...")
 
@@ -566,6 +607,20 @@ class PowerPointBuilder:
                 LIMIT 100
             """)
 
+            # NEW: Load LAST_FULL_YEAR data for specific insights
+            subcategory_last_year_df = query_to_dataframe(f"""
+                SELECT * FROM {self.view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
+                WHERE {category_where}
+            """)
+
+            merchant_last_year_df = query_to_dataframe(f"""
+                SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
+                WHERE {category_where}
+                AND AUDIENCE = '{self.category_analyzer.audience_name}'
+                ORDER BY PERC_AUDIENCE DESC
+                LIMIT 100
+            """)
+
             # Add config for custom categories temporarily
             if is_custom:
                 self.category_analyzer.categories[category_key] = cat_config
@@ -576,8 +631,14 @@ class PowerPointBuilder:
                 category_df=category_df,
                 subcategory_df=subcategory_df,
                 merchant_df=merchant_df,
+                subcategory_last_year_df=subcategory_last_year_df,  # NEW
+                merchant_last_year_df=merchant_last_year_df,  # NEW
                 validate=False
             )
+
+            # NEW: Add emerging flag from custom_cat_info if available
+            if custom_cat_info and 'is_emerging' in custom_cat_info:
+                results['is_emerging'] = custom_cat_info['is_emerging']
 
             # Clean up temporary config
             if is_custom:
@@ -589,13 +650,19 @@ class PowerPointBuilder:
 
             # Category analysis slide
             self.presentation = category_generator.generate(results, self.team_config)
-            self.slides_created.append(f"{results['display_name']} Analysis")
+
+            # Track slide with emerging tag if applicable
+            slide_name = f"{results['display_name']} Analysis"
+            if results.get('is_emerging', False):
+                slide_name += " [EMERGING]"
+            self.slides_created.append(slide_name)
 
             # Brand analysis slide
             self.presentation = category_generator.generate_brand_slide(results, self.team_config)
             self.slides_created.append(f"{results['display_name']} Brands")
 
-            logger.info(f"✓ Created {results['display_name']} slides")
+            logger.info(f"✓ Created {results['display_name']} slides" +
+                        (" [EMERGING]" if results.get('is_emerging', False) else ""))
 
         except Exception as e:
             logger.error(f"Error creating {category_key} slides: {str(e)}")
@@ -641,6 +708,9 @@ class PowerPointBuilder:
         """Create a summary text file with build information"""
         summary_path = self.output_dir / 'build_summary.txt'
 
+        # Count emerging categories
+        emerging_count = sum(1 for slide in self.slides_created if "[EMERGING]" in slide)
+
         with open(summary_path, 'w') as f:
             f.write(f"PowerPoint Build Summary\n")
             f.write(f"{'=' * 50}\n\n")
@@ -652,6 +722,15 @@ class PowerPointBuilder:
             f.write(f"Slides Created ({len(self.slides_created)}):\n")
             for i, slide in enumerate(self.slides_created, 1):
                 f.write(f"  {i}. {slide}\n")
+
+            # Add category summary
+            f.write(f"\nCategory Summary:\n")
+            f.write(
+                f"  Fixed Categories: {sum(1 for s in self.slides_created if 'Analysis' in s and '[EMERGING]' not in s and 'Demographic' not in s)}\n")
+            f.write(
+                f"  Established Custom: {sum(1 for s in self.slides_created if 'Analysis' in s and '[EMERGING]' not in s) - sum(1 for s in self.slides_created if any(cat in s.lower() for cat in ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto', 'beauty', 'health']))}\n")
+            f.write(f"  Emerging Categories: {emerging_count}\n")
+
             f.write(f"\nView Configuration:\n")
             f.write(f"  Prefix: {self.view_prefix}\n")
             f.write(f"  Demographics: {self.config_manager.get_view_name(self.team_key, 'demographics')}\n")

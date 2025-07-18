@@ -292,13 +292,37 @@ excluded_from_custom:
   - "Non-Profit"  # Part of "Charitable Giving - Non Profit"
 
 # Configuration for custom category selection
+# UPDATED: Now supports tiered selection with established vs emerging categories
 custom_category_config:
   mens_teams:
-    count: 4  # Number of custom categories to add
+    count: 4  # Total number of custom categories
+    # First 3 slots: Established categories with proven merchant presence
+    established_categories:
+      count: 3
+      min_audience_pct: 0.20  # 20% of fans must spend in category
+      min_merchant_audience_pct: 0.10  # At least one merchant must have 10% fan penetration
+    # 4th slot: Emerging category for growth opportunities
+    emerging_category:
+      count: 1
+      min_audience_pct: 0.10  # Lower threshold - only 10% of fans need to spend
+      min_merchant_audience_pct: null  # No merchant requirement - can be fragmented
+
   womens_teams:
-    count: 2  # Number of custom categories to add
+    count: 2  # Total number of custom categories
+    # Both slots use established criteria for women's teams
+    established_categories:
+      count: 2
+      min_audience_pct: 0.20  # 20% of fans must spend in category
+      min_merchant_audience_pct: 0.10  # At least one merchant must have 10% fan penetration
+    # No emerging category slot for women's teams
+    emerging_category:
+      count: 0
+      min_audience_pct: null
+      min_merchant_audience_pct: null
+
   selection_method: "composite_index"  # How to rank categories
-  min_audience_pct: 0.20  # Minimum audience percentage to consider
+  # Legacy field kept for backward compatibility - use tier-specific thresholds above
+  min_audience_pct: 0.20  # Default minimum audience percentage
 
 # Slide generation settings
 slide_settings:
@@ -314,6 +338,10 @@ slide_settings:
   significant_difference_threshold: 50  # % difference to highlight
   multiplier_threshold: 2.0  # When to use "2X more likely" language
 
+  # Visual indicators for emerging categories
+  emerging_category_badge: "Emerging Opportunity"  # Text to display on emerging category slides
+  emerging_category_color: "#FFA500"  # Orange color for emerging category indicators
+
 # Notes on data discrepancies to handle:
 # 1. Auto category doesn't have "Resale" subcategory - it's a separate "Resale" category
 # 2. Parts & Services needs to combine "Auto - Auto Parts" and "Auto - Auto Service"
@@ -322,3 +350,6 @@ slide_settings:
 # 5. Banks are excluded from Finance subcategories per business requirement
 # 6. Athletic category renamed to "Athletic Goods & Gears" for display
 # 7. Subcategory overrides handle special renaming cases
+# 8. Custom category selection now uses tiered approach:
+#    - Established categories (slots 1-3 for men's, 1-2 for women's): Require both high category spend and at least one strong merchant
+#    - Emerging category (slot 4 for men's only): Lower thresholds, no merchant requirement
