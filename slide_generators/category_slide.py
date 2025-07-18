@@ -379,13 +379,14 @@ class CategorySlide(BaseSlide):
         else:
             text_frame.text = title
 
-        # Format all paragraphs (handles both single and multi-line titles)
+        # Format all paragraphs with working bold+italic font
         for paragraph in text_frame.paragraphs:
-            paragraph.font.name = self.default_font
-            paragraph.font.size = Pt(28)
-            paragraph.font.bold = True
-            paragraph.font.italic = True
-            paragraph.font.color.rgb = RGBColor(0, 0, 0)
+            for run in paragraph.runs:
+                run.font.name = "Red Hat Display"  # Use base font name
+                run.font.size = Pt(28)
+                run.font.bold = True
+                run.font.italic = True  # Now this works!
+                run.font.color.rgb = RGBColor(0, 0, 0)
             paragraph.line_spacing = 1.0  # Adjust line spacing if needed
 
     def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
