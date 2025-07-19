@@ -11,4 +11,6 @@ python_pptx==1.0.2
 PyYAML==6.0.2
 PyYAML==6.0.2
 snowflake_connector_python==3.15.0
+gunicorn==21.2.0
+
 
