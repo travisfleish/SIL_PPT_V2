@@ -383,6 +383,20 @@
                     </div>
                 </div>
 
+                <div class="options-section">
+                    <h3>Generation Options</h3>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="skipCustom" onchange="toggleCustomCount()">
+                        <label for="skipCustom">Skip custom category slides</label>
+                    </div>
+
+                    <div class="form-group" id="customCountGroup">
+                        <label for="customCount">Number of custom categories:</label>
+                        <input type="number" id="customCount" class="number-input" min="1" max="10" value="4">
+                    </div>
+                </div>
+
                 <button class="btn" onclick="generateReport()" id="generateBtn">
                     Generate PowerPoint Report
                 </button>
@@ -524,6 +538,32 @@
             }
         }
 
+        function filterTeamsByLeague() {
+            const selectedLeague = document.getElementById('league').value;
+            const leagueTeamsSelect = document.getElementById('leagueTeams');
+
+            leagueTeamsSelect.innerHTML = '';
+
+            if (selectedLeague) {
+                const leagueTeams = teams.filter(t => t.league === selectedLeague);
+
+                leagueTeams.forEach(team => {
+                    const option = document.createElement('option');
+                    option.value = team.key;
+                    option.textContent = team.name;
+                    option.selected = true; // Select all by default
+                    leagueTeamsSelect.appendChild(option);
+                });
+            } else {
+                leagueTeamsSelect.innerHTML = '<option value="">Select a league first</option>';
+            }
+        }
+
+        function toggleCustomCount() {
+            const skipCustom = document.getElementById('skipCustom').checked;
+            document.getElementById('customCountGroup').style.display = skipCustom ? 'none' : 'block';
+        }
+
         async function generateReport() {
             // Validate selection
             let selectedTeams = [];
@@ -545,14 +585,18 @@
                 }
             }
 
+            // Get options
+            const skipCustom = document.getElementById('skipCustom').checked;
+            const customCount = skipCustom ? null : parseInt(document.getElementById('customCount').value);
+
             // Clear previous messages
             hideMessages();
 
-            // Process each team with default options
+            // Process each team
             if (selectedTeams.length === 1) {
-                await generateSingleReport(selectedTeams[0], {});
+                await generateSingleReport(selectedTeams[0], { skip_custom: skipCustom, custom_count: customCount });
             } else {
-                await generateMultipleReports(selectedTeams, {});
+                await generateMultipleReports(selectedTeams, { skip_custom: skipCustom, custom_count: customCount });
             }
         }
 
