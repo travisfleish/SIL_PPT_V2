@@ -464,391 +464,569 @@
     </div>
 
     <script>
-        // Configuration
-        const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:5001/api'
-    : '/api';
+    // Configuration
+    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:5001/api'
+        : '/api';
 
+    // State
+    let teams = [];
+    let leagues = [];
+    let currentMode = 'team';
+    let currentJob = null;
+    let currentJobId = null;  // Store job ID separately
+    let eventSource = null;
 
-        // State
-        let teams = [];
-        let leagues = [];
-        let currentMode = 'team';
-        let currentJob = null;
-        let eventSource = null;
+    // Add environment detection
+    const isProduction = window.location.hostname !== 'localhost' &&
+                        window.location.hostname !== '127.0.0.1';
 
-        // Initialize
-        window.onload = async function() {
-            await checkConnection();
-            await loadTeams();
-            await loadLeagues();
-        };
+    // Initialize
+    window.onload = async function() {
+        await checkConnection();
+        await loadTeams();
+        await loadLeagues();
+    };
 
-        async function checkConnection() {
-            try {
-                const response = await fetch(`${API_BASE}/test-connection`);
-                const data = await response.json();
+    async function checkConnection() {
+        try {
+            const response = await fetch(`${API_BASE}/test-connection`);
+            const data = await response.json();
 
-                const indicator = document.getElementById('connectionIndicator');
-                const text = document.getElementById('connectionText');
+            const indicator = document.getElementById('connectionIndicator');
+            const text = document.getElementById('connectionText');
 
-                if (data.connected) {
-                    indicator.classList.add('connected');
-                    text.textContent = 'Connected to Snowflake';
-                } else {
-                    indicator.classList.add('disconnected');
-                    text.textContent = 'Disconnected - Check database connection';
-                }
-            } catch (error) {
-                console.error('Connection check failed:', error);
-                document.getElementById('connectionText').textContent = 'Connection check failed';
-            }
-        }
-
-        async function loadTeams() {
-            try {
-                const response = await fetch(`${API_BASE}/teams`);
-                const data = await response.json();
-
-                teams = data.teams;
-
-                const teamSelect = document.getElementById('team');
-                teamSelect.innerHTML = '<option value="">-- Select a team --</option>';
-
-                teams.forEach(team => {
-                    const option = document.createElement('option');
-                    option.value = team.key;
-                    option.textContent = team.name;
-                    option.dataset.league = team.league;
-                    teamSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load teams:', error);
-                showError('Failed to load teams. Please check the server.');
-            }
-        }
-
-        async function loadLeagues() {
-            try {
-                const response = await fetch(`${API_BASE}/leagues`);
-                const data = await response.json();
-
-                leagues = data.leagues;
-
-                const leagueSelect = document.getElementById('league');
-                leagueSelect.innerHTML = '<option value="">-- Select a league --</option>';
-
-                leagues.forEach(league => {
-                    const option = document.createElement('option');
-                    option.value = league;
-                    option.textContent = league;
-                    leagueSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Failed to load leagues:', error);
-            }
-        }
-
-        function selectMode(mode) {
-            currentMode = mode;
-
-            // Update UI
-            document.querySelectorAll('.radio-option').forEach(el => {
-                el.classList.remove('selected');
-            });
-            event.currentTarget.classList.add('selected');
-
-            // Toggle sections
-            document.getElementById('teamSelect').style.display = mode === 'team' ? 'block' : 'none';
-            document.getElementById('leagueSelect').style.display = mode === 'league' ? 'block' : 'none';
-        }
-
-        function updateTeamInfo() {
-            const teamSelect = document.getElementById('team');
-            const selectedTeam = teams.find(t => t.key === teamSelect.value);
-
-            if (selectedTeam) {
-                document.getElementById('teamInfo').style.display = 'block';
-                document.getElementById('teamDetails').textContent =
-                    `League: ${selectedTeam.league} | View Prefix: ${selectedTeam.view_prefix}`;
+            if (data.connected) {
+                indicator.classList.add('connected');
+                text.textContent = 'Connected to Snowflake';
             } else {
-                document.getElementById('teamInfo').style.display = 'none';
+                indicator.classList.add('disconnected');
+                text.textContent = 'Disconnected - Check database connection';
             }
+        } catch (error) {
+            console.error('Connection check failed:', error);
+            document.getElementById('connectionText').textContent = 'Connection check failed';
         }
+    }
 
-        function filterTeamsByLeague() {
-            const selectedLeague = document.getElementById('league').value;
-            const leagueTeamsSelect = document.getElementById('leagueTeams');
+    async function loadTeams() {
+        try {
+            const response = await fetch(`${API_BASE}/teams`);
+            const data = await response.json();
 
-            if (!selectedLeague) {
-                leagueTeamsSelect.innerHTML = '<option value="">Select a league first</option>';
-                return;
-            }
+            teams = data.teams;
 
-            leagueTeamsSelect.innerHTML = '';
-            const leagueTeams = teams.filter(team => team.league === selectedLeague);
+            const teamSelect = document.getElementById('team');
+            teamSelect.innerHTML = '<option value="">-- Select a team --</option>';
 
-            leagueTeams.forEach(team => {
+            teams.forEach(team => {
                 const option = document.createElement('option');
                 option.value = team.key;
                 option.textContent = team.name;
-                leagueTeamsSelect.appendChild(option);
+                option.dataset.league = team.league;
+                teamSelect.appendChild(option);
             });
+        } catch (error) {
+            console.error('Failed to load teams:', error);
+            showError('Failed to load teams. Please check the server.');
+        }
+    }
 
-            if (leagueTeams.length === 0) {
-                leagueTeamsSelect.innerHTML = '<option value="">No teams found in this league</option>';
+    async function loadLeagues() {
+        try {
+            const response = await fetch(`${API_BASE}/leagues`);
+            const data = await response.json();
+
+            leagues = data.leagues;
+
+            const leagueSelect = document.getElementById('league');
+            leagueSelect.innerHTML = '<option value="">-- Select a league --</option>';
+
+            leagues.forEach(league => {
+                const option = document.createElement('option');
+                option.value = league;
+                option.textContent = league;
+                leagueSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Failed to load leagues:', error);
+        }
+    }
+
+   function selectMode(mode, element) {
+    currentMode = mode;
+
+    // Update UI
+    document.querySelectorAll('.radio-option').forEach(el => {
+        el.classList.remove('selected');
+    });
+
+    // Use the passed element instead of event.currentTarget
+    if (element) {
+        element.classList.add('selected');
+    }
+
+    // Toggle sections
+    document.getElementById('teamSelect').style.display = mode === 'team' ? 'block' : 'none';
+    document.getElementById('leagueSelect').style.display = mode === 'league' ? 'block' : 'none';
+
+    function updateTeamInfo() {
+        const teamSelect = document.getElementById('team');
+        const selectedTeam = teams.find(t => t.key === teamSelect.value);
+
+        if (selectedTeam) {
+            document.getElementById('teamInfo').style.display = 'block';
+            document.getElementById('teamDetails').textContent =
+                `League: ${selectedTeam.league} | View Prefix: ${selectedTeam.view_prefix}`;
+        } else {
+            document.getElementById('teamInfo').style.display = 'none';
+        }
+    }
+
+    function filterTeamsByLeague() {
+        const selectedLeague = document.getElementById('league').value;
+        const leagueTeamsSelect = document.getElementById('leagueTeams');
+
+        if (!selectedLeague) {
+            leagueTeamsSelect.innerHTML = '<option value="">Select a league first</option>';
+            return;
+        }
+
+        leagueTeamsSelect.innerHTML = '';
+        const leagueTeams = teams.filter(team => team.league === selectedLeague);
+
+        leagueTeams.forEach(team => {
+            const option = document.createElement('option');
+            option.value = team.key;
+            option.textContent = team.name;
+            leagueTeamsSelect.appendChild(option);
+        });
+
+        if (leagueTeams.length === 0) {
+            leagueTeamsSelect.innerHTML = '<option value="">No teams found in this league</option>';
+        }
+    }
+
+    async function generateReport() {
+        // Validate selection
+        let selectedTeams = [];
+
+        if (currentMode === 'team') {
+            const teamKey = document.getElementById('team').value;
+            if (!teamKey) {
+                showError('Please select a team');
+                return;
+            }
+            selectedTeams = [teamKey];
+        } else {
+            const leagueTeamsSelect = document.getElementById('leagueTeams');
+            selectedTeams = Array.from(leagueTeamsSelect.selectedOptions).map(opt => opt.value);
+
+            if (selectedTeams.length === 0) {
+                showError('Please select at least one team');
+                return;
             }
         }
 
-        async function generateReport() {
-            // Validate selection
-            let selectedTeams = [];
+        // Clear previous messages
+        hideMessages();
 
-            if (currentMode === 'team') {
-                const teamKey = document.getElementById('team').value;
-                if (!teamKey) {
-                    showError('Please select a team');
-                    return;
-                }
-                selectedTeams = [teamKey];
-            } else {
-                const leagueTeamsSelect = document.getElementById('leagueTeams');
-                selectedTeams = Array.from(leagueTeamsSelect.selectedOptions).map(opt => opt.value);
+        // Process each team with default options
+        if (selectedTeams.length === 1) {
+            await generateSingleReport(selectedTeams[0], {});
+        } else {
+            await generateMultipleReports(selectedTeams, {});
+        }
+    }
 
-                if (selectedTeams.length === 0) {
-                    showError('Please select at least one team');
-                    return;
-                }
-            }
-
+    async function generateSingleReport(teamKey, options) {
+        try {
             // Clear previous messages
             hideMessages();
 
-            // Process each team with default options
-            if (selectedTeams.length === 1) {
-                await generateSingleReport(selectedTeams[0], {});
-            } else {
-                await generateMultipleReports(selectedTeams, {});
+            // Force UI update BEFORE making request
+            document.getElementById('mainForm').style.display = 'none';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('statusMessage').textContent = 'Starting generation...';
+            document.getElementById('progressBar').style.width = '5%';
+            document.getElementById('progressDetails').textContent = 'Initializing report generation';
+
+            // Small delay to ensure UI updates
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Start generation
+            const response = await fetch(`${API_BASE}/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_key: teamKey, ...options })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Generation failed');
             }
+
+            currentJob = data;
+            currentJobId = data.job_id;
+            document.getElementById('jobId').textContent = data.job_id;
+
+            // Update initial progress
+            updateProgress({
+                status: 'running',
+                progress: 10,
+                message: 'Initializing report generation...'
+            });
+
+            // Start monitoring progress
+            monitorJobProgress(data.job_id);
+
+        } catch (error) {
+            console.error('Generation failed:', error);
+            showError(`Failed to start generation: ${error.message}`);
+            resetForm();
+        }
+    }
+
+    async function generateMultipleReports(teamKeys, options) {
+        // For multiple teams, we'd need to modify the backend to support batch generation
+        // For now, just generate the first one
+        showError('Batch generation not yet implemented. Generating for first team only.');
+        await generateSingleReport(teamKeys[0], options);
+    }
+
+    function monitorJobProgress(jobId) {
+        console.log(`Starting job monitoring for ${jobId}, production: ${isProduction}`);
+
+        // In production, skip SSE and use polling
+        if (isProduction) {
+            console.log('Production environment - using polling');
+            pollJobStatus(jobId);
+            return;
         }
 
-        async function generateSingleReport(teamKey, options) {
-            try {
-                // Show progress section
-                document.getElementById('mainForm').style.display = 'none';
-                document.getElementById('progressSection').style.display = 'block';
+        // For local development, try SSE first
+        if (eventSource) {
+            eventSource.close();
+        }
 
-                // Start generation
-                const response = await fetch(`${API_BASE}/generate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ team_key: teamKey, ...options })
-                });
+        try {
+            const progressUrl = `${API_BASE}/jobs/${jobId}/progress`;
+            console.log('Attempting SSE connection:', progressUrl);
 
-                const data = await response.json();
+            eventSource = new EventSource(progressUrl);
+            let sseTimeout = null;
 
-                if (!response.ok) {
-                    throw new Error(data.error || 'Generation failed');
+            // Set a timeout to fall back to polling if no messages received
+            sseTimeout = setTimeout(() => {
+                console.log('SSE timeout - falling back to polling');
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
                 }
+                pollJobStatus(jobId);
+            }, 5000); // 5 second timeout
 
-                currentJob = data.job_id;
-                document.getElementById('jobId').textContent = data.job_id;
-
-                // Start monitoring progress
-                monitorJobProgress(data.job_id);
-
-            } catch (error) {
-                console.error('Generation failed:', error);
-                showError(`Failed to start generation: ${error.message}`);
-                resetForm();
-            }
-        }
-
-        async function generateMultipleReports(teamKeys, options) {
-            // For multiple teams, we'd need to modify the backend to support batch generation
-            // For now, just generate the first one
-            showError('Batch generation not yet implemented. Generating for first team only.');
-            await generateSingleReport(teamKeys[0], options);
-        }
-
-        function monitorJobProgress(jobId) {
-            // Close any existing connection
-            if (eventSource) {
-                eventSource.close();
-            }
-
-            // Connect to SSE endpoint
-            eventSource = new EventSource(`${API_BASE}/jobs/${jobId}/progress`);
+            eventSource.onopen = function() {
+                console.log('SSE connection opened');
+                // Clear timeout on successful connection
+                if (sseTimeout) clearTimeout(sseTimeout);
+            };
 
             eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
+                // Clear/reset timeout on each message
+                if (sseTimeout) clearTimeout(sseTimeout);
 
-                if (data.heartbeat) return;
-
-                updateProgress(data);
-
-                if (data.status === 'completed') {
-                    onJobComplete(data);
-                    eventSource.close();
-                } else if (data.status === 'failed') {
-                    onJobFailed(data);
-                    eventSource.close();
-                }
-            };
-
-            eventSource.onerror = function(error) {
-                console.error('SSE error:', error);
-                eventSource.close();
-
-                // Fallback to polling
-                pollJobStatus(jobId);
-            };
-        }
-
-        async function pollJobStatus(jobId) {
-            const pollInterval = setInterval(async () => {
                 try {
-                    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
-                    const data = await response.json();
+                    const data = JSON.parse(event.data);
+                    console.log('SSE message:', data);
+
+                    if (data.heartbeat) return;
 
                     updateProgress(data);
 
                     if (data.status === 'completed') {
                         onJobComplete(data);
-                        clearInterval(pollInterval);
+                        eventSource.close();
+                        eventSource = null;
                     } else if (data.status === 'failed') {
                         onJobFailed(data);
-                        clearInterval(pollInterval);
+                        eventSource.close();
+                        eventSource = null;
                     }
-                } catch (error) {
-                    console.error('Polling error:', error);
-                    clearInterval(pollInterval);
-                    showError('Lost connection to server');
+                } catch (e) {
+                    console.error('Error parsing SSE data:', e);
                 }
-            }, 2000);
+            };
+
+            eventSource.onerror = function(error) {
+                console.error('SSE error:', error);
+                if (sseTimeout) clearTimeout(sseTimeout);
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                // Immediately fall back to polling
+                console.log('SSE error - falling back to polling');
+                pollJobStatus(jobId);
+            };
+
+        } catch (error) {
+            console.error('Failed to create EventSource:', error);
+            pollJobStatus(jobId);
         }
+    }
 
-        function updateProgress(job) {
-            document.getElementById('statusMessage').textContent = job.message || 'Processing...';
-            document.getElementById('progressBar').style.width = `${job.progress}%`;
+    async function pollJobStatus(jobId) {
+        console.log(`Starting polling for job ${jobId}`);
+        let retryCount = 0;
+        const maxRetries = 120; // 2 minutes max
+        let consecutiveErrors = 0;
 
-            if (job.team_name) {
-                document.getElementById('progressDetails').textContent = `Generating report for ${job.team_name}`;
-            }
-        }
-
-        function onJobComplete(job) {
-            showSuccess(`PowerPoint generated successfully!`);
-
-            // Add download button
-            const successDiv = document.getElementById('successMessage');
-            successDiv.innerHTML += `
-                <div style="margin-top: 0.75rem;">
-                    <a href="${API_BASE}/jobs/${job.id}/download"
-                       class="btn"
-                       style="display: inline-block; padding: 0.6rem 1.2rem; text-decoration: none; font-size: 0.9rem;">
-                        Download PowerPoint
-                    </a>
-                </div>
-            `;
-
-            setTimeout(resetForm, 3000);
-        }
-
-        function onJobFailed(job) {
-            showError(`Generation failed: ${job.error || 'Unknown error'}`);
-            resetForm();
-        }
-
-        function resetForm() {
-            document.getElementById('mainForm').style.display = 'block';
-            document.getElementById('progressSection').style.display = 'none';
-            document.getElementById('progressBar').style.width = '0%';
-            currentJob = null;
-
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
-            }
-        }
-
-        async function testConnection() {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.innerHTML = 'Testing...<span class="spinner"></span>';
-
+        const pollInterval = setInterval(async () => {
             try {
-                await checkConnection();
-                showSuccess('Connection test completed');
+                const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+
+                if (!response.ok) {
+                    consecutiveErrors++;
+                    console.warn(`Poll failed (${consecutiveErrors}): ${response.status}`);
+
+                    // Only error out after multiple consecutive failures
+                    if (consecutiveErrors > 3) {
+                        clearInterval(pollInterval);
+                        showError('Unable to check job status. Please refresh the page.');
+                        resetForm();
+                    }
+                    return;
+                }
+
+                // Reset error counter on success
+                consecutiveErrors = 0;
+
+                const data = await response.json();
+                console.log(`Poll ${retryCount}: ${data.status} - ${data.progress}%`);
+
+                updateProgress(data);
+
+                if (data.status === 'completed') {
+                    console.log('Job completed via polling!');
+                    clearInterval(pollInterval);
+                    onJobComplete(data);
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    onJobFailed(data);
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                    clearInterval(pollInterval);
+                    showError('Generation timeout. Please try again.');
+                    resetForm();
+                }
+
             } catch (error) {
-                showError('Connection test failed');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = 'Test Database Connection';
+                console.error('Polling error:', error);
+                consecutiveErrors++;
+
+                if (consecutiveErrors > 5) {
+                    clearInterval(pollInterval);
+                    showError('Lost connection to server. Please check your connection.');
+                    resetForm();
+                }
             }
+        }, 1500); // Poll every 1.5 seconds
+    }
+
+    function updateProgress(job) {
+        const status = job.status || 'processing';
+        const progress = job.progress || 0;
+        const message = job.message || 'Processing...';
+
+        document.getElementById('statusMessage').textContent = message;
+        document.getElementById('progressBar').style.width = `${progress}%`;
+
+        if (job.team_name) {
+            document.getElementById('progressDetails').textContent =
+                `Generating report for ${job.team_name}`;
+        } else {
+            document.getElementById('progressDetails').textContent =
+                `Status: ${status} | Progress: ${progress}%`;
         }
+    }
 
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            setTimeout(() => errorDiv.style.display = 'none', 5000);
-        }
+    function onJobComplete(job) {
+        const jobId = currentJobId || job.job_id || job.id;
 
-        function showSuccess(message) {
-            const successDiv = document.getElementById('successMessage');
-            successDiv.innerHTML = message;
-            successDiv.style.display = 'block';
-        }
+        console.log('Job completed:', job);
+        console.log('Using job ID for download:', jobId);
 
-        function hideMessages() {
-            document.getElementById('errorMessage').style.display = 'none';
-            document.getElementById('successMessage').style.display = 'none';
-        }
+        // Update UI to show completion
+        updateProgress({
+            status: 'completed',
+            progress: 100,
+            message: 'PowerPoint generated successfully!'
+        });
 
-        // Simplified download function for behaviors slide
-        async function downloadBehaviorsSlide() {
-            const teamKey = document.getElementById('team').value;
+        showSuccess(`PowerPoint generated successfully!`);
 
-            if (!teamKey) {
-                showError('Please select a team first');
+        // Add download button
+        const successDiv = document.getElementById('successMessage');
+        successDiv.innerHTML += `
+            <div style="margin-top: 0.75rem;">
+                <button onclick="downloadReport('${jobId}')"
+                        class="btn"
+                        style="display: inline-block; padding: 0.6rem 1.2rem; font-size: 0.9rem;">
+                    Download PowerPoint
+                </button>
+            </div>
+        `;
+    }
+
+    async function downloadReport(jobId) {
+        try {
+            console.log('Attempting to download report for job:', jobId);
+
+            // First check if job still exists
+            const statusResponse = await fetch(`${API_BASE}/jobs/${jobId}`);
+            if (!statusResponse.ok) {
+                showError('Job not found. The download may have expired.');
                 return;
             }
 
-            const btn = document.getElementById('previewBtn');
-            const originalText = btn.innerHTML;
+            // Trigger download
+            window.location.href = `${API_BASE}/jobs/${jobId}/download`;
 
-            // Show loading state
-            btn.disabled = true;
-            btn.innerHTML = 'Generating...<span class="spinner"></span>';
+            // Show success and reset after a delay
+            showSuccess('Download started! The form will reset in 5 seconds...');
+            setTimeout(resetForm, 5000);
 
-            try {
-                // Get team name for display
-                const teamName = teams.find(t => t.key === teamKey)?.name || teamKey;
-
-                // Create download link
-                const downloadUrl = `${API_BASE}/download-behaviors-slide/${teamKey}`;
-
-                // Create temporary link and trigger download
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = `${teamName.replace(/ /g, '_')}_Behaviors_Slide.pptx`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                // Show success message
-                showSuccess(`Downloading ${teamName} behaviors slide...`);
-
-            } catch (error) {
-                console.error('Download failed:', error);
-                showError('Failed to generate behaviors slide');
-            } finally {
-                // Reset button
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-            }
+        } catch (error) {
+            console.error('Download error:', error);
+            showError('Failed to download PowerPoint. Please try again.');
         }
-    </script>
+    }
+
+    function onJobFailed(job) {
+        const errorMsg = job.error || 'Unknown error occurred';
+        console.error('Job failed:', errorMsg);
+
+        updateProgress({
+            status: 'failed',
+            progress: 0,
+            message: 'Generation failed'
+        });
+
+        showError(`Generation failed: ${errorMsg}`);
+
+        // Reset form after a delay
+        setTimeout(resetForm, 3000);
+    }
+
+    function resetForm() {
+        document.getElementById('mainForm').style.display = 'block';
+        document.getElementById('progressSection').style.display = 'none';
+        document.getElementById('progressBar').style.width = '0%';
+        currentJob = null;
+        currentJobId = null;
+
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+
+        // Clear any messages after reset
+        setTimeout(hideMessages, 2000);
+    }
+
+    async function testConnection() {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.innerHTML = 'Testing...<span class="spinner"></span>';
+
+        try {
+            await checkConnection();
+            showSuccess('Connection test completed');
+        } catch (error) {
+            showError('Connection test failed');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = 'Test Database Connection';
+        }
+    }
+
+    function showError(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => errorDiv.style.display = 'none', 5000);
+    }
+
+    function showSuccess(message) {
+        const successDiv = document.getElementById('successMessage');
+        successDiv.innerHTML = message;
+        successDiv.style.display = 'block';
+    }
+
+    function hideMessages() {
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+    }
+
+    // Simplified download function for behaviors slide
+    async function downloadBehaviorsSlide() {
+        const teamKey = document.getElementById('team').value;
+
+        if (!teamKey) {
+            showError('Please select a team first');
+            return;
+        }
+
+        const btn = document.getElementById('previewBtn');
+        const originalText = btn.innerHTML;
+
+        // Show loading state
+        btn.disabled = true;
+        btn.innerHTML = 'Generating...<span class="spinner"></span>';
+
+        try {
+            // Get team name for display
+            const teamName = teams.find(t => t.key === teamKey)?.name || teamKey;
+
+            // Create download link
+            const downloadUrl = `${API_BASE}/download-behaviors-slide/${teamKey}`;
+
+            // Create temporary link and trigger download
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `${teamName.replace(/ /g, '_')}_Behaviors_Slide.pptx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Show success message
+            showSuccess(`Downloading ${teamName} behaviors slide...`);
+
+        } catch (error) {
+            console.error('Download failed:', error);
+            showError('Failed to generate behaviors slide');
+        } finally {
+            // Reset button
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+
+    // Add console logging for debugging in production
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+        console.error('Frontend error:', {
+            message: msg,
+            source: url,
+            lineno: lineNo,
+            colno: columnNo,
+            error: error
+        });
+        return false;
+    };
+</script>
 </body>
 </html>

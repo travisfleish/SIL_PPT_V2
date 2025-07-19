@@ -395,11 +395,11 @@
                     <div class="form-group">
                         <label>Select By:</label>
                         <div class="radio-group">
-                            <div class="radio-option selected" onclick="selectMode('team')">
+                            <div class="radio-option selected" data-mode="team">
                                 <input type="radio" name="selectMode" value="team" checked>
                                 <label>Team</label>
                             </div>
-                            <div class="radio-option" onclick="selectMode('league')">
+                            <div class="radio-option" data-mode="league">
                                 <input type="radio" name="selectMode" value="league">
                                 <label>League</label>
                             </div>
@@ -408,7 +408,7 @@
 
                     <div class="form-group" id="teamSelect">
                         <label for="team">Select Team:</label>
-                        <select id="team" onchange="updateTeamInfo()">
+                        <select id="team">
                             <option value="">Loading teams...</option>
                         </select>
                         <div class="team-info" id="teamInfo">
@@ -419,7 +419,7 @@
 
                     <div class="form-group" id="leagueSelect" style="display: none;">
                         <label for="league">Select League:</label>
-                        <select id="league" onchange="filterTeamsByLeague()">
+                        <select id="league">
                             <option value="">Loading leagues...</option>
                         </select>
                         <div class="form-group" style="margin-top: 0.75rem;">
@@ -432,15 +432,15 @@
                     </div>
                 </div>
 
-                <button class="btn" onclick="generateReport()" id="generateBtn">
+                <button class="btn" id="generateBtn">
                     Generate PowerPoint Report
                 </button>
 
-                <button class="btn btn-preview" onclick="downloadBehaviorsSlide()" id="previewBtn">
+                <button class="btn btn-preview" id="previewBtn">
                     Download Behaviors Slide
                 </button>
 
-                <button class="btn btn-secondary" onclick="testConnection()">
+                <button class="btn btn-secondary" id="testConnectionBtn">
                     Test Database Connection
                 </button>
             </div>
@@ -464,29 +464,71 @@
     </div>
 
     <script>
-    // Configuration
-    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:5001/api'
-        : '/api';
+    // Environment detection with more robust checking
+    const getEnvironment = () => {
+        const hostname = window.location.hostname;
+        const isLocal = hostname === 'localhost' ||
+                       hostname === '127.0.0.1' ||
+                       hostname.startsWith('192.168.') ||
+                       hostname.startsWith('10.');
+
+        return {
+            isProduction: !isLocal,
+            isLocal: isLocal,
+            apiBase: isLocal ? 'http://localhost:5001/api' : '/api',
+            useSSE: isLocal, // Only attempt SSE in local development
+            pollInterval: isLocal ? 1500 : 2000 // Slower polling in production
+        };
+    };
+
+    const ENV = getEnvironment();
+    const API_BASE = ENV.apiBase;
 
     // State
     let teams = [];
     let leagues = [];
     let currentMode = 'team';
     let currentJob = null;
-    let currentJobId = null;  // Store job ID separately
+    let currentJobId = null;
     let eventSource = null;
 
-    // Add environment detection
-    const isProduction = window.location.hostname !== 'localhost' &&
-                        window.location.hostname !== '127.0.0.1';
+    // Initialize app when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeEventHandlers();
+        initializeApp();
+    });
 
-    // Initialize
-    window.onload = async function() {
-        await checkConnection();
-        await loadTeams();
-        await loadLeagues();
-    };
+    function initializeEventHandlers() {
+        // Radio options with proper event handling
+        document.querySelectorAll('.radio-option').forEach(element => {
+            element.addEventListener('click', function() {
+                const mode = this.getAttribute('data-mode');
+                selectMode(mode, this);
+            });
+        });
+
+        // Team select
+        document.getElementById('team').addEventListener('change', updateTeamInfo);
+
+        // League select
+        document.getElementById('league').addEventListener('change', filterTeamsByLeague);
+
+        // Buttons
+        document.getElementById('generateBtn').addEventListener('click', generateReport);
+        document.getElementById('previewBtn').addEventListener('click', downloadBehaviorsSlide);
+        document.getElementById('testConnectionBtn').addEventListener('click', testConnection);
+    }
+
+    async function initializeApp() {
+        try {
+            await checkConnection();
+            await loadTeams();
+            await loadLeagues();
+        } catch (error) {
+            console.error('App initialization failed:', error);
+            showError('Failed to initialize application. Please refresh the page.');
+        }
+    }
 
     async function checkConnection() {
         try {
@@ -553,14 +595,18 @@
         }
     }
 
-    function selectMode(mode) {
+    function selectMode(mode, element) {
         currentMode = mode;
 
         // Update UI
         document.querySelectorAll('.radio-option').forEach(el => {
             el.classList.remove('selected');
         });
-        event.currentTarget.classList.add('selected');
+
+        // Use the passed element
+        if (element) {
+            element.classList.add('selected');
+        }
 
         // Toggle sections
         document.getElementById('teamSelect').style.display = mode === 'team' ? 'block' : 'none';
@@ -693,145 +739,186 @@
     }
 
     function monitorJobProgress(jobId) {
-        console.log(`Starting job monitoring for ${jobId}, production: ${isProduction}`);
+        console.log(`Starting job monitoring for ${jobId}, production: ${ENV.isProduction}`);
 
-        // In production, skip SSE and use polling
-        if (isProduction) {
+        // Store job ID in closure to avoid any reference issues
+        const stableJobId = jobId;
+
+        // Always use polling in production - SSE often doesn't work through proxies
+        if (ENV.isProduction) {
             console.log('Production environment - using polling');
-            pollJobStatus(jobId);
+            pollJobStatus(stableJobId);
             return;
         }
 
-        // For local development, try SSE first
+        // For local development, implement SSE with better error handling
         if (eventSource) {
             eventSource.close();
+            eventSource = null;
         }
 
+        // Wrap in try-catch to handle any initialization errors
         try {
-            const progressUrl = `${API_BASE}/jobs/${jobId}/progress`;
-            console.log('Attempting SSE connection:', progressUrl);
-
-            eventSource = new EventSource(progressUrl);
-            let sseTimeout = null;
-
-            // Set a timeout to fall back to polling if no messages received
-            sseTimeout = setTimeout(() => {
-                console.log('SSE timeout - falling back to polling');
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-                pollJobStatus(jobId);
-            }, 5000); // 5 second timeout
-
-            eventSource.onopen = function() {
-                console.log('SSE connection opened');
-                // Clear timeout on successful connection
-                if (sseTimeout) clearTimeout(sseTimeout);
-            };
-
-            eventSource.onmessage = function(event) {
-                // Clear/reset timeout on each message
-                if (sseTimeout) clearTimeout(sseTimeout);
-
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('SSE message:', data);
-
-                    if (data.heartbeat) return;
-
-                    updateProgress(data);
-
-                    if (data.status === 'completed') {
-                        onJobComplete(data);
-                        eventSource.close();
-                        eventSource = null;
-                    } else if (data.status === 'failed') {
-                        onJobFailed(data);
-                        eventSource.close();
-                        eventSource = null;
-                    }
-                } catch (e) {
-                    console.error('Error parsing SSE data:', e);
-                }
-            };
-
-            eventSource.onerror = function(error) {
-                console.error('SSE error:', error);
-                if (sseTimeout) clearTimeout(sseTimeout);
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-                // Immediately fall back to polling
-                console.log('SSE error - falling back to polling');
-                pollJobStatus(jobId);
-            };
-
+            implementSSEWithFallback(stableJobId);
         } catch (error) {
-            console.error('Failed to create EventSource:', error);
-            pollJobStatus(jobId);
+            console.error('SSE setup failed, using polling:', error);
+            pollJobStatus(stableJobId);
+        }
+    }
+
+    function implementSSEWithFallback(jobId) {
+        const progressUrl = `${API_BASE}/jobs/${jobId}/progress`;
+        let sseAttempts = 0;
+        const maxSSEAttempts = 2;
+
+        function attemptSSE() {
+            try {
+                // Create new EventSource with explicit error handling
+                const source = new EventSource(progressUrl);
+                let messageReceived = false;
+
+                // Set up timeout for fallback
+                const fallbackTimeout = setTimeout(() => {
+                    if (!messageReceived) {
+                        console.log('No SSE messages received, falling back to polling');
+                        source.close();
+                        pollJobStatus(jobId);
+                    }
+                }, 3000);
+
+                source.onopen = function(e) {
+                    console.log('SSE connection opened');
+                    eventSource = source;  // Store reference only after successful open
+                };
+
+                source.onmessage = function(e) {
+                    messageReceived = true;
+                    clearTimeout(fallbackTimeout);
+
+                    try {
+                        const data = JSON.parse(e.data);
+                        handleProgressUpdate(data, jobId);
+                    } catch (parseError) {
+                        console.error('Error parsing SSE data:', parseError);
+                    }
+                };
+
+                source.onerror = function(e) {
+                    // Don't try to access e.currentTarget or other event properties
+                    console.log('SSE connection error, attempt', sseAttempts + 1);
+                    clearTimeout(fallbackTimeout);
+                    source.close();
+
+                    sseAttempts++;
+                    if (sseAttempts < maxSSEAttempts && !messageReceived) {
+                        setTimeout(attemptSSE, 1000);
+                    } else {
+                        console.log('SSE failed, switching to polling');
+                        pollJobStatus(jobId);
+                    }
+                };
+
+            } catch (error) {
+                console.error('EventSource creation failed:', error);
+                pollJobStatus(jobId);
+            }
+        }
+
+        attemptSSE();
+    }
+
+    function handleProgressUpdate(data, jobId) {
+        if (data.heartbeat) return;
+
+        updateProgress(data);
+
+        if (data.status === 'completed') {
+            onJobComplete(data);
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        } else if (data.status === 'failed') {
+            onJobFailed(data);
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
         }
     }
 
     async function pollJobStatus(jobId) {
-        console.log(`Starting polling for job ${jobId}`);
-        let retryCount = 0;
-        const maxRetries = 120; // 2 minutes max
-        let consecutiveErrors = 0;
+        console.log(`Starting robust polling for job ${jobId}`);
 
-        const pollInterval = setInterval(async () => {
+        const pollState = {
+            retryCount: 0,
+            maxRetries: 120,
+            consecutiveErrors: 0,
+            interval: null
+        };
+
+        async function doPoll() {
             try {
-                const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
-                    consecutiveErrors++;
-                    console.warn(`Poll failed (${consecutiveErrors}): ${response.status}`);
+                    throw new Error(`HTTP ${response.status}`);
+                }
 
-                    // Only error out after multiple consecutive failures
-                    if (consecutiveErrors > 3) {
-                        clearInterval(pollInterval);
-                        showError('Unable to check job status. Please refresh the page.');
-                        resetForm();
+                // Reset error counter on successful response
+                pollState.consecutiveErrors = 0;
+
+                const data = await response.json();
+                console.log(`Poll successful: ${data.status} - ${data.progress}%`);
+
+                updateProgress(data);
+
+                if (data.status === 'completed' || data.status === 'failed') {
+                    clearInterval(pollState.interval);
+
+                    if (data.status === 'completed') {
+                        onJobComplete(data);
+                    } else {
+                        onJobFailed(data);
                     }
                     return;
                 }
 
-                // Reset error counter on success
-                consecutiveErrors = 0;
-
-                const data = await response.json();
-                console.log(`Poll ${retryCount}: ${data.status} - ${data.progress}%`);
-
-                updateProgress(data);
-
-                if (data.status === 'completed') {
-                    console.log('Job completed via polling!');
-                    clearInterval(pollInterval);
-                    onJobComplete(data);
-                } else if (data.status === 'failed') {
-                    clearInterval(pollInterval);
-                    onJobFailed(data);
-                }
-
-                retryCount++;
-                if (retryCount > maxRetries) {
-                    clearInterval(pollInterval);
+                pollState.retryCount++;
+                if (pollState.retryCount > pollState.maxRetries) {
+                    clearInterval(pollState.interval);
                     showError('Generation timeout. Please try again.');
                     resetForm();
                 }
 
             } catch (error) {
                 console.error('Polling error:', error);
-                consecutiveErrors++;
+                pollState.consecutiveErrors++;
 
-                if (consecutiveErrors > 5) {
-                    clearInterval(pollInterval);
-                    showError('Lost connection to server. Please check your connection.');
+                if (pollState.consecutiveErrors > 5) {
+                    clearInterval(pollState.interval);
+                    showError('Lost connection to server. Please refresh and try again.');
                     resetForm();
                 }
             }
-        }, 1500); // Poll every 1.5 seconds
+        }
+
+        // Start polling
+        pollState.interval = setInterval(doPoll, ENV.pollInterval);
+
+        // Do first poll immediately
+        doPoll();
     }
 
     function updateProgress(job) {
@@ -868,15 +955,15 @@
 
         // Add download button
         const successDiv = document.getElementById('successMessage');
-        successDiv.innerHTML += `
-            <div style="margin-top: 0.75rem;">
-                <button onclick="downloadReport('${jobId}')"
-                        class="btn"
-                        style="display: inline-block; padding: 0.6rem 1.2rem; font-size: 0.9rem;">
-                    Download PowerPoint
-                </button>
-            </div>
-        `;
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn';
+        downloadBtn.style.cssText = 'display: inline-block; padding: 0.6rem 1.2rem; font-size: 0.9rem; margin-top: 0.75rem;';
+        downloadBtn.textContent = 'Download PowerPoint';
+        downloadBtn.onclick = () => downloadReport(jobId);
+
+        const btnContainer = document.createElement('div');
+        btnContainer.appendChild(downloadBtn);
+        successDiv.appendChild(btnContainer);
     }
 
     async function downloadReport(jobId) {
@@ -935,7 +1022,7 @@
         setTimeout(hideMessages, 2000);
     }
 
-    async function testConnection() {
+    async function testConnection(event) {
         const btn = event.target;
         btn.disabled = true;
         btn.innerHTML = 'Testing...<span class="spinner"></span>';
@@ -969,7 +1056,6 @@
         document.getElementById('successMessage').style.display = 'none';
     }
 
-    // Simplified download function for behaviors slide
     async function downloadBehaviorsSlide() {
         const teamKey = document.getElementById('team').value;
 
@@ -1013,17 +1099,22 @@
         }
     }
 
-    // Add console logging for debugging in production
-    window.onerror = function(msg, url, lineNo, columnNo, error) {
+    // Enhanced error logging for production debugging
+    window.addEventListener('error', function(event) {
         console.error('Frontend error:', {
-            message: msg,
-            source: url,
-            lineno: lineNo,
-            colno: columnNo,
-            error: error
+            message: event.message,
+            source: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            error: event.error,
+            stack: event.error?.stack
         });
-        return false;
-    };
-</script>
+    });
+
+    // Log unhandled promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+        console.error('Unhandled promise rejection:', event.reason);
+    });
+    </script>
 </body>
 </html>
