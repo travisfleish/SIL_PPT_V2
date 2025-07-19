@@ -453,7 +453,10 @@ class PowerPointBuilder:
             demographic_data = processor.process_all_demographics()
 
             # Generate charts
-            charter = DemographicCharts(team_colors=self.team_config.get('colors'))
+            charter = DemographicCharts(
+                team_colors=self.team_config.get('colors'),
+                team_config=self.team_config  # ADD THIS LINE!
+            )
             charts = charter.create_all_demographic_charts(
                 demographic_data,
                 output_dir=self.charts_dir

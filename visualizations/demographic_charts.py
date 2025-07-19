@@ -2,8 +2,7 @@
 """
 Fixed demographic visualization with proper text scaling and correct aspect ratios
 Matches PowerPoint placeholder dimensions exactly
-UPDATED: Handles ethnicity charts with fewer communities when Local Gen Pop has null values
-FIXED: Community-based color mapping ensures correct colors regardless of data ordering
+UPDATED: Uses team_config to display short team names in gender chart
 """
 
 import matplotlib.pyplot as plt
@@ -19,12 +18,18 @@ import os
 class DemographicCharts:
     """Generate demographic charts with guaranteed legible text and correct aspect ratios"""
 
-    def __init__(self, team_colors: Optional[Dict[str, str]] = None):
+    def __init__(self, team_colors: Optional[Dict[str, str]] = None,
+                 team_config: Optional[Dict[str, Any]] = None):
         self.colors = team_colors or {
             'primary': '#002244',
             'secondary': '#FFB612',
             'accent': '#00471B'  # CHANGED: Use green instead of gray for NBA fans
         }
+
+        # Store team configuration
+        self.team_config = team_config
+        self.team_name_short = team_config.get('team_name_short', '') if team_config else ''
+        self.audience_name = team_config.get('audience_name', '') if team_config else ''
 
         # CRITICAL: Community-based color mapping - fixed order
         self.community_color_map = {
@@ -102,59 +107,69 @@ class DemographicCharts:
             plt.rcParams['font.weight'] = 'light'
 
     def _get_community_color(self, community_name: str) -> str:
-        """
-        Map community names to appropriate colors based on content, not position
+        """Map community names to appropriate colors based on content, not position"""
+        community_name_lower = str(community_name).lower()
 
-        Args:
-            community_name: Name of the community (e.g., "Utah Jazz Fans", "Local Gen Pop", "NBA Fans")
-
-        Returns:
-            Hex color code for the community
-        """
-        community_name = str(community_name).lower()
-
-        # Team fans (specific team name) -> Primary color (blue)
-        if any(team in community_name for team in ['jazz fans', 'cowboys fans', 'lakers fans']):
-            if 'nba' not in community_name and 'nfl' not in community_name:  # Exclude league-wide fans
-                return self.community_color_map['primary']
-
-        # Local general population -> Secondary color (yellow)
-        if 'local gen pop' in community_name or 'gen pop' in community_name:
+        # FIRST: Check for Local Gen Pop (must be first!)
+        if 'local gen pop' in community_name_lower:
             return self.community_color_map['secondary']
 
-        # League fans (NBA, NFL, etc.) -> Accent color (green)
-        if any(league in community_name for league in ['nba fans', 'nfl fans', 'mlb fans', 'nhl fans']):
-            return self.community_color_map['accent']
+        # SECOND: Check if it's ONLY the team's fans (exact match)
+        if self.audience_name and community_name_lower == self.audience_name.lower():
+            return self.community_color_map['primary']
 
-        # Fallback - if we can't identify, use order-based assignment
-        print(f"Warning: Could not identify community type for '{community_name}', using fallback colors")
-        return self.community_color_map['primary']  # Default to primary
+        # THIRD: Everything else (league fans, etc.) gets accent color
+        return self.community_color_map['accent']
 
     def _get_gender_colors(self, communities: List[str]) -> Tuple[str, str]:
         """
-        Get colors for gender chart based on community types
-        Gender chart has stacked bars, not separate communities, so we use male/female colors
+        Get colors for gender chart - always black and white for universal compatibility
+
+        Gender charts show male/female split, not community comparisons. Using black/white
+        ensures no conflicts with any team colors across 100+ teams.
 
         Returns:
             Tuple of (male_color, female_color)
         """
-        # For gender charts, we use consistent colors regardless of communities
-        # Male = Primary (blue), Female = depends on which non-team community is present
-        male_color = self.community_color_map['primary']  # Always blue for male
-
-        # Determine female color based on what communities are present
-        has_local_gen_pop = any('local gen pop' in str(comm).lower() for comm in communities)
-        has_league_fans = any('nba fans' in str(comm).lower() or 'nfl fans' in str(comm).lower()
-                              for comm in communities)
-
-        if has_league_fans:
-            female_color = self.community_color_map['accent']  # Green for female
-        elif has_local_gen_pop:
-            female_color = self.community_color_map['secondary']  # Yellow for female
-        else:
-            female_color = self.community_color_map['secondary']  # Default to yellow
+        # Always use black and white for gender charts
+        male_color = '#FFFFFF'  # White (with black text)
+        female_color = '#000000'  # Black (with white text)
 
         return male_color, female_color
+
+    def _format_community_label(self, community: str) -> str:
+        """Format community label using team configuration"""
+
+        # If we have team config and this is the team's fans, use short name
+        if self.team_config and self.audience_name and self.team_name_short:
+            if self.audience_name in community or self.audience_name.lower() in community.lower():
+                return f"{self.team_name_short} Fans"
+
+        # Handle Local Gen Pop
+        if "Local Gen Pop" in community:
+            return "Local Gen Pop"
+
+        # Handle league fans
+        if "NBA Fans" in community:
+            return "NBA Fans"
+        elif "NFL Fans" in community:
+            return "NFL Fans"
+        elif "MLB Fans" in community:
+            return "MLB Fans"
+        elif "NHL Fans" in community:
+            return "NHL Fans"
+
+        # Fallback - try to extract team name
+        if "Fans" in community:
+            # Try to extract just the team nickname
+            words = community.split()
+            if "Fans" in words:
+                fans_idx = words.index("Fans")
+                if fans_idx > 0:
+                    # Take the word before "Fans"
+                    return f"{words[fans_idx - 1]} Fans"
+
+        return community
 
     def _format_income_label(self, label: str) -> str:
         """Format income labels to be extremely concise for small charts"""
@@ -445,17 +460,11 @@ class DemographicCharts:
         # Define edge properties for crisp rendering (without alpha)
         edge_props = dict(linewidth=0.5, edgecolor='#666666')  # Gray edge for subtlety
 
-        # Simplified community labels
+        # Format community labels using the new method
         community_labels = []
         for community in communities:
-            if "Jazz Fans" in community and "NBA" not in community:
-                community_labels.append("Jazz Fans")
-            elif "Local Gen Pop" in community:
-                community_labels.append("Local Gen Pop")
-            elif "NBA Fans" in community or "League" in community:
-                community_labels.append("NBA Fans")
-            else:
-                community_labels.append(community)  # Fallback
+            label = self._format_community_label(community)
+            community_labels.append(label)
 
         # Track male/female positions for top labels
         male_positions = []
@@ -484,15 +493,13 @@ class DemographicCharts:
             if male_pct > 5:
                 ax.text(male_pct / 2, y_positions[idx], f'{int(male_pct)}%',
                         ha='center', va='center', fontweight='bold',
-                        color='white', fontsize=self.label_size,
+                        color='black', fontsize=self.label_size,  # Always black text on white
                         fontfamily=self.font_family)
 
             if female_pct > 5:
-                # Use white text on green, black text on yellow
-                text_color = 'white' if female_color == self.community_color_map['accent'] else 'black'
                 ax.text(male_pct + female_pct / 2, y_positions[idx], f'{int(female_pct)}%',
                         ha='center', va='center', fontweight='bold',
-                        color=text_color, fontsize=self.label_size,
+                        color='white', fontsize=self.label_size,  # Always white text on black
                         fontfamily=self.font_family)
 
             # Add community label below each bar
