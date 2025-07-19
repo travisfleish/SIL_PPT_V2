@@ -6,7 +6,6 @@ Handles authentication and provides reusable connection/query functions
 
 import os
 import sys
-import base64
 import snowflake.connector
 import pandas as pd
 from pathlib import Path
@@ -32,7 +31,6 @@ def get_connection():
         user = os.getenv('SNOWFLAKE_USER')
         password = os.getenv('SNOWFLAKE_PASSWORD')
         private_key_path = os.getenv('SNOWFLAKE_PRIVATE_KEY_PATH')
-        private_key_base64 = os.getenv('SNOWFLAKE_PRIVATE_KEY_BASE64')
 
         if not account or not user:
             raise ValueError("Missing required Snowflake credentials in .env file")
@@ -47,72 +45,33 @@ def get_connection():
             'role': os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
         }
 
-        # Import cryptography modules (needed for both cases)
-        from cryptography.hazmat.backends import default_backend
-        from cryptography.hazmat.primitives import serialization
+        # Use private key if available, otherwise use password
+        if private_key_path and os.path.exists(private_key_path):
+            logger.info("Using key-pair authentication")
+            with open(private_key_path, "rb") as key_file:
+                private_key = key_file.read()
 
-        # Try different authentication methods in order
-        private_key_loaded = False
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives import serialization
 
-        # 1. Try base64 encoded private key first (for production/Render)
-        if private_key_base64:
-            try:
-                logger.info("Using key-pair authentication (base64)")
-                # Decode base64 to get PEM formatted key
-                private_key_pem = base64.b64decode(private_key_base64)
+            p_key = serialization.load_pem_private_key(
+                private_key,
+                password=None,
+                backend=default_backend()
+            )
 
-                # Load the private key
-                p_key = serialization.load_pem_private_key(
-                    private_key_pem,
-                    password=None,
-                    backend=default_backend()
-                )
+            pkb = p_key.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption()
+            )
 
-                # Convert to DER format for Snowflake
-                pkb = p_key.private_bytes(
-                    encoding=serialization.Encoding.DER,
-                    format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.NoEncryption()
-                )
-
-                conn_params['private_key'] = pkb
-                private_key_loaded = True
-
-            except Exception as e:
-                logger.warning(f"Failed to load base64 private key: {str(e)}")
-
-        # 2. Try private key from file path (for local development)
-        if not private_key_loaded and private_key_path and os.path.exists(private_key_path):
-            try:
-                logger.info("Using key-pair authentication (file)")
-                with open(private_key_path, "rb") as key_file:
-                    private_key = key_file.read()
-
-                p_key = serialization.load_pem_private_key(
-                    private_key,
-                    password=None,
-                    backend=default_backend()
-                )
-
-                pkb = p_key.private_bytes(
-                    encoding=serialization.Encoding.DER,
-                    format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.NoEncryption()
-                )
-
-                conn_params['private_key'] = pkb
-                private_key_loaded = True
-
-            except Exception as e:
-                logger.warning(f"Failed to load private key from file: {str(e)}")
-
-        # 3. Fall back to password authentication
-        if not private_key_loaded:
-            if password:
-                logger.info("Using password authentication")
-                conn_params['password'] = password
-            else:
-                raise ValueError("No authentication method available (password or private key)")
+            conn_params['private_key'] = pkb
+        elif password:
+            logger.info("Using password authentication")
+            conn_params['password'] = password
+        else:
+            raise ValueError("No authentication method available (password or private key)")
 
         # Create connection
         conn = snowflake.connector.connect(**conn_params)
