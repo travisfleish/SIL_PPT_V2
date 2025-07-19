@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sports Innovation Lab - PowerPoint Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Red Hat Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-image: url('../assets/logos/general/HeroImage.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            position: relative;
+        }
+
+        /* Add overlay to ensure readability */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3); /* Dark overlay for better contrast */
+            z-index: -1;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            width: 90%;
+            max-width: 800px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: #000000;
+            padding: 2rem;
+            text-align: center;
+            color: white;
+            position: relative;
+        }
+
+        .header-logo {
+            width: 150px;
+            height: auto;
+            margin-bottom: 1rem;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .content {
+            padding: 2rem;
+        }
+
+        .form-section {
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+        }
+
+        .radio-option:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .radio-option input[type="radio"] {
+            width: auto;
+            margin-right: 0.5rem;
+        }
+
+        .radio-option.selected {
+            border-color: #667eea;
+            background: #eef2ff;
+        }
+
+        .options-section {
+            background: #f7fafc;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+        }
+
+        .options-section h3 {
+            margin-bottom: 1rem;
+            color: #4a5568;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 0.75rem;
+        }
+
+        .number-input {
+            max-width: 100px;
+        }
+
+        .btn {
+            background: #0066FF;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:hover {
+            background: #0052CC;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 102, 255, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-preview {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            margin-top: 1rem;
+        }
+
+        .btn-secondary {
+            background: #718096;
+            margin-top: 1rem;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.8);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1200px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            background: #000000;
+            color: white;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .modal-body {
+            padding: 2rem;
+            text-align: center;
+            background: #f7fafc;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .modal-close:hover {
+            transform: scale(1.1);
+        }
+
+        .preview-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .preview-loading {
+            text-align: center;
+            padding: 3rem;
+        }
+
+        .preview-loading .spinner {
+            width: 50px;
+            height: 50px;
+            border-width: 5px;
+            margin: 0 auto 1rem;
+        }
+
+        .progress-section {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .progress-bar-container {
+            background: #e2e8f0;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1.5rem 0;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-message {
+            color: #4a5568;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-details {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .success-message {
+            background: #c6f6d5;
+            color: #276749;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            background: #cbd5e0;
+        }
+
+        .status-indicator.connected {
+            background: #48bb78;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.disconnected {
+            background: #f56565;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .team-info {
+            background: #eef2ff;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .team-info h4 {
+            color: #4a5568;
+            margin-bottom: 0.5rem;
+        }
+
+        .team-info p {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="../assets/logos/general/SIL_white.png" alt="Sports Innovation Lab" class="header-logo">
+            <h1>Insights Report Generator</h1>
+            <p>Sports Innovation Lab - Internal</p>
+        </div>
+
+        <div class="content">
+            <div class="connection-status">
+                <span class="status-indicator" id="connectionIndicator"></span>
+                <span id="connectionText">Checking connection...</span>
+            </div>
+
+            <div id="mainForm">
+                <div class="form-section">
+                    <div class="form-group">
+                        <label>Select By:</label>
+                        <div class="radio-group">
+                            <div class="radio-option selected" onclick="selectMode('team')">
+                                <input type="radio" name="selectMode" value="team" checked>
+                                <label>Team</label>
+                            </div>
+                            <div class="radio-option" onclick="selectMode('league')">
+                                <input type="radio" name="selectMode" value="league">
+                                <label>League</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="teamSelect">
+                        <label for="team">Select Team:</label>
+                        <select id="team" onchange="updateTeamInfo()">
+                            <option value="">Loading teams...</option>
+                        </select>
+                        <div class="team-info" id="teamInfo">
+                            <h4>Team Details</h4>
+                            <p id="teamDetails"></p>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="leagueSelect" style="display: none;">
+                        <label for="league">Select League:</label>
+                        <select id="league" onchange="filterTeamsByLeague()">
+                            <option value="">Loading leagues...</option>
+                        </select>
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <label for="leagueTeams">Teams in League:</label>
+                            <select id="leagueTeams" multiple size="6">
+                                <option value="">Select a league first</option>
+                            </select>
+                            <small style="color: #718096;">Hold Ctrl/Cmd to select multiple teams</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="options-section">
+                    <h3>Generation Options</h3>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="skipCustom" onchange="toggleCustomCount()">
+                        <label for="skipCustom">Skip custom category slides</label>
+                    </div>
+
+                    <div class="form-group" id="customCountGroup">
+                        <label for="customCount">Number of custom categories:</label>
+                        <input type="number" id="customCount" class="number-input" min="1" max="10" value="4">
+                    </div>
+                </div>
+
+                <button class="btn" onclick="generateReport()" id="generateBtn">
+                    Generate PowerPoint Report
+                </button>
+
+                <button class="btn btn-preview" onclick="generatePreview()" id="previewBtn">
+                    Generate Preview (Behaviors Slide)
+                </button>
+
+                <button class="btn btn-secondary" onclick="testConnection()">
+                    Test Database Connection
+                </button>
+            </div>
+
+            <div class="progress-section" id="progressSection">
+                <h3 class="status-message" id="statusMessage">Initializing...</h3>
+                <p class="progress-details" id="progressDetails">Starting generation process</p>
+
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+
+                <p style="color: #718096; margin-top: 1rem;">
+                    Job ID: <code id="jobId" style="background: #e2e8f0; padding: 0.25rem 0.5rem; border-radius: 4px;"></code>
+                </p>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="previewTitle">Behaviors Slide Preview</h2>
+                <span class="modal-close" onclick="closePreview()">&times;</span>
+            </div>
+            <div class="modal-body" id="previewBody">
+                <div class="preview-loading">
+                    <div class="spinner"></div>
+                    <p>Generating preview...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:5001/api';
+
+        // State
+        let teams = [];
+        let leagues = [];
+        let currentMode = 'team';
+        let currentJob = null;
+        let eventSource = null;
+
+        // Initialize
+        window.onload = async function() {
+            await checkConnection();
+            await loadTeams();
+            await loadLeagues();
+        };
+
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/test-connection`);
+                const data = await response.json();
+
+                const indicator = document.getElementById('connectionIndicator');
+                const text = document.getElementById('connectionText');
+
+                if (data.connected) {
+                    indicator.classList.add('connected');
+                    text.textContent = 'Connected to Snowflake';
+                } else {
+                    indicator.classList.add('disconnected');
+                    text.textContent = 'Disconnected - Check database connection';
+                }
+            } catch (error) {
+                console.error('Connection check failed:', error);
+                document.getElementById('connectionText').textContent = 'Connection check failed';
+            }
+        }
+
+        async function loadTeams() {
+            try {
+                const response = await fetch(`${API_BASE}/teams`);
+                const data = await response.json();
+
+                teams = data.teams;
+
+                const teamSelect = document.getElementById('team');
+                teamSelect.innerHTML = '<option value="">-- Select a team --</option>';
+
+                teams.forEach(team => {
+                    const option = document.createElement('option');
+                    option.value = team.key;
+                    option.textContent = team.name;
+                    option.dataset.league = team.league;
+                    teamSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load teams:', error);
+                showError('Failed to load teams. Please check the server.');
+            }
+        }
+
+        async function loadLeagues() {
+            try {
+                const response = await fetch(`${API_BASE}/leagues`);
+                const data = await response.json();
+
+                leagues = data.leagues;
+
+                const leagueSelect = document.getElementById('league');
+                leagueSelect.innerHTML = '<option value="">-- Select a league --</option>';
+
+                leagues.forEach(league => {
+                    const option = document.createElement('option');
+                    option.value = league;
+                    option.textContent = league;
+                    leagueSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load leagues:', error);
+            }
+        }
+
+        function selectMode(mode) {
+            currentMode = mode;
+
+            // Update UI
+            document.querySelectorAll('.radio-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+
+            // Toggle sections
+            document.getElementById('teamSelect').style.display = mode === 'team' ? 'block' : 'none';
+            document.getElementById('leagueSelect').style.display = mode === 'league' ? 'block' : 'none';
+        }
+
+        function updateTeamInfo() {
+            const teamSelect = document.getElementById('team');
+            const selectedTeam = teams.find(t => t.key === teamSelect.value);
+
+            if (selectedTeam) {
+                document.getElementById('teamInfo').style.display = 'block';
+                document.getElementById('teamDetails').textContent =
+                    `League: ${selectedTeam.league} | View Prefix: ${selectedTeam.view_prefix}`;
+            } else {
+                document.getElementById('teamInfo').style.display = 'none';
+            }
+        }
+
+        function filterTeamsByLeague() {
+            const selectedLeague = document.getElementById('league').value;
+            const leagueTeamsSelect = document.getElementById('leagueTeams');
+
+            leagueTeamsSelect.innerHTML = '';
+
+            if (selectedLeague) {
+                const leagueTeams = teams.filter(t => t.league === selectedLeague);
+
+                leagueTeams.forEach(team => {
+                    const option = document.createElement('option');
+                    option.value = team.key;
+                    option.textContent = team.name;
+                    option.selected = true; // Select all by default
+                    leagueTeamsSelect.appendChild(option);
+                });
+            } else {
+                leagueTeamsSelect.innerHTML = '<option value="">Select a league first</option>';
+            }
+        }
+
+        function toggleCustomCount() {
+            const skipCustom = document.getElementById('skipCustom').checked;
+            document.getElementById('customCountGroup').style.display = skipCustom ? 'none' : 'block';
+        }
+
+        async function generateReport() {
+            // Validate selection
+            let selectedTeams = [];
+
+            if (currentMode === 'team') {
+                const teamKey = document.getElementById('team').value;
+                if (!teamKey) {
+                    showError('Please select a team');
+                    return;
+                }
+                selectedTeams = [teamKey];
+            } else {
+                const leagueTeamsSelect = document.getElementById('leagueTeams');
+                selectedTeams = Array.from(leagueTeamsSelect.selectedOptions).map(opt => opt.value);
+
+                if (selectedTeams.length === 0) {
+                    showError('Please select at least one team');
+                    return;
+                }
+            }
+
+            // Get options
+            const skipCustom = document.getElementById('skipCustom').checked;
+            const customCount = skipCustom ? null : parseInt(document.getElementById('customCount').value);
+
+            // Clear previous messages
+            hideMessages();
+
+            // Process each team
+            if (selectedTeams.length === 1) {
+                await generateSingleReport(selectedTeams[0], { skip_custom: skipCustom, custom_count: customCount });
+            } else {
+                await generateMultipleReports(selectedTeams, { skip_custom: skipCustom, custom_count: customCount });
+            }
+        }
+
+        async function generateSingleReport(teamKey, options) {
+            try {
+                // Show progress section
+                document.getElementById('mainForm').style.display = 'none';
+                document.getElementById('progressSection').style.display = 'block';
+
+                // Start generation
+                const response = await fetch(`${API_BASE}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team_key: teamKey, ...options })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Generation failed');
+                }
+
+                currentJob = data.job_id;
+                document.getElementById('jobId').textContent = data.job_id;
+
+                // Start monitoring progress
+                monitorJobProgress(data.job_id);
+
+            } catch (error) {
+                console.error('Generation failed:', error);
+                showError(`Failed to start generation: ${error.message}`);
+                resetForm();
+            }
+        }
+
+        async function generateMultipleReports(teamKeys, options) {
+            // For multiple teams, we'd need to modify the backend to support batch generation
+            // For now, just generate the first one
+            showError('Batch generation not yet implemented. Generating for first team only.');
+            await generateSingleReport(teamKeys[0], options);
+        }
+
+        function monitorJobProgress(jobId) {
+            // Close any existing connection
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            // Connect to SSE endpoint
+            eventSource = new EventSource(`${API_BASE}/jobs/${jobId}/progress`);
+
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+
+                if (data.heartbeat) return;
+
+                updateProgress(data);
+
+                if (data.status === 'completed') {
+                    onJobComplete(data);
+                    eventSource.close();
+                } else if (data.status === 'failed') {
+                    onJobFailed(data);
+                    eventSource.close();
+                }
+            };
+
+            eventSource.onerror = function(error) {
+                console.error('SSE error:', error);
+                eventSource.close();
+
+                // Fallback to polling
+                pollJobStatus(jobId);
+            };
+        }
+
+        async function pollJobStatus(jobId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+                    const data = await response.json();
+
+                    updateProgress(data);
+
+                    if (data.status === 'completed') {
+                        onJobComplete(data);
+                        clearInterval(pollInterval);
+                    } else if (data.status === 'failed') {
+                        onJobFailed(data);
+                        clearInterval(pollInterval);
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    clearInterval(pollInterval);
+                    showError('Lost connection to server');
+                }
+            }, 2000);
+        }
+
+        function updateProgress(job) {
+            document.getElementById('statusMessage').textContent = job.message || 'Processing...';
+            document.getElementById('progressBar').style.width = `${job.progress}%`;
+
+            if (job.team_name) {
+                document.getElementById('progressDetails').textContent = `Generating report for ${job.team_name}`;
+            }
+        }
+
+        function onJobComplete(job) {
+            showSuccess(`PowerPoint generated successfully!`);
+
+            // Add download button
+            const successDiv = document.getElementById('successMessage');
+            successDiv.innerHTML += `
+                <div style="margin-top: 1rem;">
+                    <a href="${API_BASE}/jobs/${job.id}/download"
+                       class="btn"
+                       style="display: inline-block; padding: 0.75rem 1.5rem; text-decoration: none;">
+                        Download PowerPoint
+                    </a>
+                </div>
+            `;
+
+            setTimeout(resetForm, 3000);
+        }
+
+        function onJobFailed(job) {
+            showError(`Generation failed: ${job.error || 'Unknown error'}`);
+            resetForm();
+        }
+
+        function resetForm() {
+            document.getElementById('mainForm').style.display = 'block';
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+            currentJob = null;
+
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+
+        async function testConnection() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = 'Testing...<span class="spinner"></span>';
+
+            try {
+                await checkConnection();
+                showSuccess('Connection test completed');
+            } catch (error) {
+                showError('Connection test failed');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Test Database Connection';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.innerHTML = message;
+            successDiv.style.display = 'block';
+        }
+
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+
+        // Preview functionality
+        async function generatePreview() {
+            const teamKey = document.getElementById('team').value;
+
+            if (!teamKey) {
+                showError('Please select a team first');
+                return;
+            }
+
+            // Show modal with loading state
+            const modal = document.getElementById('previewModal');
+            const previewBody = document.getElementById('previewBody');
+            const previewTitle = document.getElementById('previewTitle');
+
+            modal.style.display = 'block';
+            previewBody.innerHTML = `
+                <div class="preview-loading">
+                    <div class="spinner"></div>
+                    <p>Generating preview for ${teams.find(t => t.key === teamKey)?.name || teamKey}...</p>
+                </div>
+            `;
+
+            try {
+                // Call preview API
+                const response = await fetch(`${API_BASE}/preview-image/${teamKey}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Preview generation failed');
+                }
+
+                // Update modal with preview
+                previewTitle.textContent = `${data.team_name} - Behaviors Slide Preview`;
+                previewBody.innerHTML = `
+                    <div>
+                        <img src="${data.preview_image}" alt="Behaviors Slide Preview" class="preview-image">
+                        <div style="margin-top: 1rem;">
+                            <button class="btn" onclick="closePreviewAndGenerate()" style="display: inline-block; width: auto; padding: 0.75rem 2rem;">
+                                Generate Full Report
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Preview failed:', error);
+                previewBody.innerHTML = `
+                    <div style="color: #c53030;">
+                        <p>Failed to generate preview: ${error.message}</p>
+                        <button class="btn btn-secondary" onclick="closePreview()" style="margin-top: 1rem; width: auto; padding: 0.5rem 1rem;">
+                            Close
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('previewModal').style.display = 'none';
+        }
+
+        function closePreviewAndGenerate() {
+            closePreview();
+            generateReport();
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('previewModal');
+            if (event.target === modal) {
+                closePreview();
+            }
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closePreview();
+            }
+        });
+    </script>
+</body>
+</html>
