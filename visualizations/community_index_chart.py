@@ -14,23 +14,7 @@ from typing import Dict, Optional, List, Tuple
 import matplotlib.font_manager as fm
 import os
 
-
-# Add Red Hat Display fonts to matplotlib when this module is imported
-def _setup_fonts():
-    """Add Red Hat Display fonts to matplotlib"""
-    font_dir = os.path.expanduser('~/Library/Fonts')
-    if os.path.exists(font_dir):
-        for font_file in os.listdir(font_dir):
-            if 'RedHatDisplay' in font_file and font_file.endswith('.ttf'):
-                try:
-                    font_path = os.path.join(font_dir, font_file)
-                    fm.fontManager.addfont(font_path)
-                except:
-                    pass
-
-
-# Run font setup on import
-_setup_fonts()
+from utils.font_manager import font_manager  # Added font manager import
 
 
 class CommunityIndexChart:
@@ -52,8 +36,8 @@ class CommunityIndexChart:
 
         self.background_color = '#C5C5C5'  # Gray for background bars
 
-        # Font settings
-        self.font_family = 'Red Hat Display'
+        # Use font manager to get the appropriate font family
+        self.font_family = font_manager.get_font_family('Red Hat Display')
 
     def create(self, data: pd.DataFrame,
                output_path: Optional[Path] = None,

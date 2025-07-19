@@ -3,6 +3,7 @@
 Fixed demographic visualization with proper text scaling and correct aspect ratios
 Matches PowerPoint placeholder dimensions exactly
 UPDATED: Uses team_config to display short team names in gender chart
+UPDATED: Now uses font_manager for consistent font handling
 """
 
 import matplotlib.pyplot as plt
@@ -13,6 +14,8 @@ from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 import matplotlib.font_manager as fm
 import os
+
+from utils.font_manager import font_manager  # Added font manager import
 
 
 class DemographicCharts:
@@ -50,45 +53,15 @@ class DemographicCharts:
         self.pie_text_size = 10  # Pie chart percentages
         self.legend_size = 9
 
-        # Font family - try Overpass Light first, fallback to Arial
-        try:
-            # Check if Overpass Light is available
-            import matplotlib.font_manager as fm
+        # Use font manager to get the appropriate font family
+        # Try Overpass first, but let font manager handle fallback
+        self.font_family = font_manager.get_font_family('Overpass')
 
-            # Get all available font names
-            available_fonts = sorted(set([f.name for f in fm.fontManager.ttflist]))
+        # If we didn't get Overpass, try Overpass Light specifically
+        if self.font_family != 'Overpass':
+            self.font_family = font_manager.get_font_family('Overpass Light')
 
-            # Debug: Print available fonts that contain "Overpass"
-            overpass_fonts = [f for f in available_fonts if 'Overpass' in f.lower()]
-            if overpass_fonts:
-                print(f"Found Overpass fonts: {overpass_fonts}")
-
-            # Try different variations of Overpass
-            if 'Overpass Light' in available_fonts:
-                self.font_family = 'Overpass Light'
-                print("Using: Overpass Light")
-            elif 'Overpass-Light' in available_fonts:
-                self.font_family = 'Overpass-Light'
-                print("Using: Overpass-Light")
-            elif 'Overpass' in available_fonts:
-                self.font_family = 'Overpass'
-                # Try to use light weight
-                plt.rcParams['font.weight'] = 'light'
-                print("Using: Overpass (with light weight)")
-            else:
-                # Fallback to Arial if Overpass not found
-                self.font_family = 'Arial'
-                print(
-                    f"Warning: Overpass font not found in system. Available fonts containing 'over': {[f for f in available_fonts if 'over' in f.lower()][:5]}")
-                print("Using Arial as fallback. To use Overpass Light:")
-                print("1. Download from: https://fonts.google.com/specimen/Overpass")
-                print("2. Install the font on your system")
-                print("3. Clear matplotlib cache: import matplotlib; matplotlib.font_manager._rebuild()")
-                print("4. Restart your Python environment")
-        except Exception as e:
-            self.font_family = 'Arial'  # Fallback
-            print(f"Font detection error: {e}")
-            print("Using Arial as fallback")
+        print(f"DemographicCharts using font: {self.font_family}")
 
         # FIXED: Ensure we have all three colors in correct order
         self.community_colors = [
@@ -101,7 +74,7 @@ class DemographicCharts:
         plt.rcParams['figure.autolayout'] = False
         plt.rcParams['axes.autolimit_mode'] = 'data'
 
-        # Configure font settings
+        # Configure font settings with font manager's selection
         plt.rcParams['font.family'] = self.font_family
         if 'Overpass' in self.font_family:
             plt.rcParams['font.weight'] = 'light'

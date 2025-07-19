@@ -17,6 +17,7 @@ import pandas as pd
 
 from .base_chart import BaseChart
 from utils.logo_manager import LogoManager
+from utils.font_manager import font_manager  # Added font manager import
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,10 @@ class FanWheel(BaseChart):
 
         # Load arrow logo during initialization
         self.arrow_logo = self._load_arrow_logo()
+
+        # Get font family from font manager
+        self.font_family = font_manager.get_font_family('Red Hat Display')
+        logger.info(f"Using font family: {self.font_family}")
 
     def _load_arrow_logo(self) -> Optional[Image.Image]:
         """Load arrow logo during initialization"""
@@ -362,6 +367,7 @@ class FanWheel(BaseChart):
                         ha='center', va='center',
                         fontsize=28,  # INCREASED: fontsize from 24 to 28
                         fontweight='bold',
+                        fontfamily=self.font_family,  # Use font from font manager
                         color='white',
                         zorder=23,
                         linespacing=0.8)
@@ -380,7 +386,9 @@ class FanWheel(BaseChart):
         fan_text = f"THE {self.team_short.upper()} FAN"
         ax.text(0, 0, fan_text,
                 ha='center', va='center',
-                fontsize=20, fontweight='bold',  # INCREASED: fontsize from 16 to 20
+                fontsize=20,
+                fontweight='bold',
+                fontfamily=self.font_family,  # Use font from font manager
                 color='white', zorder=22)
 
     def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float):
@@ -444,31 +452,11 @@ class FanWheel(BaseChart):
                     ha='center', va='center',
                     fontsize=22,
                     fontweight='bold',
-                    fontfamily='Red Hat Display',
+                    fontfamily=self.font_family,  # Use font from font manager
                     color='white',
                     rotation=0,
                     linespacing=0.9,
                     zorder=7)
-
-        # Log missing logos for debugging
-        if missing_logos and self.enable_logos:
-            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
-
-        # Log missing logos for debugging
-        if missing_logos and self.enable_logos:
-            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
-
-        # Log missing logos for debugging
-        if missing_logos and self.enable_logos:
-            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
-
-        # Log missing logos for debugging
-        if missing_logos and self.enable_logos:
-            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
-
-        # Log missing logos for debugging
-        if missing_logos and self.enable_logos:
-            logger.debug(f"Missing logos for: {', '.join(missing_logos)}")
 
         # Log missing logos for debugging
         if missing_logos and self.enable_logos:
@@ -544,7 +532,9 @@ class FanWheel(BaseChart):
         initials = ''.join([word[0].upper() for word in merchant.split()[:2]])
         ax.text(x, y, initials,
                 ha='center', va='center',
-                fontsize=16, fontweight='bold',  # INCREASED: fontsize from 12 to 16
+                fontsize=16,
+                fontweight='bold',
+                fontfamily=self.font_family,  # Use font from font manager
                 color='#888888', zorder=6)
 
     def generate_logo_report(self, wheel_data: pd.DataFrame) -> Dict[str, any]:
