@@ -136,8 +136,8 @@
 
         select:focus, input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #0066FF;
+            box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
         }
 
         .radio-group {
@@ -159,8 +159,8 @@
         }
 
         .radio-option:hover {
-            border-color: #667eea;
-            background: #f7fafc;
+            border-color: #0066FF;
+            background: #F0F7FF;
         }
 
         .radio-option input[type="radio"] {
@@ -169,8 +169,9 @@
         }
 
         .radio-option.selected {
-            border-color: #667eea;
-            background: #eef2ff;
+            border-color: #0066FF;
+            background: linear-gradient(135deg, #F0F7FF 0%, #E1EFFF 100%);
+            box-shadow: 0 2px 10px rgba(0, 102, 255, 0.1);
         }
 
         .team-info {
@@ -192,12 +193,13 @@
             font-size: 0.85rem;  /* Reduced from 0.9rem */
         }
 
+        /* Primary button - main blue gradient */
         .btn {
-            background: #0066FF;
+            background: linear-gradient(135deg, #0066FF 0%, #0052CC 100%);
             color: white;
             border: none;
-            padding: 0.8rem 1.5rem;  /* Reduced padding */
-            font-size: 1rem;  /* Reduced from 1.1rem */
+            padding: 0.8rem 1.5rem;
+            font-size: 1rem;
             font-weight: 600;
             border-radius: 8px;
             cursor: pointer;
@@ -205,7 +207,8 @@
             width: 100%;
             position: relative;
             overflow: hidden;
-            margin-bottom: 0.75rem;  /* Add spacing between buttons */
+            margin-bottom: 0.75rem;
+            box-shadow: 0 4px 15px rgba(0, 102, 255, 0.2);
         }
 
         .btn:last-child {
@@ -213,23 +216,60 @@
         }
 
         .btn:hover {
-            background: #0052CC;
+            background: linear-gradient(135deg, #0052CC 0%, #0041A3 100%);
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 102, 255, 0.3);
+            box-shadow: 0 8px 25px rgba(0, 102, 255, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(0, 102, 255, 0.2);
         }
 
         .btn:disabled {
+            background: linear-gradient(135deg, #8FA3C7 0%, #7A90B8 100%);
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
 
+        /* Preview button - lighter blue gradient */
         .btn-preview {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.2);
         }
 
+        .btn-preview:hover {
+            background: linear-gradient(135deg, #357ABD 0%, #2968A3 100%);
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.3);
+        }
+
+        /* Secondary button - darker blue gradient */
         .btn-secondary {
-            background: #718096;
+            background: linear-gradient(135deg, #34495E 0%, #2C3E50 100%);
+            box-shadow: 0 4px 15px rgba(52, 73, 94, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #2C3E50 0%, #1A252F 100%);
+            box-shadow: 0 8px 25px rgba(52, 73, 94, 0.3);
+        }
+
+        /* Add a subtle animation on hover */
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
         }
 
         .progress-section {
@@ -247,7 +287,7 @@
         }
 
         .progress-bar {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(90deg, #0066FF 0%, #0052CC 100%);
             height: 100%;
             width: 0%;
             transition: width 0.3s ease;
@@ -433,11 +473,11 @@
                 </div>
 
                 <button class="btn" id="generateBtn">
-                    Generate PowerPoint Report
+                    Generate Full Insights Report
                 </button>
 
                 <button class="btn btn-preview" id="previewBtn">
-                    Download Behaviors Slide
+                    PREVIEW - Download Fan Behaviors Slide
                 </button>
 
                 <button class="btn btn-secondary" id="testConnectionBtn">
