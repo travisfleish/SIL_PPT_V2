@@ -11,4 +11,4 @@ python_pptx==1.0.2
 PyYAML==6.0.2
 PyYAML==6.0.2
 snowflake_connector_python==3.15.0
-snowflake_snowpark_python==1.32.0
+
