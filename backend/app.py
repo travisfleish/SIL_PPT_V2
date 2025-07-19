@@ -9,7 +9,7 @@ import sys
 import json
 import logging
 import traceback
-import tempfile  # MOVED HERE - before first use
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -48,9 +48,19 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging with more detailed format for debugging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+# Global job storage with thread safety
+import threading
+
+jobs_lock = threading.Lock()
+jobs = {}  # job_id -> job_info
+job_queues = {}  # job_id -> queue for progress updates
 
 
 def initialize_app():
@@ -88,55 +98,62 @@ initialize_app()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
-# Job tracking
-jobs = {}  # job_id -> job_info
-job_queues = {}  # job_id -> queue for progress updates
-
 
 class JobManager:
-    """Manages background PowerPoint generation jobs"""
+    """Manages background PowerPoint generation jobs with thread safety"""
 
     @staticmethod
     def create_job(team_key: str, options: dict) -> str:
         """Create a new job and return job ID"""
         job_id = str(uuid.uuid4())
 
-        jobs[job_id] = {
-            'id': job_id,
-            'team_key': team_key,
-            'team_name': None,
-            'status': 'pending',
-            'progress': 0,
-            'message': 'Initializing...',
-            'created_at': datetime.now().isoformat(),
-            'completed_at': None,
-            'output_file': None,
-            'output_dir': None,  # Added for better tracking
-            'error': None,
-            'options': options
-        }
+        with jobs_lock:
+            jobs[job_id] = {
+                'id': job_id,
+                'job_id': job_id,  # Ensure job_id is always present
+                'team_key': team_key,
+                'team_name': None,
+                'status': 'pending',
+                'progress': 0,
+                'message': 'Initializing...',
+                'created_at': datetime.now().isoformat(),
+                'completed_at': None,
+                'output_file': None,
+                'output_dir': None,
+                'error': None,
+                'options': options
+            }
 
-        # Create progress queue for this job
-        job_queues[job_id] = queue.Queue()
+            # Create progress queue for this job
+            job_queues[job_id] = queue.Queue()
+
+            logger.info(f"Created job {job_id} for team {team_key}")
+            logger.info(f"Current jobs in memory: {list(jobs.keys())}")
 
         return job_id
 
     @staticmethod
     def update_job(job_id: str, **kwargs):
-        """Update job information"""
-        if job_id in jobs:
-            jobs[job_id].update(kwargs)
+        """Update job information with thread safety"""
+        with jobs_lock:
+            if job_id in jobs:
+                jobs[job_id].update(kwargs)
+                logger.info(f"Updated job {job_id}: {kwargs}")
 
-            # Send update to queue if exists
-            if job_id in job_queues:
-                try:
-                    job_queues[job_id].put_nowait(kwargs)
-                except queue.Full:
-                    pass
+                # Send update to queue if exists
+                if job_id in job_queues:
+                    try:
+                        job_queues[job_id].put_nowait(kwargs)
+                    except queue.Full:
+                        pass
+            else:
+                logger.error(f"Attempted to update non-existent job: {job_id}")
 
 
 def generate_pptx_worker(job_id: str, team_key: str, options: dict):
     """Worker function to generate PowerPoint in background"""
+    logger.info(f"Starting worker for job {job_id}, team {team_key}")
+
     try:
         # Get team configuration
         config_manager = TeamConfigManager()
@@ -196,8 +213,6 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
 
 
 # ===== FRONTEND SERVING ROUTES =====
-# These routes must come before the API routes
-
 @app.route('/')
 def serve_frontend():
     """Serve the main frontend HTML file"""
@@ -224,7 +239,6 @@ def serve_assets(path):
         return jsonify({'error': f'Asset not found: {path}'}), 404
 
 
-# Optional: Serve any other static files if needed
 @app.route('/static/<path:path>')
 def serve_static(path):
     """Serve other static files if needed"""
@@ -242,7 +256,9 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'active_jobs': len(jobs),
+        'jobs': list(jobs.keys())  # Include job IDs for debugging
     })
 
 
@@ -253,7 +269,7 @@ def debug_fonts():
         from matplotlib import font_manager as fm
 
         available_fonts = sorted([f.name for f in fm.fontManager.ttflist])
-        red_hat_fonts = [f for f in available_fonts if 'Red Hat' in f.lower()]
+        red_hat_fonts = [f for f in available_fonts if 'Red Hat' in f]
 
         # Get current matplotlib settings
         import matplotlib.pyplot as plt
@@ -370,14 +386,22 @@ def generate_report():
         )
         thread.start()
 
+        logger.info(f"Started generation job {job_id} for team {team_key}")
+
+        # Return complete job info
+        with jobs_lock:
+            job_info = jobs.get(job_id, {})
+
         return jsonify({
             'job_id': job_id,
             'status': 'started',
-            'message': 'Generation started'
+            'message': 'Generation started',
+            'job': job_info  # Include full job info for debugging
         })
 
     except Exception as e:
         logger.error(f"Error starting generation: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
@@ -433,7 +457,7 @@ def generate_behaviors_slide_pptx(team_key: str, team_config: dict) -> Path:
         comparison_pop = team_config.get('comparison_population')
 
         merchant_ranker = MerchantRanker(
-            team_view_prefix=view_prefix,  # Note: PowerPointBuilder uses 'team_view_prefix'
+            team_view_prefix=view_prefix,
             comparison_population=comparison_pop
         )
 
@@ -455,39 +479,55 @@ def generate_behaviors_slide_pptx(team_key: str, team_config: dict) -> Path:
         raise
 
 
+# CRITICAL FIX: Add explicit route with and without trailing slash
 @app.route('/api/jobs/<job_id>', methods=['GET'])
+@app.route('/api/jobs/<job_id>/', methods=['GET'])  # Handle trailing slash
 def get_job_status(job_id):
-    """Get job status"""
-    if job_id not in jobs:
-        return jsonify({'error': 'Job not found'}), 404
+    """Get job status - primary endpoint for polling"""
+    logger.info(f"Job status request for: {job_id}")
+    logger.info(f"Current jobs: {list(jobs.keys())}")
 
-    return jsonify(jobs[job_id])
+    with jobs_lock:
+        if job_id not in jobs:
+            logger.error(f"Job {job_id} not found in jobs dict")
+            return jsonify({'error': 'Job not found', 'job_id': job_id}), 404
+
+        job = jobs[job_id].copy()  # Return a copy to avoid modification
+
+    logger.info(f"Returning job status: {job['status']} for job {job_id}")
+    return jsonify(job)
 
 
 @app.route('/api/jobs/<job_id>/status', methods=['GET'])
 def get_job_status_simple(job_id):
     """Simple status endpoint for polling fallback"""
-    if job_id not in jobs:
-        return jsonify({'error': 'Job not found'}), 404
+    with jobs_lock:
+        if job_id not in jobs:
+            return jsonify({'error': 'Job not found'}), 404
 
-    job = jobs[job_id]
-    return jsonify({
-        'status': job['status'],
-        'progress': job['progress'],
-        'message': job['message'],
-        'error': job.get('error')
-    })
+        job = jobs[job_id]
+        return jsonify({
+            'status': job['status'],
+            'progress': job['progress'],
+            'message': job['message'],
+            'error': job.get('error')
+        })
 
 
 @app.route('/api/jobs/<job_id>/progress', methods=['GET'])
 def get_job_progress_stream(job_id):
     """Server-sent events stream for job progress"""
-    if job_id not in jobs:
-        return jsonify({'error': 'Job not found'}), 404
+    logger.info(f"SSE progress request for job: {job_id}")
+
+    with jobs_lock:
+        if job_id not in jobs:
+            return jsonify({'error': 'Job not found'}), 404
 
     def generate():
         # Send initial status immediately
-        yield f"data: {json.dumps(jobs[job_id])}\n\n"
+        with jobs_lock:
+            if job_id in jobs:
+                yield f"data: {json.dumps(jobs[job_id])}\n\n"
 
         # Get the queue for this job
         job_queue = job_queues.get(job_id)
@@ -499,7 +539,9 @@ def get_job_progress_stream(job_id):
 
         while retry_count < max_retries:
             try:
-                current_job = jobs.get(job_id)
+                with jobs_lock:
+                    current_job = jobs.get(job_id)
+
                 if not current_job:
                     yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
                     break
@@ -522,7 +564,9 @@ def get_job_progress_stream(job_id):
                         # Non-blocking get
                         update = job_queue.get_nowait()
                         # Send current state after update
-                        yield f"data: {json.dumps(jobs[job_id])}\n\n"
+                        with jobs_lock:
+                            if job_id in jobs:
+                                yield f"data: {json.dumps(jobs[job_id])}\n\n"
                     except queue.Empty:
                         pass
 
@@ -563,12 +607,14 @@ def get_job_progress_stream(job_id):
 def download_report(job_id):
     """Download generated PowerPoint file"""
     try:
-        # Check if job exists
-        if job_id not in jobs:
-            logger.error(f"Download attempted for non-existent job: {job_id}")
-            return jsonify({'error': 'Job not found'}), 404
+        with jobs_lock:
+            # Check if job exists
+            if job_id not in jobs:
+                logger.error(f"Download attempted for non-existent job: {job_id}")
+                return jsonify({'error': 'Job not found'}), 404
 
-        job = jobs[job_id]
+            job = jobs[job_id].copy()
+
         logger.info(f"Download requested for job {job_id}: status={job['status']}, file={job.get('output_file')}")
 
         # Check if job is completed
@@ -622,11 +668,12 @@ def download_report(job_id):
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():
     """List all jobs (recent first)"""
-    job_list = sorted(
-        jobs.values(),
-        key=lambda x: x['created_at'],
-        reverse=True
-    )
+    with jobs_lock:
+        job_list = sorted(
+            jobs.values(),
+            key=lambda x: x['created_at'],
+            reverse=True
+        )
 
     # Limit to recent jobs
     return jsonify({
@@ -652,23 +699,26 @@ def cleanup_old_files():
 
         # Clean up old job records older than 24 hours
         jobs_to_delete = []
-        for job_id, job_info in jobs.items():
-            if 'created_at' in job_info:
-                job_time = datetime.fromisoformat(job_info['created_at'])
-                if (datetime.now() - job_time).total_seconds() > 86400:  # 24 hours
-                    jobs_to_delete.append(job_id)
+        with jobs_lock:
+            for job_id, job_info in jobs.items():
+                if 'created_at' in job_info:
+                    job_time = datetime.fromisoformat(job_info['created_at'])
+                    if (datetime.now() - job_time).total_seconds() > 86400:  # 24 hours
+                        jobs_to_delete.append(job_id)
 
         for job_id in jobs_to_delete:
-            # Delete output file if exists
-            if 'output_file' in jobs[job_id] and jobs[job_id]['output_file']:
-                output_path = Path(jobs[job_id]['output_file'])
-                if output_path.exists():
-                    output_path.unlink(missing_ok=True)
-                    files_deleted += 1
+            with jobs_lock:
+                if job_id in jobs:
+                    # Delete output file if exists
+                    if 'output_file' in jobs[job_id] and jobs[job_id]['output_file']:
+                        output_path = Path(jobs[job_id]['output_file'])
+                        if output_path.exists():
+                            output_path.unlink(missing_ok=True)
+                            files_deleted += 1
 
-            # Remove from tracking
-            jobs.pop(job_id, None)
-            job_queues.pop(job_id, None)
+                    # Remove from tracking
+                    jobs.pop(job_id, None)
+                    job_queues.pop(job_id, None)
 
         return jsonify({
             'status': 'success',
@@ -679,6 +729,26 @@ def cleanup_old_files():
     except Exception as e:
         logger.error(f"Cleanup error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+# Error handlers for better debugging
+@app.errorhandler(404)
+def not_found(error):
+    logger.error(f"404 error: {request.url}")
+    return jsonify({
+        'error': 'Not found',
+        'url': request.url,
+        'method': request.method
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"500 error: {str(error)}")
+    return jsonify({
+        'error': 'Internal server error',
+        'details': str(error)
+    }), 500
 
 
 if __name__ == '__main__':
