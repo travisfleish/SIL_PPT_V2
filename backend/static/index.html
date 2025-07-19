@@ -887,15 +887,78 @@
         }
     }
 
-    async function pollJobStatus(jobId) {
-        console.log(`Starting robust polling for job ${jobId}`);
+    // Find the pollJobStatus function in your index.html and replace it with this:
 
-        const pollState = {
-            retryCount: 0,
-            maxRetries: 120,
-            consecutiveErrors: 0,
-            interval: null
-        };
+async function pollJobStatus(jobId) {
+    console.log(`Starting robust polling for job ${jobId}`);
+
+    let retryCount = 0;
+    const maxRetries = 120;
+    let consecutiveErrors = 0;
+
+    const pollInterval = setInterval(async () => {
+        try {
+            // Use the /status endpoint which works reliably in production
+            const response = await fetch(`${API_BASE}/jobs/${jobId}/status`);
+
+            if (!response.ok) {
+                consecutiveErrors++;
+                console.warn(`Poll failed (${consecutiveErrors}): ${response.status}`);
+
+                // Only error out after multiple consecutive failures
+                if (consecutiveErrors > 5) {
+                    clearInterval(pollInterval);
+                    showError('Unable to check job status. Please refresh the page.');
+                    resetForm();
+                }
+                return;
+            }
+
+            // Reset error counter on success
+            consecutiveErrors = 0;
+
+            const data = await response.json();
+            console.log(`Poll ${retryCount}: ${data.status} - ${data.progress}%`);
+
+            // Reconstruct full job object from status response
+            const jobData = {
+                status: data.status,
+                progress: data.progress,
+                message: data.message,
+                error: data.error,
+                job_id: jobId
+            };
+
+            updateProgress(jobData);
+
+            if (data.status === 'completed') {
+                console.log('Job completed via polling!');
+                clearInterval(pollInterval);
+                onJobComplete(jobData);
+            } else if (data.status === 'failed') {
+                clearInterval(pollInterval);
+                onJobFailed(jobData);
+            }
+
+            retryCount++;
+            if (retryCount > maxRetries) {
+                clearInterval(pollInterval);
+                showError('Generation timeout. Please try again.');
+                resetForm();
+            }
+
+        } catch (error) {
+            console.error('Polling error:', error);
+            consecutiveErrors++;
+
+            if (consecutiveErrors > 5) {
+                clearInterval(pollInterval);
+                showError('Lost connection to server. Please check your connection.');
+                resetForm();
+            }
+        }
+    }, ENV.pollInterval || 2000); // Poll every 2 seconds
+}
 
         async function doPoll() {
             try {

@@ -9,6 +9,7 @@ import sys
 import json
 import logging
 import traceback
+import tempfile  # MOVED HERE - before first use
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -19,8 +20,12 @@ import queue
 import uuid
 import matplotlib
 
+# Configure matplotlib BEFORE importing pyplot
 matplotlib.use('Agg')  # Must be before importing pyplot
-import tempfile
+
+# Set matplotlib cache directory to a writable location
+os.environ['MPLCONFIGDIR'] = os.path.join(tempfile.gettempdir(), 'matplotlib')
+
 import base64
 import subprocess
 import io
@@ -28,6 +33,9 @@ from PIL import Image
 
 # Add parent directory to path to import existing modules
 sys.path.append(str(Path(__file__).parent.parent))
+
+# Import font manager BEFORE other visualization imports
+from utils.font_manager import font_manager
 
 from utils.team_config_manager import TeamConfigManager
 from report_builder.pptx_builder import PowerPointBuilder
@@ -40,12 +48,45 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def initialize_app():
+    """Initialize application components including fonts"""
+    try:
+        # Initialize custom fonts
+        logger.info("Initializing custom fonts...")
+
+        # Configure matplotlib with custom fonts
+        font_manager.configure_matplotlib()
+
+        # Log font status for debugging
+        font_family = font_manager.get_font_family('Red Hat Display')
+        logger.info(f"Font system initialized. Using font family: {font_family}")
+
+        # Optional: Create a test plot to ensure matplotlib is configured
+        try:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(1, 1))
+            ax.text(0.5, 0.5, 'Font Test', ha='center', va='center')
+            plt.close(fig)
+            logger.info("Matplotlib font test successful")
+        except Exception as e:
+            logger.warning(f"Matplotlib font test warning: {e}")
+
+    except Exception as e:
+        logger.error(f"Error initializing fonts: {e}")
+        logger.error(traceback.format_exc())
+        # Continue running even if fonts fail to load
+
+
+# Initialize fonts at module level (when app starts)
+initialize_app()
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS for frontend
 
 # Job tracking
 jobs = {}  # job_id -> job_info
@@ -70,6 +111,7 @@ class JobManager:
             'created_at': datetime.now().isoformat(),
             'completed_at': None,
             'output_file': None,
+            'output_dir': None,  # Added for better tracking
             'error': None,
             'options': options
         }
@@ -117,23 +159,7 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
         # Create builder
         builder = PowerPointBuilder(team_key)
 
-        # Custom progress callback
-        original_method = builder.build_presentation
-
-        def build_with_progress(*args, **kwargs):
-            # Update progress during build
-            JobManager.update_job(job_id,
-                                  progress=30,
-                                  message='Processing demographics...')
-
-            # You could add more granular progress updates here
-            # by modifying the PowerPointBuilder class
-
-            return original_method(*args, **kwargs)
-
-        builder.build_presentation = build_with_progress
-
-        # Build presentation
+        # Build presentation with progress updates
         JobManager.update_job(job_id,
                               progress=40,
                               message='Generating slides...')
@@ -143,13 +169,19 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
             custom_category_count=options.get('custom_count')
         )
 
-        # Complete
+        # Ensure output_path is a Path object
+        output_path = Path(output_path)
+
+        # Store both the file path and directory for better tracking
         JobManager.update_job(job_id,
                               status='completed',
                               progress=100,
                               message='PowerPoint generated successfully!',
                               completed_at=datetime.now().isoformat(),
-                              output_file=str(output_path))
+                              output_file=str(output_path),
+                              output_dir=str(output_path.parent))
+
+        logger.info(f"Job {job_id} completed. Output file: {output_path}")
 
     except Exception as e:
         logger.error(f"Job {job_id} failed: {str(e)}")
@@ -212,6 +244,36 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat()
     })
+
+
+@app.route('/api/debug/fonts', methods=['GET'])
+def debug_fonts():
+    """Debug endpoint to check available fonts"""
+    try:
+        from matplotlib import font_manager as fm
+
+        available_fonts = sorted([f.name for f in fm.fontManager.ttflist])
+        red_hat_fonts = [f for f in available_fonts if 'Red Hat' in f.lower()]
+
+        # Get current matplotlib settings
+        import matplotlib.pyplot as plt
+        current_font = plt.rcParams['font.family']
+
+        return jsonify({
+            'status': 'success',
+            'total_fonts': len(available_fonts),
+            'red_hat_fonts': red_hat_fonts,
+            'current_matplotlib_font': current_font,
+            'matplotlib_cache': os.environ.get('MPLCONFIGDIR', 'default'),
+            'font_sample': available_fonts[:20],
+            'fonts_loaded': font_manager.fonts_loaded
+        })
+    except Exception as e:
+        logger.error(f"Font debug error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
 
 
 @app.route('/api/teams', methods=['GET'])
@@ -402,6 +464,21 @@ def get_job_status(job_id):
     return jsonify(jobs[job_id])
 
 
+@app.route('/api/jobs/<job_id>/status', methods=['GET'])
+def get_job_status_simple(job_id):
+    """Simple status endpoint for polling fallback"""
+    if job_id not in jobs:
+        return jsonify({'error': 'Job not found'}), 404
+
+    job = jobs[job_id]
+    return jsonify({
+        'status': job['status'],
+        'progress': job['progress'],
+        'message': job['message'],
+        'error': job.get('error')
+    })
+
+
 @app.route('/api/jobs/<job_id>/progress', methods=['GET'])
 def get_job_progress_stream(job_id):
     """Server-sent events stream for job progress"""
@@ -409,51 +486,137 @@ def get_job_progress_stream(job_id):
         return jsonify({'error': 'Job not found'}), 404
 
     def generate():
-        # Send initial status
+        # Send initial status immediately
         yield f"data: {json.dumps(jobs[job_id])}\n\n"
 
-        # Wait for updates
+        # Get the queue for this job
         job_queue = job_queues.get(job_id)
-        if job_queue:
-            while True:
-                try:
-                    # Wait for update with timeout
-                    update = job_queue.get(timeout=30)
 
-                    # Send current job state
-                    yield f"data: {json.dumps(jobs[job_id])}\n\n"
+        # Keep track of last sent data to avoid duplicates
+        last_status = None
+        retry_count = 0
+        max_retries = 120  # 2 minutes max
 
-                    # Check if job is complete
-                    if jobs[job_id]['status'] in ['completed', 'failed']:
-                        break
+        while retry_count < max_retries:
+            try:
+                current_job = jobs.get(job_id)
+                if not current_job:
+                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                    break
 
-                except queue.Empty:
-                    # Send heartbeat
-                    yield f"data: {json.dumps({'heartbeat': True})}\n\n"
+                # Send update if status changed
+                current_status = current_job.get('status')
+                if current_status != last_status:
+                    yield f"data: {json.dumps(current_job)}\n\n"
+                    last_status = current_status
 
-    return Response(generate(), mimetype='text/event-stream')
+                # Check if job is complete
+                if current_status in ['completed', 'failed']:
+                    # Send final update
+                    yield f"data: {json.dumps(current_job)}\n\n"
+                    break
+
+                # Try to get updates from queue
+                if job_queue:
+                    try:
+                        # Non-blocking get
+                        update = job_queue.get_nowait()
+                        # Send current state after update
+                        yield f"data: {json.dumps(jobs[job_id])}\n\n"
+                    except queue.Empty:
+                        pass
+
+                # Send heartbeat to keep connection alive
+                yield f": heartbeat\n\n"  # SSE comment to keep alive
+
+                # Sleep briefly
+                import time
+                time.sleep(1)
+                retry_count += 1
+
+            except Exception as e:
+                logger.error(f"SSE error for job {job_id}: {str(e)}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                break
+
+    # Create response with proper headers
+    response = Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',  # Disable Nginx buffering
+            'Connection': 'keep-alive',
+            'Content-Type': 'text/event-stream',
+            'Access-Control-Allow-Origin': '*',
+            'Transfer-Encoding': 'chunked'
+        }
+    )
+
+    # Ensure response is not buffered
+    response.direct_passthrough = True
+
+    return response
 
 
 @app.route('/api/jobs/<job_id>/download', methods=['GET'])
 def download_report(job_id):
     """Download generated PowerPoint file"""
-    if job_id not in jobs:
-        return jsonify({'error': 'Job not found'}), 404
+    try:
+        # Check if job exists
+        if job_id not in jobs:
+            logger.error(f"Download attempted for non-existent job: {job_id}")
+            return jsonify({'error': 'Job not found'}), 404
 
-    job = jobs[job_id]
+        job = jobs[job_id]
+        logger.info(f"Download requested for job {job_id}: status={job['status']}, file={job.get('output_file')}")
 
-    if job['status'] != 'completed':
-        return jsonify({'error': 'Job not completed'}), 400
+        # Check if job is completed
+        if job['status'] != 'completed':
+            return jsonify({'error': 'Job not completed', 'status': job['status']}), 400
 
-    if not job['output_file'] or not Path(job['output_file']).exists():
-        return jsonify({'error': 'Output file not found'}), 404
+        # Check if output file exists
+        output_file = job.get('output_file')
+        if not output_file:
+            logger.error(f"Job {job_id} has no output_file set")
+            return jsonify({'error': 'No output file found for this job'}), 404
 
-    return send_file(
-        job['output_file'],
-        as_attachment=True,
-        download_name=Path(job['output_file']).name,
-        mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation'
-    )
+        output_path = Path(output_file)
+        if not output_path.exists():
+            logger.error(f"Output file does not exist: {output_path}")
+
+            # Try to find the file in the output directory
+            output_dir = job.get('output_dir')
+            if output_dir:
+                output_dir_path = Path(output_dir)
+                if output_dir_path.exists():
+                    # Look for any .pptx file in the directory
+                    pptx_files = list(output_dir_path.glob('*.pptx'))
+                    if pptx_files:
+                        output_path = pptx_files[0]
+                        logger.info(f"Found PowerPoint file in output directory: {output_path}")
+                    else:
+                        logger.error(f"No .pptx files found in output directory: {output_dir}")
+                        return jsonify({'error': 'Output file not found'}), 404
+                else:
+                    logger.error(f"Output directory does not exist: {output_dir}")
+                    return jsonify({'error': 'Output directory not found'}), 404
+            else:
+                return jsonify({'error': 'Output file not found and no output directory specified'}), 404
+
+        # Send the file
+        logger.info(f"Sending file: {output_path}")
+        return send_file(
+            str(output_path),
+            as_attachment=True,
+            download_name=output_path.name,
+            mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        )
+
+    except Exception as e:
+        logger.error(f"Error downloading file for job {job_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'Download failed: {str(e)}'}), 500
 
 
 @app.route('/api/jobs', methods=['GET'])
