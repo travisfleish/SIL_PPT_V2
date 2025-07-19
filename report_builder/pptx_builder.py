@@ -67,11 +67,16 @@ class PowerPointBuilder:
         self.view_prefix = self.team_config['view_prefix']
 
         # Initialize data processors
-        self.merchant_ranker = MerchantRanker(team_view_prefix=self.view_prefix)
+        self.merchant_ranker = MerchantRanker(
+            team_view_prefix=self.view_prefix,
+            comparison_population=self.team_config['comparison_population']
+        )
+
         self.category_analyzer = CategoryAnalyzer(
             team_name=self.team_name,
             team_short=self.team_short,
-            league=self.league
+            league=self.league,
+            comparison_population=self.team_config['comparison_population']  # ADD THIS LINE
         )
 
         # Validate and set presentation font
@@ -276,12 +281,15 @@ class PowerPointBuilder:
                 logger.warning("No demographics data found for AI insights")
                 return self._get_fallback_demographic_insight()
 
+            comparison_population = self.team_config.get('comparison_population')
+
             # Process demographics with AI insights enabled
             processor = DemographicsProcessor(
                 data_source=df,
                 team_name=self.team_name,
                 league=self.league,
-                use_ai_insights=True  # Enable AI insights
+                use_ai_insights=True,  # Enable AI insights
+                comparison_population = comparison_population  # ADD THIS LINE
             )
 
             demographic_data = processor.process_all_demographics()
@@ -432,11 +440,14 @@ class PowerPointBuilder:
                 self._add_placeholder_slide("Demographics data not available")
                 return
 
+            comparison_population = self.team_config.get('comparison_population')
+
             # Process demographics
             processor = DemographicsProcessor(
                 data_source=df,
                 team_name=self.team_name,
-                league=self.league
+                league=self.league,
+                comparison_population = comparison_population  # ADD THIS LINE
             )
 
             demographic_data = processor.process_all_demographics()

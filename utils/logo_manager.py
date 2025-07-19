@@ -10,6 +10,7 @@ from typing import Optional, Dict, Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import re
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,19 @@ class LogoManager:
         # Lowercase
         variations.append(merchant_name.lower())
 
+        # UNICODE NORMALIZATION - Handle characters like ō -> o
+        normalized_unicode = unicodedata.normalize('NFD', merchant_name)
+        ascii_only = ''.join(char for char in normalized_unicode
+                            if unicodedata.category(char) != 'Mn')
+        if ascii_only != merchant_name:
+            variations.append(ascii_only)
+            variations.append(ascii_only.lower())
+            variations.append(ascii_only.lower().replace(' ', '_'))
+            variations.append(ascii_only.lower().replace(' ', '-'))
+            # Also add version without spaces
+            clean_ascii = re.sub(r'[^a-zA-Z0-9]', '', ascii_only.lower())
+            variations.append(clean_ascii)
+
         # Replace spaces with underscores
         variations.append(merchant_name.lower().replace(' ', '_'))
 
@@ -176,14 +190,19 @@ class LogoManager:
             'dave & buster': ['dave_&_busters', 'dave_and_busters', 'daveandbusters', 'dave_busters'],
             'dave&buster': ['dave_&_busters', 'dave_and_busters', 'daveandbusters'],
             'davebusters': ['dave_&_busters', 'dave_and_busters', 'daveandbusters'],
+            # Add EōS Fitness specific mappings
+            'eōs fitness': ['eos_fitness', 'eos', 'eosfitness'],
+            'eos fitness': ['eos_fitness', 'eos', 'eosfitness'],
         }
 
         merchant_lower = merchant_name.lower()
         # Also check the version without special characters
         merchant_clean = re.sub(r"[^a-zA-Z0-9\s]", '', merchant_lower)
+        # Also check the Unicode-normalized version
+        merchant_normalized = ascii_only.lower()
 
         for key, aliases in name_mapping.items():
-            if key in merchant_lower or key in merchant_clean:
+            if key in merchant_lower or key in merchant_clean or key in merchant_normalized:
                 variations.extend(aliases)
 
         # Remove duplicates while preserving order

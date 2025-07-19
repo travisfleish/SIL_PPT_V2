@@ -667,6 +667,30 @@ class CategorySlide(BaseSlide):
             for col in range(4):
                 self._format_data_cell(table.cell(row_idx, col))
 
+        # ADD EXPLANATORY TEXT BELOW THE TABLE
+        # Calculate position below the table
+        explanation_top = top + table_height + Inches(0.1)  # Add small gap after table
+
+        # Add explanatory text
+        explanation_box = slide.shapes.add_textbox(
+            left, explanation_top,
+            width, Inches(0.3)
+        )
+
+        text_frame = explanation_box.text_frame
+        text_frame.word_wrap = True
+
+        # Set the explanatory text
+        text_frame.text = "Subcategories shown in descending order by composite index"
+
+        # Format the text
+        p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(10)
+        p.font.italic = True
+        p.font.color.rgb = RGBColor(100, 100, 100)  # Gray color for de-emphasis
+        p.alignment = PP_ALIGN.LEFT  # Left align to match table
+
     def _has_colored_background(self, image: Image.Image, threshold: int = 240) -> bool:
         """
         Check if an image has a colored (non-white) background

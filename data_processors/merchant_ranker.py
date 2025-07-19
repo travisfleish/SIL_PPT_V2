@@ -3,6 +3,8 @@
 Merchant Ranker - Fetches top communities and their top merchants from Snowflake
 Enhanced with OpenAI-powered merchant name standardization
 FIXED VERSION - properly overwrites MERCHANT column with standardized names
+UPDATED - removed all hardcoded team references
+FIXED - Changed COMMUNITY_GROUP to COMMUNITY to match actual column names
 """
 
 import pandas as pd
@@ -18,16 +20,25 @@ logger = logging.getLogger(__name__)
 class MerchantRanker:
     """Analyze and rank merchants by community with merchant name standardization"""
 
-    def __init__(self, team_view_prefix: str = "V_UTAH_JAZZ_SIL"):
+    def __init__(self, team_view_prefix: str, comparison_population: str = None):
         """
         Initialize merchant ranker
 
         Args:
-            team_view_prefix: Snowflake view prefix for the team
+            team_view_prefix: Snowflake view prefix for the team (REQUIRED)
+            comparison_population: Comparison population string from config
         """
+        if not team_view_prefix:
+            raise ValueError("team_view_prefix is required")
+
         self.team_view_prefix = team_view_prefix
         self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_ALL_TIME"
         self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
+
+        # Store comparison population - no default!
+        self.comparison_population = comparison_population
+        if not self.comparison_population:
+            logger.warning("No comparison_population provided - will need to pass explicitly to methods")
 
         # Initialize merchant name standardizer
         try:
@@ -111,24 +122,31 @@ class MerchantRanker:
             return df
 
     def get_top_communities(self,
-                            min_audience_pct: float = 0.20,  # Changed from 0.15 to 0.20
+                            min_audience_pct: float = 0.20,
                             top_n: int = 10,
-                            comparison_pop: str = "Local Gen Pop (Excl. Jazz)") -> pd.DataFrame:
+                            comparison_pop: str = None) -> pd.DataFrame:
         """
         Get top communities based on composite index
 
         Args:
             min_audience_pct: Minimum audience percentage threshold (20%)
             top_n: Number of top communities to return
-            comparison_pop: Comparison population name
+            comparison_pop: Comparison population name (uses instance default if not provided)
 
         Returns:
             DataFrame with top communities
         """
+        # Use instance comparison_population if not provided
+        if comparison_pop is None:
+            comparison_pop = self.comparison_population
+
+        if not comparison_pop:
+            raise ValueError("comparison_pop must be provided or set in instance")
+
         # Build the IN clause for approved communities
         if self.approved_communities:
             communities_list = "', '".join(self.approved_communities)
-            community_filter = f"AND COMMUNITY IN ('{communities_list}')"
+            community_filter = f"AND COMMUNITY IN ('{communities_list}')"  # FIXED: Changed from COMMUNITY_GROUP
         else:
             # If no approved communities loaded, use old exclusion logic
             logger.warning("No approved communities loaded, using exclusion logic")
@@ -136,7 +154,7 @@ class MerchantRanker:
 
         query = f"""
         SELECT 
-            COMMUNITY,
+            COMMUNITY,  
             PERC_AUDIENCE,
             PERC_INDEX,
             COMPOSITE_INDEX
@@ -152,6 +170,7 @@ class MerchantRanker:
 
         logger.info(f"Fetching top {top_n} communities from {self.community_view}")
         logger.info(f"Filter: PERC_AUDIENCE >= {min_audience_pct * 100}%")
+        logger.info(f"Comparison population: {comparison_pop}")
 
         # Import here to avoid circular imports
         from data_processors.snowflake_connector import query_to_dataframe
@@ -181,16 +200,16 @@ class MerchantRanker:
 
         conditions = []
         communities_list = "', '".join(excluded_communities)
-        conditions.append(f"AND COMMUNITY NOT IN ('{communities_list}')")
+        conditions.append(f"AND COMMUNITY NOT IN ('{communities_list}')")  # FIXED: Changed from COMMUNITY_GROUP
 
         for pattern in excluded_patterns:
-            conditions.append(f"AND UPPER(COMMUNITY) NOT LIKE '{pattern}'")
+            conditions.append(f"AND UPPER(COMMUNITY) NOT LIKE '{pattern}'")  # FIXED: Changed from COMMUNITY_GROUP
 
         return " ".join(conditions)
 
     def get_top_merchants_for_communities(self,
                                           communities: List[str],
-                                          comparison_pop: str = "Local Gen Pop (Excl. Jazz)",
+                                          comparison_pop: str = None,
                                           min_audience_count: int = 10,
                                           top_n_per_community: int = 1,
                                           exclude_live_entertainment_sports: bool = True) -> pd.DataFrame:
@@ -199,7 +218,7 @@ class MerchantRanker:
 
         Args:
             communities: List of community names
-            comparison_pop: Comparison population name
+            comparison_pop: Comparison population name (uses instance default if not provided)
             min_audience_count: Minimum audience count for merchant relevance
             top_n_per_community: Number of top merchants per community
             exclude_live_entertainment_sports: Exclude professional sports from Live Entertainment Seekers
@@ -207,6 +226,13 @@ class MerchantRanker:
         Returns:
             DataFrame with top merchants for each community (with standardized names)
         """
+        # Use instance comparison_population if not provided
+        if comparison_pop is None:
+            comparison_pop = self.comparison_population
+
+        if not comparison_pop:
+            raise ValueError("comparison_pop must be provided or set in instance")
+
         # Format communities for SQL
         communities_list = "', '".join(communities)
 
@@ -253,6 +279,7 @@ class MerchantRanker:
         """
 
         logger.info(f"Fetching top merchants for {len(communities)} communities")
+        logger.info(f"Comparison population: {comparison_pop}")
         if exclude_live_entertainment_sports:
             logger.info("Excluding professional sports subcategory from Live Entertainment Seekers")
         logger.info("Ranking merchants by PERC_AUDIENCE")
@@ -268,14 +295,16 @@ class MerchantRanker:
         return df
 
     def get_fan_wheel_data(self,
-                           min_audience_pct: float = 0.20,  # Changed from 0.15
-                           top_n_communities: int = 10) -> pd.DataFrame:
+                           min_audience_pct: float = 0.20,
+                           top_n_communities: int = 10,
+                           comparison_pop: str = None) -> pd.DataFrame:
         """
         Get data formatted for fan wheel visualization with standardized merchant names
 
         Args:
             min_audience_pct: Minimum audience percentage threshold (20%)
             top_n_communities: Number of communities to include
+            comparison_pop: Comparison population (uses instance default if not provided)
 
         Returns:
             DataFrame with one merchant per community for fan wheel (standardized names)
@@ -283,7 +312,8 @@ class MerchantRanker:
         # Get top communities
         communities_df = self.get_top_communities(
             min_audience_pct=min_audience_pct,
-            top_n=top_n_communities
+            top_n=top_n_communities,
+            comparison_pop=comparison_pop
         )
 
         if communities_df.empty:
@@ -293,8 +323,9 @@ class MerchantRanker:
         communities = communities_df['COMMUNITY'].tolist()
         merchants_df = self.get_top_merchants_for_communities(
             communities=communities,
+            comparison_pop=comparison_pop,
             top_n_per_community=1,
-            exclude_live_entertainment_sports=True  # This is the key change
+            exclude_live_entertainment_sports=True
         )
 
         # Merge community data with merchant data
@@ -350,21 +381,24 @@ class MerchantRanker:
             return merchant
 
     def get_community_index_data(self,
-                                 min_audience_pct: float = 0.20,  # Changed from 0.15
-                                 top_n: int = 10) -> pd.DataFrame:
+                                 min_audience_pct: float = 0.20,
+                                 top_n: int = 10,
+                                 comparison_pop: str = None) -> pd.DataFrame:
         """
         Get community data formatted for index bar chart
 
         Args:
             min_audience_pct: Minimum audience percentage threshold (20%)
             top_n: Number of communities to include
+            comparison_pop: Comparison population (uses instance default if not provided)
 
         Returns:
             DataFrame with community index data for bar chart
         """
         communities_df = self.get_top_communities(
             min_audience_pct=min_audience_pct,
-            top_n=top_n
+            top_n=top_n,
+            comparison_pop=comparison_pop
         )
 
         # Rename columns for chart
@@ -382,18 +416,25 @@ class MerchantRanker:
     def get_standardized_merchant_ranking(self,
                                           category_filter: str = None,
                                           top_n: int = 10,
-                                          comparison_pop: str = "Local Gen Pop (Excl. Jazz)") -> pd.DataFrame:
+                                          comparison_pop: str = None) -> pd.DataFrame:
         """
         Get top merchants with standardized names for any category/analysis
 
         Args:
             category_filter: Optional category filter (e.g., "Restaurants", "Auto")
             top_n: Number of top merchants to return
-            comparison_pop: Comparison population name
+            comparison_pop: Comparison population name (uses instance default if not provided)
 
         Returns:
             DataFrame with top merchants and standardized names
         """
+        # Use instance comparison_population if not provided
+        if comparison_pop is None:
+            comparison_pop = self.comparison_population
+
+        if not comparison_pop:
+            raise ValueError("comparison_pop must be provided or set in instance")
+
         # Build category filter
         category_clause = ""
         if category_filter:
@@ -423,67 +464,3 @@ class MerchantRanker:
         df = self.standardize_merchant_data(df)
 
         return df
-
-
-# Example usage
-if __name__ == "__main__":
-    # Test the enhanced merchant ranker
-    print("🧪 Testing Fixed MerchantRanker with Name Standardization")
-    print("=" * 60)
-
-    ranker = MerchantRanker()
-
-    # Test 1: Get fan wheel data (with standardized names)
-    print("\n📊 Testing Fan Wheel Data...")
-    try:
-        wheel_data = ranker.get_fan_wheel_data()
-        print("✅ Fan Wheel Data (with standardized names):")
-        print("Note: MERCHANT column should now show standardized names!")
-
-        display_cols = ['COMMUNITY', 'MERCHANT', 'behavior', 'PERC_AUDIENCE', 'PERC_INDEX']
-        if 'MERCHANT_ORIGINAL' in wheel_data.columns:
-            display_cols.insert(2, 'MERCHANT_ORIGINAL')
-
-        print(wheel_data[display_cols].head())
-
-        # Show comparison if original column exists
-        if 'MERCHANT_ORIGINAL' in wheel_data.columns:
-            print("\n🎯 Name Standardization Comparison:")
-            print("-" * 60)
-            for _, row in wheel_data.head(5).iterrows():
-                original = row['MERCHANT_ORIGINAL']
-                standardized = row['MERCHANT']
-                changed = "🔄" if original != standardized else "   "
-                print(f"   {original} → {standardized} {changed}")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-
-    # Test 2: Get standardized merchant ranking
-    print("\n🏪 Testing Standardized Merchant Ranking...")
-    try:
-        merchant_ranking = ranker.get_standardized_merchant_ranking(
-            category_filter="Restaurants",
-            top_n=5
-        )
-        print("✅ Top 5 Restaurant Merchants (standardized):")
-
-        if 'MERCHANT_ORIGINAL' in merchant_ranking.columns:
-            print("Original vs Standardized:")
-            for _, row in merchant_ranking.iterrows():
-                orig = row['MERCHANT_ORIGINAL']
-                std = row['MERCHANT']
-                changed = "🔄" if orig != std else "   "
-                print(f"   {orig} → {std} {changed}")
-        else:
-            print(merchant_ranking[['MERCHANT', 'PERC_AUDIENCE']].to_string(index=False))
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-
-    print(f"\n✅ Testing completed!")
-    print("\n📝 Key Changes:")
-    print("   ✅ MERCHANT column is now OVERWRITTEN with standardized names")
-    print("   ✅ Original names preserved in MERCHANT_ORIGINAL column")
-    print("   ✅ Fan wheel behavior text uses standardized names")
-    print("   ✅ All display logic sees standardized names in MERCHANT column")

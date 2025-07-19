@@ -5,6 +5,7 @@ for PowerPoint presentations. Handles large datasets (400K+ rows) efficiently.
 Now includes AI-powered insights generation and ethnicity processing.
 FIXED VERSION: Handles null values in ETHNIC_GROUP column.
 UPDATED: Filters out 'Retired' and 'Other' from occupation charts.
+UPDATED: Removed all hardcoded team references
 """
 
 import pandas as pd
@@ -25,13 +26,6 @@ logger = logging.getLogger(__name__)
 
 class DemographicsProcessor:
     """Process demographic data for sports team fan analysis"""
-
-    # Expected communities in the data
-    EXPECTED_COMMUNITIES = [
-        'Utah Jazz Fans',  # Or dynamically set based on team
-        'Local Gen Pop (Excl. Jazz)',  # Or 'Local Gen Pop (Excl. {team})'
-        'NBA Fans'  # Or '{league} Fans'
-    ]
 
     # Demographic categories expected in the full dataset
     GENERATION_ORDER = [
@@ -74,9 +68,10 @@ class DemographicsProcessor:
     ETHNICITY_ORDER = ['White', 'Hispanic', 'African American', 'Asian', 'Other']
 
     def __init__(self, data_source: Union[str, Path, pd.DataFrame],
-                 team_name: str = "Utah Jazz",
-                 league: str = "NBA",
-                 use_ai_insights: bool = True):
+                 team_name: str,
+                 league: str,
+                 use_ai_insights: bool = True,
+                 comparison_population: str = None):
         """
         Initialize the processor with data and team configuration
 
@@ -85,6 +80,7 @@ class DemographicsProcessor:
             team_name: Name of the team (e.g., "Utah Jazz")
             league: League name (e.g., "NBA")
             use_ai_insights: Whether to use AI for insight generation
+            comparison_population: Exact comparison population name from config
         """
         self.team_name = team_name
         self.league = league
@@ -94,11 +90,22 @@ class DemographicsProcessor:
             logger.warning("AI insights requested but no OpenAI API key found. Using template insights.")
 
         # Update expected communities based on team
-        self.communities = [
-            f'{team_name} Fans',
-            f'Local Gen Pop (Excl. {team_name.split()[-1]})',  # Gets last word (Jazz, Cowboys, etc)
-            f'{league} Fans'
-        ]
+        if comparison_population:
+            self.communities = [
+                f'{team_name} Fans',
+                comparison_population,  # USE THE EXACT VALUE FROM CONFIG
+                f'{league} Fans'
+            ]
+            self.comparison_population = comparison_population
+        else:
+            # Fallback to the old logic if not provided
+            self.communities = [
+                f'{team_name} Fans',
+                f'Local Gen Pop (Excl. {team_name.split()[-1]})',  # Gets last word (Jazz, Cowboys, etc)
+                f'{league} Fans'
+            ]
+            self.comparison_population = self.communities[1]
+            logger.warning(f"No comparison_population provided, using fallback: {self.comparison_population}")
 
         # Load and validate data
         self.data = self._load_data(data_source)
@@ -385,18 +392,22 @@ class DemographicsProcessor:
             if null_count > 0:
                 self.data = original_data
 
-            # CRITICAL: Filter out Local Gen Pop community due to null values
-            local_gen_pop_key = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
+            # CRITICAL: Check each community's ethnicity data quality
+            communities_to_exclude = []
+            for community in self.communities:
+                if community in raw_percentages:
+                    gen_pop_data = raw_percentages[community]
+                    # If all or most of the data is Unknown, exclude this community
+                    unknown_percentage = gen_pop_data.get('Unknown', 0)
+                    if unknown_percentage > 90:  # If more than 90% is Unknown/null
+                        logger.warning(
+                            f"Excluding '{community}' from ethnicity chart due to null values ({unknown_percentage:.1f}% unknown)")
+                        communities_to_exclude.append(community)
 
-            # Check if local gen pop has only Unknown/null ethnicity data
-            if local_gen_pop_key in raw_percentages:
-                gen_pop_data = raw_percentages[local_gen_pop_key]
-                # If all or most of the data is Unknown, exclude this community
-                unknown_percentage = gen_pop_data.get('Unknown', 0)
-                if unknown_percentage > 90:  # If more than 90% is Unknown/null
-                    logger.warning(
-                        f"Excluding '{local_gen_pop_key}' from ethnicity chart due to null values ({unknown_percentage:.1f}% unknown)")
-                    del raw_percentages[local_gen_pop_key]
+            # Remove excluded communities from raw_percentages
+            for community in communities_to_exclude:
+                if community in raw_percentages:
+                    del raw_percentages[community]
 
             # Filter communities list for this chart
             ethnicity_communities = [c for c in self.communities if c in raw_percentages]
@@ -452,7 +463,7 @@ class DemographicsProcessor:
                 'communities': ethnicity_communities,  # Use filtered communities list
                 'data': normalized,  # Use normalized data instead of aggregated
                 'insights': self._generate_ethnicity_insights(normalized),
-                'note': 'Percentages based on known ethnicities only. Local Gen Pop excluded due to insufficient data.'
+                'note': 'Percentages based on known ethnicities only. Communities with insufficient data excluded.'
             }
 
         except Exception as e:
@@ -523,15 +534,16 @@ class DemographicsProcessor:
                 summary_parts.append('who are working professionals')
 
             if summary_parts:
-                return f"{self.team_name} fans are {', and '.join(summary_parts)} versus the Utah gen pop."
+                # Use the actual comparison population from config
+                return f"{self.team_name} fans are {', and '.join(summary_parts)} versus the {self.comparison_population}."
 
-        return f"{self.team_name} fans have unique demographic characteristics compared to the general population and NBA average fans."
+        return f"{self.team_name} fans have unique demographic characteristics compared to the general population and {self.league} average fans."
 
     def _generate_generation_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for generation distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
+        gen_pop = self.communities[1]  # Use actual comparison population from config
 
         if fan_community in percentages and gen_pop in percentages:
             # Check if fans are younger
@@ -549,7 +561,7 @@ class DemographicsProcessor:
         """Generate insights for income distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
+        gen_pop = self.communities[1]  # Use actual comparison population from config
 
         if fan_community in percentages and gen_pop in percentages:
             # Check higher income brackets
@@ -567,7 +579,7 @@ class DemographicsProcessor:
         """Generate insights for occupation distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
+        gen_pop = self.communities[1]  # Use actual comparison population from config
 
         if fan_community in percentages and gen_pop in percentages:
             # Check professional categories
@@ -585,7 +597,7 @@ class DemographicsProcessor:
         """Generate insights for children distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = f'Local Gen Pop (Excl. {self.team_name.split()[-1]})'
+        gen_pop = self.communities[1]  # Use actual comparison population from config
 
         if fan_community in percentages and gen_pop in percentages:
             fan_with_children = percentages[fan_community].get('At least 1 Child in HH', 0)
@@ -643,7 +655,7 @@ class DemographicsProcessor:
         try:
             # Collect data for all three communities
             team_fans = f"{self.team_name} Fans"
-            gen_pop = f"Local Gen Pop (Excl. {self.team_name.split()[-1]})"
+            gen_pop = self.communities[1]  # Use actual comparison population from config
             league_fans = f"{self.league} Fans"
 
             # Build comprehensive data summary

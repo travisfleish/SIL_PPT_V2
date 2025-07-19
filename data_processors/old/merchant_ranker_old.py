@@ -1,11 +1,14 @@
 # data_processors/merchant_ranker.py
 """
 Merchant Ranker - Fetches top communities and their top merchants from Snowflake
+Enhanced with OpenAI-powered merchant name standardization
+FIXED VERSION - properly overwrites MERCHANT column with standardized names
 """
 
 import pandas as pd
 import yaml
 import logging
+import asyncio
 from typing import Dict, List, Optional
 from pathlib import Path
 
@@ -13,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class MerchantRanker:
-    """Analyze and rank merchants by community"""
+    """Analyze and rank merchants by community with merchant name standardization"""
 
     def __init__(self, team_view_prefix: str = "V_UTAH_JAZZ_SIL"):
         """
@@ -25,6 +28,15 @@ class MerchantRanker:
         self.team_view_prefix = team_view_prefix
         self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_ALL_TIME"
         self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
+
+        # Initialize merchant name standardizer
+        try:
+            from utils.merchant_name_standardizer import MerchantNameStandardizer
+            self.standardizer = MerchantNameStandardizer(cache_enabled=True)
+            logger.info("✅ Merchant name standardization enabled")
+        except ImportError:
+            logger.warning("⚠️ MerchantNameStandardizer not available - names will not be standardized")
+            self.standardizer = None
 
         # Load approved communities
         self._load_approved_communities()
@@ -53,6 +65,50 @@ class MerchantRanker:
             # Fallback to empty set
             self.approved_communities = set()
             self.community_actions = {}
+
+    def standardize_merchant_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        FIXED VERSION: Standardize merchant names and OVERWRITE the original MERCHANT column
+
+        Args:
+            df: DataFrame with 'MERCHANT' column
+
+        Returns:
+            DataFrame with standardized merchant names (MERCHANT column is OVERWRITTEN)
+        """
+        if 'MERCHANT' not in df.columns or df.empty or self.standardizer is None:
+            return df
+
+        try:
+            logger.info(f"🔄 Standardizing merchant names for {len(df['MERCHANT'].unique())} unique merchants...")
+
+            # Get unique names
+            unique_names = df['MERCHANT'].dropna().unique().tolist()
+
+            if not unique_names:
+                return df
+
+            # Preserve original names BEFORE overwriting
+            df['MERCHANT_ORIGINAL'] = df['MERCHANT'].copy()
+
+            # Get standardized mapping
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                name_mapping = loop.run_until_complete(self.standardizer.standardize_merchants(unique_names))
+            finally:
+                loop.close()
+
+            # OVERWRITE THE MERCHANT COLUMN (KEY FIX)
+            df['MERCHANT'] = df['MERCHANT'].map(name_mapping).fillna(df['MERCHANT'])
+
+            logger.info("✅ Merchant name standardization completed")
+            return df
+
+        except Exception as e:
+            logger.warning(f"⚠️ Merchant name standardization failed: {e}")
+            return df
 
     def get_top_communities(self,
                             min_audience_pct: float = 0.20,  # Changed from 0.15 to 0.20
@@ -139,7 +195,7 @@ class MerchantRanker:
                                           top_n_per_community: int = 1,
                                           exclude_live_entertainment_sports: bool = True) -> pd.DataFrame:
         """
-        Get top merchants for specified communities
+        Get top merchants for specified communities with standardized names
 
         Args:
             communities: List of community names
@@ -149,7 +205,7 @@ class MerchantRanker:
             exclude_live_entertainment_sports: Exclude professional sports from Live Entertainment Seekers
 
         Returns:
-            DataFrame with top merchants for each community
+            DataFrame with top merchants for each community (with standardized names)
         """
         # Format communities for SQL
         communities_list = "', '".join(communities)
@@ -206,20 +262,23 @@ class MerchantRanker:
         df = query_to_dataframe(query)
         logger.info(f"Found {len(df)} merchant-community pairs")
 
+        # STANDARDIZE MERCHANT NAMES (MERCHANT column will be overwritten)
+        df = self.standardize_merchant_data(df)
+
         return df
 
     def get_fan_wheel_data(self,
                            min_audience_pct: float = 0.20,  # Changed from 0.15
                            top_n_communities: int = 10) -> pd.DataFrame:
         """
-        Get data formatted for fan wheel visualization
+        Get data formatted for fan wheel visualization with standardized merchant names
 
         Args:
             min_audience_pct: Minimum audience percentage threshold (20%)
             top_n_communities: Number of communities to include
 
         Returns:
-            DataFrame with one merchant per community for fan wheel
+            DataFrame with one merchant per community for fan wheel (standardized names)
         """
         # Get top communities
         communities_df = self.get_top_communities(
@@ -251,6 +310,7 @@ class MerchantRanker:
         )
 
         # Generate behavior text using approved communities action verbs
+        # Now uses standardized merchant names for behavior text
         result['behavior'] = result.apply(
             lambda row: self._generate_behavior_from_community(row['COMMUNITY'], row['MERCHANT']),
             axis=1
@@ -261,10 +321,11 @@ class MerchantRanker:
     def _generate_behavior_from_community(self, community: str, merchant: str) -> str:
         """
         Generate behavior text using community action verb from YAML
+        Now uses standardized merchant names for better display
 
         Args:
             community: Community name
-            merchant: Merchant name
+            merchant: Merchant name (standardized)
 
         Returns:
             Behavior text formatted for fan wheel
@@ -318,17 +379,111 @@ class MerchantRanker:
 
         return communities_df
 
+    def get_standardized_merchant_ranking(self,
+                                          category_filter: str = None,
+                                          top_n: int = 10,
+                                          comparison_pop: str = "Local Gen Pop (Excl. Jazz)") -> pd.DataFrame:
+        """
+        Get top merchants with standardized names for any category/analysis
+
+        Args:
+            category_filter: Optional category filter (e.g., "Restaurants", "Auto")
+            top_n: Number of top merchants to return
+            comparison_pop: Comparison population name
+
+        Returns:
+            DataFrame with top merchants and standardized names
+        """
+        # Build category filter
+        category_clause = ""
+        if category_filter:
+            category_clause = f"AND UPPER(CATEGORY) LIKE '%{category_filter.upper()}%'"
+
+        query = f"""
+        SELECT 
+            MERCHANT,
+            CATEGORY,
+            SUBCATEGORY,
+            PERC_INDEX,
+            PERC_AUDIENCE,
+            AUDIENCE_TOTAL_SPEND,
+            AUDIENCE_COUNT
+        FROM {self.merchant_view}
+        WHERE 
+            COMPARISON_POPULATION = '{comparison_pop}'
+            {category_clause}
+        ORDER BY PERC_AUDIENCE DESC
+        LIMIT {top_n}
+        """
+
+        from data_processors.snowflake_connector import query_to_dataframe
+        df = query_to_dataframe(query)
+
+        # STANDARDIZE MERCHANT NAMES (MERCHANT column will be overwritten)
+        df = self.standardize_merchant_data(df)
+
+        return df
+
 
 # Example usage
 if __name__ == "__main__":
+    # Test the enhanced merchant ranker
+    print("🧪 Testing Fixed MerchantRanker with Name Standardization")
+    print("=" * 60)
+
     ranker = MerchantRanker()
 
-    # Get fan wheel data
-    wheel_data = ranker.get_fan_wheel_data()
-    print("Fan Wheel Data:")
-    print(wheel_data[['COMMUNITY', 'MERCHANT', 'behavior', 'PERC_AUDIENCE', 'PERC_INDEX']])
+    # Test 1: Get fan wheel data (with standardized names)
+    print("\n📊 Testing Fan Wheel Data...")
+    try:
+        wheel_data = ranker.get_fan_wheel_data()
+        print("✅ Fan Wheel Data (with standardized names):")
+        print("Note: MERCHANT column should now show standardized names!")
 
-    # Get community index data
-    community_data = ranker.get_community_index_data()
-    print("\nCommunity Index Data:")
-    print(community_data[['Community', 'Audience_Index']])
+        display_cols = ['COMMUNITY', 'MERCHANT', 'behavior', 'PERC_AUDIENCE', 'PERC_INDEX']
+        if 'MERCHANT_ORIGINAL' in wheel_data.columns:
+            display_cols.insert(2, 'MERCHANT_ORIGINAL')
+
+        print(wheel_data[display_cols].head())
+
+        # Show comparison if original column exists
+        if 'MERCHANT_ORIGINAL' in wheel_data.columns:
+            print("\n🎯 Name Standardization Comparison:")
+            print("-" * 60)
+            for _, row in wheel_data.head(5).iterrows():
+                original = row['MERCHANT_ORIGINAL']
+                standardized = row['MERCHANT']
+                changed = "🔄" if original != standardized else "   "
+                print(f"   {original} → {standardized} {changed}")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+    # Test 2: Get standardized merchant ranking
+    print("\n🏪 Testing Standardized Merchant Ranking...")
+    try:
+        merchant_ranking = ranker.get_standardized_merchant_ranking(
+            category_filter="Restaurants",
+            top_n=5
+        )
+        print("✅ Top 5 Restaurant Merchants (standardized):")
+
+        if 'MERCHANT_ORIGINAL' in merchant_ranking.columns:
+            print("Original vs Standardized:")
+            for _, row in merchant_ranking.iterrows():
+                orig = row['MERCHANT_ORIGINAL']
+                std = row['MERCHANT']
+                changed = "🔄" if orig != std else "   "
+                print(f"   {orig} → {std} {changed}")
+        else:
+            print(merchant_ranking[['MERCHANT', 'PERC_AUDIENCE']].to_string(index=False))
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+    print(f"\n✅ Testing completed!")
+    print("\n📝 Key Changes:")
+    print("   ✅ MERCHANT column is now OVERWRITTEN with standardized names")
+    print("   ✅ Original names preserved in MERCHANT_ORIGINAL column")
+    print("   ✅ Fan wheel behavior text uses standardized names")
+    print("   ✅ All display logic sees standardized names in MERCHANT column")
