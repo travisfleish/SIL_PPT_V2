@@ -4,6 +4,7 @@ Generate demographic overview slide with AI-generated insights
 Uses the blue SIL layout (#11) with team branding and AI insights text
 FIXED VERSION: No RGBColor transparency errors, works with template layouts
 Updated to use Overpass font for insights text
+Enhanced with dynamic fan image loading from assets
 """
 
 from pathlib import Path
@@ -72,8 +73,8 @@ class DemographicOverviewSlide(BaseSlide):
         # Add AI insights text
         self._add_insights_text(slide, ai_insights)
 
-        # Add image placeholder
-        self._add_image_placeholder(slide)
+        # Add fan image (replaces placeholder)
+        self._add_fan_image(slide, team_name)
 
         logger.info(f"Generated demographic overview slide for {team_name}")
         return self.presentation
@@ -174,8 +175,101 @@ class DemographicOverviewSlide(BaseSlide):
             run.font.color.rgb = RGBColor(255, 255, 255)  # White text on blue background
             run.font.bold = False
 
-    def _add_image_placeholder(self, slide):
-        """Add a circular placeholder for team/fan image"""
+    def _add_fan_image(self, slide, team_name: str):
+        """Add the team fan image from assets directory"""
+        # Convert team name to filename format (remove spaces)
+        team_filename = team_name.replace(" ", "")
+
+        # Build the image path
+        # Try multiple ways to find the project root
+        current_file = Path(__file__).resolve()
+
+        # Method 1: If we're in slide_generators/, go up one level
+        if current_file.parent.name == 'slide_generators':
+            project_root = current_file.parent.parent
+        # Method 2: If we're deeper (e.g., in a submodule), go up until we find 'assets'
+        else:
+            project_root = current_file.parent
+            while project_root.parent != project_root:  # Not at filesystem root
+                if (project_root / 'assets').exists():
+                    break
+                project_root = project_root.parent
+
+        logger.info(f"Project root resolved to: {project_root}")
+
+        # Try multiple common image extensions without the extension in the base name
+        image_extensions = ['.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG']
+        image_path = None
+
+        base_filename = f"{team_filename}_Fanpic"
+        fans_dir = project_root / "assets" / "logos" / "fans"
+
+        logger.info(f"Looking for fan image in: {fans_dir}")
+        logger.info(f"Base filename: {base_filename}")
+
+        for ext in image_extensions:
+            potential_path = fans_dir / f"{base_filename}{ext}"
+            logger.debug(f"Checking: {potential_path}")
+            if potential_path.exists():
+                image_path = potential_path
+                logger.info(f"Found fan image at: {image_path}")
+                break
+
+        if image_path and image_path.exists():
+            try:
+                # Add the image as a circular shape
+                # Position on the right side, matching the placeholder location
+                left = Inches(7.167)
+                top = Inches(1.5)
+                width = Inches(5)
+                height = Inches(5)
+
+                # Add the picture
+                picture = slide.shapes.add_picture(
+                    str(image_path),
+                    left, top, width, height
+                )
+
+                # Apply circular crop to the image
+                # This creates a circular mask effect
+                picture.crop_left = 0
+                picture.crop_right = 0
+                picture.crop_top = 0
+                picture.crop_bottom = 0
+
+                # Note: PowerPoint doesn't directly support circular cropping via python-pptx
+                # The image will be square/rectangular, but we can add a circular border
+
+                # Add a white circular border overlay
+                border_circle = slide.shapes.add_shape(
+                    MSO_SHAPE.OVAL,
+                    left, top, width, height
+                )
+
+                # Make the circle transparent with white border
+                border_circle.fill.background()  # Transparent fill
+                border_circle.line.color.rgb = RGBColor(255, 255, 255)
+                border_circle.line.width = Pt(3)
+
+                # Move border to front
+                slide.shapes._spTree.remove(border_circle._element)
+                slide.shapes._spTree.append(border_circle._element)
+
+                logger.info(f"Successfully added fan image for {team_name}")
+
+            except Exception as e:
+                logger.error(f"Error adding fan image: {str(e)}")
+                # Fall back to placeholder if image fails
+                self._add_image_placeholder_fallback(slide)
+        else:
+            logger.warning(f"Fan image not found for {team_name}")
+            logger.warning(f"Searched in: {fans_dir}")
+            logger.warning(f"Expected filename pattern: {base_filename}.[png/jpg/jpeg]")
+            # Add fallback placeholder
+            self._add_image_placeholder_fallback(slide)
+
+    def _add_image_placeholder_fallback(self, slide):
+        """Add a circular placeholder for team/fan image as fallback"""
         # Create circular placeholder on the right side
         placeholder_circle = slide.shapes.add_shape(
             MSO_SHAPE.OVAL,

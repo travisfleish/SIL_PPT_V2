@@ -464,6 +464,21 @@ def get_job_status(job_id):
     return jsonify(jobs[job_id])
 
 
+@app.route('/api/jobs/<job_id>/status', methods=['GET'])
+def get_job_status_simple(job_id):
+    """Simple status endpoint for polling fallback"""
+    if job_id not in jobs:
+        return jsonify({'error': 'Job not found'}), 404
+
+    job = jobs[job_id]
+    return jsonify({
+        'status': job['status'],
+        'progress': job['progress'],
+        'message': job['message'],
+        'error': job.get('error')
+    })
+
+
 @app.route('/api/jobs/<job_id>/progress', methods=['GET'])
 def get_job_progress_stream(job_id):
     """Server-sent events stream for job progress"""
@@ -471,29 +486,77 @@ def get_job_progress_stream(job_id):
         return jsonify({'error': 'Job not found'}), 404
 
     def generate():
-        # Send initial status
+        # Send initial status immediately
         yield f"data: {json.dumps(jobs[job_id])}\n\n"
 
-        # Wait for updates
+        # Get the queue for this job
         job_queue = job_queues.get(job_id)
-        if job_queue:
-            while True:
-                try:
-                    # Wait for update with timeout
-                    update = job_queue.get(timeout=30)
 
-                    # Send current job state
-                    yield f"data: {json.dumps(jobs[job_id])}\n\n"
+        # Keep track of last sent data to avoid duplicates
+        last_status = None
+        retry_count = 0
+        max_retries = 120  # 2 minutes max
 
-                    # Check if job is complete
-                    if jobs[job_id]['status'] in ['completed', 'failed']:
-                        break
+        while retry_count < max_retries:
+            try:
+                current_job = jobs.get(job_id)
+                if not current_job:
+                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                    break
 
-                except queue.Empty:
-                    # Send heartbeat
-                    yield f"data: {json.dumps({'heartbeat': True})}\n\n"
+                # Send update if status changed
+                current_status = current_job.get('status')
+                if current_status != last_status:
+                    yield f"data: {json.dumps(current_job)}\n\n"
+                    last_status = current_status
 
-    return Response(generate(), mimetype='text/event-stream')
+                # Check if job is complete
+                if current_status in ['completed', 'failed']:
+                    # Send final update
+                    yield f"data: {json.dumps(current_job)}\n\n"
+                    break
+
+                # Try to get updates from queue
+                if job_queue:
+                    try:
+                        # Non-blocking get
+                        update = job_queue.get_nowait()
+                        # Send current state after update
+                        yield f"data: {json.dumps(jobs[job_id])}\n\n"
+                    except queue.Empty:
+                        pass
+
+                # Send heartbeat to keep connection alive
+                yield f": heartbeat\n\n"  # SSE comment to keep alive
+
+                # Sleep briefly
+                import time
+                time.sleep(1)
+                retry_count += 1
+
+            except Exception as e:
+                logger.error(f"SSE error for job {job_id}: {str(e)}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                break
+
+    # Create response with proper headers
+    response = Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',  # Disable Nginx buffering
+            'Connection': 'keep-alive',
+            'Content-Type': 'text/event-stream',
+            'Access-Control-Allow-Origin': '*',
+            'Transfer-Encoding': 'chunked'
+        }
+    )
+
+    # Ensure response is not buffered
+    response.direct_passthrough = True
+
+    return response
 
 
 @app.route('/api/jobs/<job_id>/download', methods=['GET'])
