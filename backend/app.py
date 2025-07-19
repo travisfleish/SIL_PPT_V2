@@ -12,7 +12,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, send_from_directory
 from flask_cors import CORS
 import threading
 import queue
@@ -33,6 +33,12 @@ from utils.team_config_manager import TeamConfigManager
 from report_builder.pptx_builder import PowerPointBuilder
 from data_processors.snowflake_connector import test_connection
 from data_processors.merchant_ranker import MerchantRanker
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
@@ -156,6 +162,48 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
                               error=str(e),
                               completed_at=datetime.now().isoformat())
 
+
+# ===== FRONTEND SERVING ROUTES =====
+# These routes must come before the API routes
+
+@app.route('/')
+def serve_frontend():
+    """Serve the main frontend HTML file"""
+    static_path = Path(__file__).parent / 'static' / 'index.html'
+    if static_path.exists():
+        return send_file(str(static_path))
+    else:
+        logger.error(f"Frontend file not found at: {static_path}")
+        return jsonify({'error': 'Frontend not found. Please ensure index.html is in backend/static/'}), 404
+
+
+@app.route('/assets/<path:path>')
+def serve_assets(path):
+    """Serve asset files (images, etc.)"""
+    assets_dir = Path(__file__).parent / 'assets'
+    if not assets_dir.exists():
+        logger.error(f"Assets directory not found at: {assets_dir}")
+        return jsonify({'error': 'Assets directory not found'}), 404
+
+    try:
+        return send_from_directory(str(assets_dir), path)
+    except FileNotFoundError:
+        logger.error(f"Asset not found: {path}")
+        return jsonify({'error': f'Asset not found: {path}'}), 404
+
+
+# Optional: Serve any other static files if needed
+@app.route('/static/<path:path>')
+def serve_static(path):
+    """Serve other static files if needed"""
+    static_dir = Path(__file__).parent / 'static'
+    try:
+        return send_from_directory(str(static_dir), path)
+    except FileNotFoundError:
+        return jsonify({'error': f'Static file not found: {path}'}), 404
+
+
+# ===== API ROUTES =====
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

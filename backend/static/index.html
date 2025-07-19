@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sports Innovation Lab - PowerPoint Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Red Hat Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-image: url('/assets/logos/general/HeroImage.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            position: relative;
+            padding: 1rem;
+        }
+
+        /* Add overlay to ensure readability */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: -1;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            width: 100%;
+            max-width: 900px;  /* Reduced from 1000px */
+            max-height: 85vh;   /* Reduced from 90vh */
+            overflow-y: auto;
+            overflow-x: hidden;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom scrollbar */
+        .container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .header {
+            background: #000000;
+            padding: 1.25rem 1.5rem;  /* Further reduced */
+            text-align: center;
+            color: white;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .header-logo {
+            width: 120px;  /* Reduced from 150px */
+            height: auto;
+            margin-bottom: 0.75rem;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        }
+
+        .header h1 {
+            font-size: 1.5rem;  /* Further reduced */
+            margin-bottom: 0.25rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;  /* Reduced from 1.1rem */
+        }
+
+        .content {
+            padding: 1.25rem 1.5rem;  /* Further reduced */
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .form-section {
+            margin-bottom: 1.25rem;  /* Further reduced */
+        }
+
+        .form-group {
+            margin-bottom: 1rem;  /* Further reduced */
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;  /* Reduced from 0.5rem */
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.95rem;  /* Slightly smaller */
+        }
+
+        select, input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;  /* Reduced vertical padding */
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.95rem;  /* Slightly smaller */
+            transition: all 0.3s;
+            background: white;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 0.75rem;  /* Reduced from 1rem */
+            margin-top: 0.4rem;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            padding: 0.6rem 0.9rem;  /* Reduced padding */
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            font-size: 0.95rem;
+        }
+
+        .radio-option:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .radio-option input[type="radio"] {
+            width: auto;
+            margin-right: 0.4rem;
+        }
+
+        .radio-option.selected {
+            border-color: #667eea;
+            background: #eef2ff;
+        }
+
+        .team-info {
+            background: #eef2ff;
+            padding: 0.75rem;  /* Reduced from 1rem */
+            border-radius: 8px;
+            margin-top: 0.75rem;
+            display: none;
+        }
+
+        .team-info h4 {
+            color: #4a5568;
+            margin-bottom: 0.3rem;
+            font-size: 0.95rem;
+        }
+
+        .team-info p {
+            color: #718096;
+            font-size: 0.85rem;  /* Reduced from 0.9rem */
+        }
+
+        .btn {
+            background: #0066FF;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;  /* Reduced padding */
+            font-size: 1rem;  /* Reduced from 1.1rem */
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 0.75rem;  /* Add spacing between buttons */
+        }
+
+        .btn:last-child {
+            margin-bottom: 0;
+        }
+
+        .btn:hover {
+            background: #0052CC;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 102, 255, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-preview {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .btn-secondary {
+            background: #718096;
+        }
+
+        .progress-section {
+            display: none;
+            text-align: center;
+            padding: 1.5rem;  /* Reduced from 2rem */
+        }
+
+        .progress-bar-container {
+            background: #e2e8f0;
+            height: 6px;  /* Reduced from 8px */
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-message {
+            color: #4a5568;
+            font-size: 1rem;  /* Reduced from 1.1rem */
+            margin-bottom: 0.4rem;
+        }
+
+        .progress-details {
+            color: #718096;
+            font-size: 0.85rem;  /* Reduced from 0.9rem */
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 0.75rem;  /* Reduced from 1rem */
+            border-radius: 8px;
+            margin-top: 0.75rem;
+            display: none;
+            font-size: 0.9rem;
+        }
+
+        .success-message {
+            background: #c6f6d5;
+            color: #276749;
+            padding: 0.75rem;  /* Reduced from 1rem */
+            border-radius: 8px;
+            margin-top: 0.75rem;
+            display: none;
+            font-size: 0.9rem;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem;  /* Reduced from 0.75rem */
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 1rem;  /* Reduced from 1.5rem */
+            font-size: 0.85rem;  /* Reduced from 0.9rem */
+        }
+
+        .status-indicator {
+            width: 8px;  /* Reduced from 10px */
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.4rem;
+            background: #cbd5e0;
+        }
+
+        .status-indicator.connected {
+            background: #48bb78;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.disconnected {
+            background: #f56565;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;  /* Reduced from 20px */
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* League mode specific styles */
+        #leagueSelect select[multiple] {
+            padding: 0.5rem;
+        }
+
+        #leagueSelect small {
+            display: block;
+            margin-top: 0.4rem;
+            color: #718096;
+            font-size: 0.8rem;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                max-width: 100%;
+                max-height: 90vh;
+                margin: 0.5rem;
+            }
+
+            .header {
+                padding: 1rem;
+            }
+
+            .content {
+                padding: 1rem;
+            }
+
+            .btn {
+                padding: 0.7rem 1.2rem;
+                font-size: 0.95rem;
+            }
+        }
+
+        /* Code block in success message */
+        code {
+            background: #e2e8f0;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/assets/logos/general/SIL_white.png" alt="Sports Innovation Lab" class="header-logo">
+            <h1>Insights Report Generator</h1>
+            <p>Sports Innovation Lab - Internal</p>
+        </div>
+
+        <div class="content">
+            <div class="connection-status">
+                <span class="status-indicator" id="connectionIndicator"></span>
+                <span id="connectionText">Checking connection...</span>
+            </div>
+
+            <div id="mainForm">
+                <div class="form-section">
+                    <div class="form-group">
+                        <label>Select By:</label>
+                        <div class="radio-group">
+                            <div class="radio-option selected" onclick="selectMode('team')">
+                                <input type="radio" name="selectMode" value="team" checked>
+                                <label>Team</label>
+                            </div>
+                            <div class="radio-option" onclick="selectMode('league')">
+                                <input type="radio" name="selectMode" value="league">
+                                <label>League</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="teamSelect">
+                        <label for="team">Select Team:</label>
+                        <select id="team" onchange="updateTeamInfo()">
+                            <option value="">Loading teams...</option>
+                        </select>
+                        <div class="team-info" id="teamInfo">
+                            <h4>Team Details</h4>
+                            <p id="teamDetails"></p>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="leagueSelect" style="display: none;">
+                        <label for="league">Select League:</label>
+                        <select id="league" onchange="filterTeamsByLeague()">
+                            <option value="">Loading leagues...</option>
+                        </select>
+                        <div class="form-group" style="margin-top: 0.75rem;">
+                            <label for="leagueTeams">Teams in League:</label>
+                            <select id="leagueTeams" multiple size="6">
+                                <option value="">Select a league first</option>
+                            </select>
+                            <small>Hold Ctrl/Cmd to select multiple teams</small>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn" onclick="generateReport()" id="generateBtn">
+                    Generate PowerPoint Report
+                </button>
+
+                <button class="btn btn-preview" onclick="downloadBehaviorsSlide()" id="previewBtn">
+                    Download Behaviors Slide
+                </button>
+
+                <button class="btn btn-secondary" onclick="testConnection()">
+                    Test Database Connection
+                </button>
+            </div>
+
+            <div class="progress-section" id="progressSection">
+                <h3 class="status-message" id="statusMessage">Initializing...</h3>
+                <p class="progress-details" id="progressDetails">Starting generation process</p>
+
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+
+                <p style="color: #718096; margin-top: 0.75rem; font-size: 0.85rem;">
+                    Job ID: <code id="jobId"></code>
+                </p>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:5001/api'
+    : '/api';
+
+
+        // State
+        let teams = [];
+        let leagues = [];
+        let currentMode = 'team';
+        let currentJob = null;
+        let eventSource = null;
+
+        // Initialize
+        window.onload = async function() {
+            await checkConnection();
+            await loadTeams();
+            await loadLeagues();
+        };
+
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/test-connection`);
+                const data = await response.json();
+
+                const indicator = document.getElementById('connectionIndicator');
+                const text = document.getElementById('connectionText');
+
+                if (data.connected) {
+                    indicator.classList.add('connected');
+                    text.textContent = 'Connected to Snowflake';
+                } else {
+                    indicator.classList.add('disconnected');
+                    text.textContent = 'Disconnected - Check database connection';
+                }
+            } catch (error) {
+                console.error('Connection check failed:', error);
+                document.getElementById('connectionText').textContent = 'Connection check failed';
+            }
+        }
+
+        async function loadTeams() {
+            try {
+                const response = await fetch(`${API_BASE}/teams`);
+                const data = await response.json();
+
+                teams = data.teams;
+
+                const teamSelect = document.getElementById('team');
+                teamSelect.innerHTML = '<option value="">-- Select a team --</option>';
+
+                teams.forEach(team => {
+                    const option = document.createElement('option');
+                    option.value = team.key;
+                    option.textContent = team.name;
+                    option.dataset.league = team.league;
+                    teamSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load teams:', error);
+                showError('Failed to load teams. Please check the server.');
+            }
+        }
+
+        async function loadLeagues() {
+            try {
+                const response = await fetch(`${API_BASE}/leagues`);
+                const data = await response.json();
+
+                leagues = data.leagues;
+
+                const leagueSelect = document.getElementById('league');
+                leagueSelect.innerHTML = '<option value="">-- Select a league --</option>';
+
+                leagues.forEach(league => {
+                    const option = document.createElement('option');
+                    option.value = league;
+                    option.textContent = league;
+                    leagueSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load leagues:', error);
+            }
+        }
+
+        function selectMode(mode) {
+            currentMode = mode;
+
+            // Update UI
+            document.querySelectorAll('.radio-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+
+            // Toggle sections
+            document.getElementById('teamSelect').style.display = mode === 'team' ? 'block' : 'none';
+            document.getElementById('leagueSelect').style.display = mode === 'league' ? 'block' : 'none';
+        }
+
+        function updateTeamInfo() {
+            const teamSelect = document.getElementById('team');
+            const selectedTeam = teams.find(t => t.key === teamSelect.value);
+
+            if (selectedTeam) {
+                document.getElementById('teamInfo').style.display = 'block';
+                document.getElementById('teamDetails').textContent =
+                    `League: ${selectedTeam.league} | View Prefix: ${selectedTeam.view_prefix}`;
+            } else {
+                document.getElementById('teamInfo').style.display = 'none';
+            }
+        }
+
+        function filterTeamsByLeague() {
+            const selectedLeague = document.getElementById('league').value;
+            const leagueTeamsSelect = document.getElementById('leagueTeams');
+
+            if (!selectedLeague) {
+                leagueTeamsSelect.innerHTML = '<option value="">Select a league first</option>';
+                return;
+            }
+
+            leagueTeamsSelect.innerHTML = '';
+            const leagueTeams = teams.filter(team => team.league === selectedLeague);
+
+            leagueTeams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.key;
+                option.textContent = team.name;
+                leagueTeamsSelect.appendChild(option);
+            });
+
+            if (leagueTeams.length === 0) {
+                leagueTeamsSelect.innerHTML = '<option value="">No teams found in this league</option>';
+            }
+        }
+
+        async function generateReport() {
+            // Validate selection
+            let selectedTeams = [];
+
+            if (currentMode === 'team') {
+                const teamKey = document.getElementById('team').value;
+                if (!teamKey) {
+                    showError('Please select a team');
+                    return;
+                }
+                selectedTeams = [teamKey];
+            } else {
+                const leagueTeamsSelect = document.getElementById('leagueTeams');
+                selectedTeams = Array.from(leagueTeamsSelect.selectedOptions).map(opt => opt.value);
+
+                if (selectedTeams.length === 0) {
+                    showError('Please select at least one team');
+                    return;
+                }
+            }
+
+            // Clear previous messages
+            hideMessages();
+
+            // Process each team with default options
+            if (selectedTeams.length === 1) {
+                await generateSingleReport(selectedTeams[0], {});
+            } else {
+                await generateMultipleReports(selectedTeams, {});
+            }
+        }
+
+        async function generateSingleReport(teamKey, options) {
+            try {
+                // Show progress section
+                document.getElementById('mainForm').style.display = 'none';
+                document.getElementById('progressSection').style.display = 'block';
+
+                // Start generation
+                const response = await fetch(`${API_BASE}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team_key: teamKey, ...options })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Generation failed');
+                }
+
+                currentJob = data.job_id;
+                document.getElementById('jobId').textContent = data.job_id;
+
+                // Start monitoring progress
+                monitorJobProgress(data.job_id);
+
+            } catch (error) {
+                console.error('Generation failed:', error);
+                showError(`Failed to start generation: ${error.message}`);
+                resetForm();
+            }
+        }
+
+        async function generateMultipleReports(teamKeys, options) {
+            // For multiple teams, we'd need to modify the backend to support batch generation
+            // For now, just generate the first one
+            showError('Batch generation not yet implemented. Generating for first team only.');
+            await generateSingleReport(teamKeys[0], options);
+        }
+
+        function monitorJobProgress(jobId) {
+            // Close any existing connection
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            // Connect to SSE endpoint
+            eventSource = new EventSource(`${API_BASE}/jobs/${jobId}/progress`);
+
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+
+                if (data.heartbeat) return;
+
+                updateProgress(data);
+
+                if (data.status === 'completed') {
+                    onJobComplete(data);
+                    eventSource.close();
+                } else if (data.status === 'failed') {
+                    onJobFailed(data);
+                    eventSource.close();
+                }
+            };
+
+            eventSource.onerror = function(error) {
+                console.error('SSE error:', error);
+                eventSource.close();
+
+                // Fallback to polling
+                pollJobStatus(jobId);
+            };
+        }
+
+        async function pollJobStatus(jobId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+                    const data = await response.json();
+
+                    updateProgress(data);
+
+                    if (data.status === 'completed') {
+                        onJobComplete(data);
+                        clearInterval(pollInterval);
+                    } else if (data.status === 'failed') {
+                        onJobFailed(data);
+                        clearInterval(pollInterval);
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    clearInterval(pollInterval);
+                    showError('Lost connection to server');
+                }
+            }, 2000);
+        }
+
+        function updateProgress(job) {
+            document.getElementById('statusMessage').textContent = job.message || 'Processing...';
+            document.getElementById('progressBar').style.width = `${job.progress}%`;
+
+            if (job.team_name) {
+                document.getElementById('progressDetails').textContent = `Generating report for ${job.team_name}`;
+            }
+        }
+
+        function onJobComplete(job) {
+            showSuccess(`PowerPoint generated successfully!`);
+
+            // Add download button
+            const successDiv = document.getElementById('successMessage');
+            successDiv.innerHTML += `
+                <div style="margin-top: 0.75rem;">
+                    <a href="${API_BASE}/jobs/${job.id}/download"
+                       class="btn"
+                       style="display: inline-block; padding: 0.6rem 1.2rem; text-decoration: none; font-size: 0.9rem;">
+                        Download PowerPoint
+                    </a>
+                </div>
+            `;
+
+            setTimeout(resetForm, 3000);
+        }
+
+        function onJobFailed(job) {
+            showError(`Generation failed: ${job.error || 'Unknown error'}`);
+            resetForm();
+        }
+
+        function resetForm() {
+            document.getElementById('mainForm').style.display = 'block';
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+            currentJob = null;
+
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+
+        async function testConnection() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = 'Testing...<span class="spinner"></span>';
+
+            try {
+                await checkConnection();
+                showSuccess('Connection test completed');
+            } catch (error) {
+                showError('Connection test failed');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Test Database Connection';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.innerHTML = message;
+            successDiv.style.display = 'block';
+        }
+
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+
+        // Simplified download function for behaviors slide
+        async function downloadBehaviorsSlide() {
+            const teamKey = document.getElementById('team').value;
+
+            if (!teamKey) {
+                showError('Please select a team first');
+                return;
+            }
+
+            const btn = document.getElementById('previewBtn');
+            const originalText = btn.innerHTML;
+
+            // Show loading state
+            btn.disabled = true;
+            btn.innerHTML = 'Generating...<span class="spinner"></span>';
+
+            try {
+                // Get team name for display
+                const teamName = teams.find(t => t.key === teamKey)?.name || teamKey;
+
+                // Create download link
+                const downloadUrl = `${API_BASE}/download-behaviors-slide/${teamKey}`;
+
+                // Create temporary link and trigger download
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = `${teamName.replace(/ /g, '_')}_Behaviors_Slide.pptx`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                // Show success message
+                showSuccess(`Downloading ${teamName} behaviors slide...`);
+
+            } catch (error) {
+                console.error('Download failed:', error);
+                showError('Failed to generate behaviors slide');
+            } finally {
+                // Reset button
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    </script>
+</body>
+</html>
