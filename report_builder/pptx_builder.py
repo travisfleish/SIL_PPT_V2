@@ -554,18 +554,19 @@ class PowerPointBuilder:
                             f"composite: {cat.get('composite_index', 0):.1f})")
 
             # Create slides for each custom category
+            # Create slides for each custom category
             for i, custom_cat in enumerate(custom_categories[:custom_count]):
-                category_name = custom_cat['display_name']
+                category_name = custom_cat['display_name'].strip()  # Strip here!
                 is_emerging = custom_cat.get('is_emerging', False)
 
                 logger.info(f"Creating custom category slide {i + 1}: {category_name} "
                             f"{'[EMERGING]' if is_emerging else '[ESTABLISHED]'}")
 
-                # Pass the custom category info to create the slide
+                # Pass the stripped category name
                 self._create_category_slide(
                     category_key=category_name,
                     is_custom=True,
-                    custom_cat_info=custom_cat  # NEW: Pass the full category info
+                    custom_cat_info=custom_cat
                 )
 
         except Exception as e:
@@ -575,19 +576,16 @@ class PowerPointBuilder:
                                custom_cat_info: Optional[Dict[str, Any]] = None):
         """
         Create slides for a single category
-
-        Args:
-            category_key: Category identifier
-            is_custom: Whether this is a custom category
-            custom_cat_info: Full category info including is_emerging flag
         """
         try:
             logger.info(f"Creating slides for {category_key} {'[CUSTOM]' if is_custom else '[FIXED]'}...")
 
             # Load category data
             if is_custom:
+                # FIX: Strip whitespace from category_key for custom categories
+                category_key = category_key.strip()
                 cat_config = self.category_analyzer.create_custom_category_config(category_key)
-                cat_names = [category_key]
+                cat_names = [category_key]  # Now using the stripped key
             else:
                 cat_config = self.category_analyzer.categories.get(category_key, {})
                 cat_names = cat_config.get('category_names_in_data', [])
@@ -596,8 +594,8 @@ class PowerPointBuilder:
                 logger.warning(f"No configuration found for {category_key}")
                 return
 
-            # Build WHERE clause
-            category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat}'" for cat in cat_names])
+            # Build WHERE clause - also strip each cat name for safety
+            category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat.strip()}'" for cat in cat_names])
 
             # Load data
             category_df = query_to_dataframe(f"""

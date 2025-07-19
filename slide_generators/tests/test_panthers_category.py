@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Debug test script for Carolina Panthers category slides
-Tests the CategoryAnalyzer and CategorySlide with real data to diagnose the comparison population issue
+Debug test script for Carolina Panthers category slides with custom category testing
+Tests the CategoryAnalyzer and CategorySlide with real data to diagnose issues
 """
 
 import sys
@@ -229,6 +229,263 @@ def debug_panthers_category():
     return analyzer_with, team_config
 
 
+def debug_custom_categories(analyzer, team_config):
+    """Debug custom category selection for Panthers"""
+    logger.info("\n" + "=" * 60)
+    logger.info("DEBUGGING CUSTOM CATEGORIES")
+    logger.info("=" * 60)
+
+    # 1. Check configuration
+    logger.info("\n1. CUSTOM CATEGORY CONFIGURATION:")
+    logger.info(
+        f"   - allowed_for_custom: {analyzer.allowed_custom[:5]}..." if analyzer.allowed_custom else "   - allowed_for_custom: []")
+    logger.info(
+        f"   - excluded_from_custom: {analyzer.excluded_custom[:5]}..." if analyzer.excluded_custom else "   - excluded_from_custom: []")
+
+    # 2. Load category data
+    logger.info("\n2. LOADING CATEGORY DATA FOR CUSTOM SELECTION:")
+
+    category_query = f"""
+    SELECT 
+        CATEGORY,
+        AUDIENCE,
+        COMPARISON_POPULATION,
+        PERC_AUDIENCE,
+        PERC_INDEX,
+        COMPOSITE_INDEX,
+        PPC,
+        SPC
+    FROM {team_config['view_prefix']}_CATEGORY_INDEXING_ALL_TIME
+    WHERE AUDIENCE = '{analyzer.audience_name}'
+    AND COMPARISON_POPULATION = '{analyzer.comparison_pop}'
+    ORDER BY COMPOSITE_INDEX DESC
+    """
+
+    category_df = query_to_dataframe(category_query)
+
+    if category_df.empty:
+        logger.error("   ❌ No category data found!")
+        return None
+
+    logger.info(f"   ✅ Found {len(category_df)} categories")
+
+    # 3. Show top categories by composite index
+    logger.info("\n3. TOP CATEGORIES BY COMPOSITE INDEX:")
+    top_10 = category_df.head(10)
+    for idx, row in top_10.iterrows():
+        cat_name = row['CATEGORY']
+        logger.info(f"   {idx + 1}. {cat_name} (raw length: {len(cat_name)})")
+        if cat_name != cat_name.strip():
+            logger.warning(f"      ⚠️  HAS TRAILING/LEADING SPACES: '{cat_name}' vs '{cat_name.strip()}'")
+        logger.info(f"      - PERC_AUDIENCE: {row['PERC_AUDIENCE'] * 100:.1f}%")
+        logger.info(f"      - COMPOSITE_INDEX: {row['COMPOSITE_INDEX']:.1f}")
+        logger.info(f"      - Allowed: {'✅' if row['CATEGORY'].strip() in analyzer.allowed_custom else '❌'}")
+        logger.info(f"      - Excluded: {'❌' if row['CATEGORY'].strip() in analyzer.excluded_custom else '✅'}")
+
+    # 4. Load merchant data for verification
+    logger.info("\n4. LOADING MERCHANT DATA FOR VERIFICATION:")
+
+    merchant_query = f"""
+    SELECT 
+        CATEGORY,
+        MERCHANT,
+        AUDIENCE,
+        PERC_AUDIENCE,
+        COMPOSITE_INDEX
+    FROM {team_config['view_prefix']}_MERCHANT_INDEXING_ALL_TIME
+    WHERE AUDIENCE = '{analyzer.audience_name}'
+    ORDER BY CATEGORY, PERC_AUDIENCE DESC
+    """
+
+    merchant_df = query_to_dataframe(merchant_query)
+
+    if merchant_df.empty:
+        logger.error("   ❌ No merchant data found!")
+        return None
+
+    logger.info(f"   ✅ Found {len(merchant_df)} merchant records")
+
+    # 5. Test get_custom_categories
+    logger.info("\n5. TESTING get_custom_categories():")
+
+    try:
+        # Get fixed categories for the team
+        is_womens = team_config.get('is_womens_team', False)
+        fixed_categories = analyzer.config['fixed_categories']['womens_teams' if is_womens else 'mens_teams']
+
+        logger.info(f"   - Team type: {'Womens' if is_womens else 'Mens'}")
+        logger.info(f"   - Fixed categories: {fixed_categories}")
+
+        # Call get_custom_categories
+        custom_categories = analyzer.get_custom_categories(
+            category_df=category_df,
+            merchant_df=merchant_df,
+            is_womens_team=is_womens,
+            existing_categories=fixed_categories
+        )
+
+        logger.info(f"\n   RESULTS:")
+        logger.info(f"   - Found {len(custom_categories)} custom categories")
+
+        for i, cat in enumerate(custom_categories):
+            logger.info(f"\n   Custom Category {i + 1}:")
+            logger.info(f"     - Display Name: {cat['display_name']}")
+            logger.info(f"     - Audience %: {cat['audience_pct'] * 100:.1f}%")
+            logger.info(f"     - Composite Index: {cat['composite_index']:.1f}")
+            logger.info(f"     - Is Emerging: {cat.get('is_emerging', False)}")
+
+            # Check merchant verification - STRIP display_name too!
+            cat_merchants = merchant_df[
+                (merchant_df['CATEGORY'].str.strip() == cat['display_name'].strip()) &
+                (merchant_df['AUDIENCE'] == analyzer.audience_name)
+                ]
+
+            if not cat_merchants.empty:
+                top_merchant = cat_merchants.iloc[0]
+                logger.info(
+                    f"     - Top Merchant: {top_merchant['MERCHANT']} ({top_merchant['PERC_AUDIENCE'] * 100:.1f}%)")
+            else:
+                logger.info(f"     - Top Merchant: None found")
+
+    except Exception as e:
+        logger.error(f"   ❌ Error in get_custom_categories: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+    # 6. Debug why categories might be excluded
+    logger.info("\n6. DEBUGGING CATEGORY EXCLUSIONS:")
+
+    # Check categories that meet thresholds but aren't selected
+    high_audience_cats = category_df[category_df['PERC_AUDIENCE'] >= 0.10]
+
+    logger.info(f"   Categories with >=10% audience:")
+    for idx, row in high_audience_cats.iterrows():
+        cat_name = row['CATEGORY'].strip()
+
+        # Check various exclusion reasons
+        reasons = []
+
+        if cat_name not in analyzer.allowed_custom:
+            reasons.append("Not in allowed_for_custom")
+
+        if cat_name in analyzer.excluded_custom:
+            reasons.append("In excluded_from_custom")
+
+        # Check if it's a fixed category
+        for fixed_key in fixed_categories:
+            if fixed_key in analyzer.categories:
+                fixed_cat_names = analyzer.categories[fixed_key].get('category_names_in_data', [])
+                if cat_name in fixed_cat_names:
+                    reasons.append(f"Already in fixed category: {fixed_key}")
+
+        # Check merchant threshold
+        cat_merchants = merchant_df[
+            (merchant_df['CATEGORY'].str.strip() == cat_name) &
+            (merchant_df['AUDIENCE'] == analyzer.audience_name)
+            ]
+
+        if not cat_merchants.empty:
+            max_merchant_pct = cat_merchants['PERC_AUDIENCE'].max()
+            if max_merchant_pct < 0.10:
+                reasons.append(f"No merchant >=10% (max: {max_merchant_pct * 100:.1f}%)")
+        else:
+            reasons.append("No merchant data")
+
+        logger.info(f"\n   - {cat_name} ({row['PERC_AUDIENCE'] * 100:.1f}% audience)")
+        if reasons:
+            for reason in reasons:
+                logger.info(f"     ❌ {reason}")
+        else:
+            logger.info(f"     ✅ Should be selectable")
+
+    # 7. Test analyzing a custom category
+    if custom_categories:
+        logger.info("\n7. TESTING CUSTOM CATEGORY ANALYSIS:")
+
+        test_cat = custom_categories[0]
+        logger.info(f"   Testing category: {test_cat['display_name']}")
+
+        try:
+            # Create config for the custom category
+            custom_config = analyzer.create_custom_category_config(test_cat['display_name'])
+
+            # Load data for this category - USE STRIPPED NAME!
+            category_name_stripped = test_cat['display_name'].strip()
+
+            cat_data_query = f"""
+            SELECT * 
+            FROM {team_config['view_prefix']}_CATEGORY_INDEXING_ALL_TIME
+            WHERE TRIM(CATEGORY) = '{category_name_stripped}'
+            AND AUDIENCE = '{analyzer.audience_name}'
+            """
+            cat_data = query_to_dataframe(cat_data_query)
+
+            subcat_data_query = f"""
+            SELECT * 
+            FROM {team_config['view_prefix']}_SUBCATEGORY_INDEXING_ALL_TIME
+            WHERE TRIM(CATEGORY) = '{category_name_stripped}'
+            """
+            subcat_data = query_to_dataframe(subcat_data_query)
+
+            merch_data_query = f"""
+            SELECT * 
+            FROM {team_config['view_prefix']}_MERCHANT_INDEXING_ALL_TIME
+            WHERE TRIM(CATEGORY) = '{category_name_stripped}'
+            """
+            merch_data = query_to_dataframe(merch_data_query)
+
+            # Analyze the category
+            logger.info(f"   Calling analyze_category with:")
+            logger.info(f"      - category_key: '{test_cat['category_key']}'")
+            logger.info(f"      - display_name: '{test_cat['display_name']}'")
+            logger.info(f"      - category data rows: {len(cat_data)}")
+            logger.info(f"      - subcategory data rows: {len(subcat_data)}")
+            logger.info(f"      - merchant data rows: {len(merch_data)}")
+
+            # Check if category_key exists in analyzer.categories
+            if test_cat['category_key'] not in analyzer.categories:
+                logger.warning(f"   ⚠️  Category key '{test_cat['category_key']}' not found in analyzer.categories")
+                logger.info(f"      Available keys: {list(analyzer.categories.keys())[:10]}...")
+
+                # Since it's a custom category, we need to add it to the analyzer's categories
+                analyzer.categories[test_cat['category_key']] = custom_config
+
+            results = analyzer.analyze_category(
+                category_key=test_cat['category_key'],
+                category_df=cat_data,
+                subcategory_df=subcat_data,
+                merchant_df=merch_data,
+                validate=False
+            )
+
+            logger.info(f"   ✅ Analysis successful:")
+            logger.info(f"      - Insights: {len(results['insights'])}")
+            logger.info(f"      - Subcategories: {len(results['subcategory_stats'])}")
+            logger.info(f"      - Merchants: {len(results['merchant_stats'][0])}")
+
+            # Test slide generation
+            presentation = Presentation()
+            slide_gen = CategorySlide(presentation)
+
+            # Mark as emerging if applicable
+            results['is_emerging'] = test_cat.get('is_emerging', False)
+
+            presentation = slide_gen.generate(results, team_config)
+            presentation = slide_gen.generate_brand_slide(results, team_config)
+
+            output_path = Path(f"test_panthers_custom_{test_cat['category_key']}.pptx")
+            presentation.save(output_path)
+            logger.info(f"   ✅ Test slides saved to: {output_path.absolute()}")
+
+        except Exception as e:
+            logger.error(f"   ❌ Error analyzing custom category: {e}")
+            import traceback
+            traceback.print_exc()
+
+    return custom_categories
+
+
 def check_all_teams_comparison_populations():
     """Check comparison populations for all configured teams"""
     logger.info("\n" + "=" * 60)
@@ -274,6 +531,9 @@ if __name__ == "__main__":
 
         # Then debug Panthers specifically
         analyzer, team_config = debug_panthers_category()
+
+        # NEW: Debug custom categories
+        custom_categories = debug_custom_categories(analyzer, team_config)
 
         logger.info("\n✅ Debug test completed!")
 
