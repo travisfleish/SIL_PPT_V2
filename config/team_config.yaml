@@ -45,18 +45,6 @@ teams:
     audience_name: "Utah Jazz Fans"
     comparison_population: "Local Gen Pop (Excl. Jazz)"
 
-  dallas_cowboys:
-    team_name: "Dallas Cowboys"
-    team_name_short: "Cowboys"
-    league: "NFL"
-    view_prefix: "V_DALLAS_COWBOYS"  # No SIL in the prefix
-    colors:
-      primary: "#002244"
-      secondary: "#869397"
-      accent: "#FFFFFF"
-    audience_name: "Dallas Cowboys Fans"
-    comparison_population: "Local Gen Pop (Excl. Dallas Cowboys Fans)"
-
   carolina_panthers:
     team_name: "Carolina Panthers"
     team_name_short: "Panthers"
