@@ -47,16 +47,21 @@ class PostgreSQLJobStore:
         """Create tables if they don't exist."""
         with self._get_connection() as conn:
             with conn.cursor() as cur:
-                # Create jobs table
+                # Create jobs table with all necessary columns
                 cur.execute('''
                     CREATE TABLE IF NOT EXISTS jobs (
                         job_id UUID PRIMARY KEY,
                         team_key VARCHAR(100) NOT NULL,
+                        team_name VARCHAR(200),
                         status VARCHAR(50) NOT NULL DEFAULT 'pending',
                         progress INTEGER DEFAULT 0,
+                        message TEXT,
                         error TEXT,
                         result JSONB,
                         options JSONB,
+                        output_file TEXT,
+                        output_dir TEXT,
+                        completed_at TIMESTAMP WITH TIME ZONE,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         expires_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() + INTERVAL '24 hours'
@@ -118,10 +123,17 @@ class PostgreSQLJobStore:
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute('''
-                    INSERT INTO jobs (job_id, team_key, status, options)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO jobs (job_id, team_key, status, options, team_name, message)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING job_id
-                ''', (job_id, team_key, 'pending', Json(options)))
+                ''', (
+                    job_id,
+                    team_key,
+                    options.get('status', 'pending'),
+                    Json(options),
+                    options.get('team_name'),
+                    options.get('message', 'Initializing...')
+                ))
                 conn.commit()
 
         logger.info(f"Created job {job_id} for team {team_key}")
@@ -133,8 +145,9 @@ class PostgreSQLJobStore:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute('''
-                        SELECT job_id, team_key, status, progress, error, result, options,
-                               created_at, updated_at
+                        SELECT job_id, team_key, team_name, status, progress, message, 
+                               error, result, options, output_file, output_dir,
+                               created_at, updated_at, completed_at
                         FROM jobs
                         WHERE job_id = %s
                     ''', (job_id,))
@@ -144,11 +157,12 @@ class PostgreSQLJobStore:
                         # Convert to regular dict and ensure job_id is string
                         job_data = dict(row)
                         job_data['job_id'] = str(job_data['job_id'])
+
                         # Convert datetime objects to ISO format strings
-                        if job_data.get('created_at'):
-                            job_data['created_at'] = job_data['created_at'].isoformat()
-                        if job_data.get('updated_at'):
-                            job_data['updated_at'] = job_data['updated_at'].isoformat()
+                        for field in ['created_at', 'updated_at', 'completed_at']:
+                            if job_data.get(field):
+                                job_data[field] = job_data[field].isoformat()
+
                         return job_data
                     return None
         except Exception as e:
@@ -157,16 +171,28 @@ class PostgreSQLJobStore:
 
     def update_job(self, job_id: str, **kwargs) -> bool:
         """Update job fields."""
-        # Build dynamic UPDATE query
-        allowed_fields = {'status', 'progress', 'error', 'result'}
+        # Expanded list of allowed fields to include ALL job fields
+        allowed_fields = {
+            'status', 'progress', 'message', 'error', 'result',
+            'team_name', 'output_file', 'output_dir', 'completed_at'
+        }
+
         updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
         if not updates:
+            logger.warning(f"No valid fields to update for job {job_id}. Provided: {list(kwargs.keys())}")
             return False
 
         # Convert result to JSON if present
-        if 'result' in updates:
+        if 'result' in updates and updates['result'] is not None:
             updates['result'] = Json(updates['result'])
+
+        # Handle datetime fields
+        if 'completed_at' in updates and isinstance(updates['completed_at'], str):
+            try:
+                updates['completed_at'] = datetime.fromisoformat(updates['completed_at'].replace('Z', '+00:00'))
+            except:
+                pass
 
         set_clause = ', '.join(f"{k} = %s" for k in updates.keys())
         values = list(updates.values())
@@ -185,9 +211,12 @@ class PostgreSQLJobStore:
                     updated = cur.rowcount > 0
                     if updated:
                         logger.info(f"Updated job {job_id}: {list(updates.keys())}")
+                    else:
+                        logger.warning(f"No job found with ID {job_id}")
                     return updated
         except Exception as e:
             logger.error(f"Error updating job {job_id}: {e}")
+            logger.error(f"Updates attempted: {updates}")
             return False
 
     def list_recent_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -196,7 +225,8 @@ class PostgreSQLJobStore:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute('''
-                        SELECT job_id, team_key, status, progress, created_at
+                        SELECT job_id, team_key, team_name, status, progress, message,
+                               output_file, created_at, completed_at
                         FROM jobs
                         WHERE expires_at > NOW()
                         ORDER BY created_at DESC
@@ -207,8 +237,12 @@ class PostgreSQLJobStore:
                     for row in cur.fetchall():
                         job_data = dict(row)
                         job_data['job_id'] = str(job_data['job_id'])
-                        if job_data.get('created_at'):
-                            job_data['created_at'] = job_data['created_at'].isoformat()
+
+                        # Convert datetime objects
+                        for field in ['created_at', 'completed_at']:
+                            if job_data.get(field):
+                                job_data[field] = job_data[field].isoformat()
+
                         jobs.append(job_data)
 
                     return jobs
@@ -269,35 +303,3 @@ class PostgreSQLJobStore:
         if hasattr(self, 'pool'):
             self.pool.closeall()
             logger.info("Closed all PostgreSQL connections")
-
-
-# Example usage for testing
-if __name__ == '__main__':
-    # Test the connection
-    store = PostgreSQLJobStore()
-
-    # Create a test job
-    job_id = store.create_job('test_team', {'test': True})
-    print(f"Created job: {job_id}")
-
-    # Get the job
-    job = store.get_job(job_id)
-    print(f"Retrieved job: {job}")
-
-    # Update the job
-    store.update_job(job_id, status='running', progress=50)
-
-    # Get updated job
-    job = store.get_job(job_id)
-    print(f"Updated job: {job}")
-
-    # List jobs
-    jobs = store.list_recent_jobs()
-    print(f"Recent jobs: {jobs}")
-
-    # Get stats
-    stats = store.get_job_stats()
-    print(f"Job stats: {stats}")
-
-    # Close connections
-    store.close()

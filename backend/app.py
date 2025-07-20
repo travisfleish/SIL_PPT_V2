@@ -573,7 +573,7 @@ def get_job_progress_stream(job_id):
         # Send initial status immediately
         initial_job = job_store.get_job(job_id)
         if initial_job:
-            yield f"data: {json.dumps(initial_job)}\n\n"
+            yield f"data: {json.dumps(initial_job)}\n\n".encode('utf-8')
 
         # Get the queue for this job
         job_queue = job_queues.get(job_id)
@@ -587,19 +587,19 @@ def get_job_progress_stream(job_id):
             try:
                 current_job = job_store.get_job(job_id)
                 if not current_job:
-                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n".encode('utf-8')
                     break
 
                 # Send update if status changed
                 current_status = current_job.get('status')
                 if current_status != last_status:
-                    yield f"data: {json.dumps(current_job)}\n\n"
+                    yield f"data: {json.dumps(current_job)}\n\n".encode('utf-8')
                     last_status = current_status
 
                 # Check if job is complete
                 if current_status in ['completed', 'failed']:
                     # Send final update
-                    yield f"data: {json.dumps(current_job)}\n\n"
+                    yield f"data: {json.dumps(current_job)}\n\n".encode('utf-8')
                     break
 
                 # Try to get updates from queue
@@ -610,12 +610,12 @@ def get_job_progress_stream(job_id):
                         # Get latest job state from PostgreSQL
                         latest_job = job_store.get_job(job_id)
                         if latest_job:
-                            yield f"data: {json.dumps(latest_job)}\n\n"
+                            yield f"data: {json.dumps(latest_job)}\n\n".encode('utf-8')
                     except queue.Empty:
                         pass
 
                 # Send heartbeat to keep connection alive
-                yield f": heartbeat\n\n"  # SSE comment to keep alive
+                yield f": heartbeat\n\n".encode('utf-8')  # SSE comment to keep alive
 
                 # Sleep briefly
                 import time
@@ -624,7 +624,7 @@ def get_job_progress_stream(job_id):
 
             except Exception as e:
                 logger.error(f"SSE error for job {job_id}: {str(e)}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield f"data: {json.dumps({'error': str(e)})}\n\n".encode('utf-8')
                 break
 
     # Create response with proper headers
