@@ -67,7 +67,8 @@ class CategoryAnalyzer:
 
     def __init__(self, team_name: str, team_short: str, league: str,
                  config_path: Optional[Path] = None,
-                 comparison_population: str = None):
+                 comparison_population: str = None,
+                 cache_manager: Optional[Any] = None):  # ADD THIS PARAMETER
         """
         Initialize the category analyzer with merchant name standardization
 
@@ -76,10 +77,15 @@ class CategoryAnalyzer:
             team_short: Short team name (e.g., "Jazz")
             league: League name (e.g., "NBA")
             config_path: Path to categories config file
+            comparison_population: Comparison population string
+            cache_manager: Optional CacheManager instance for caching
         """
         self.team_name = team_name
         self.team_short = team_short
         self.league = league
+
+        # Store cache_manager
+        self.cache_manager = cache_manager
 
         # Standard audiences
         self.audience_name = f"{team_name} Fans"
@@ -91,11 +97,21 @@ class CategoryAnalyzer:
             self.comparison_pop = f"Local Gen Pop (Excl. {team_short})"
         self.league_fans = f"{league} Fans"
 
-        # Initialize merchant name standardizer
+        # Initialize merchant name standardizer with cache_manager
         try:
             from utils.merchant_name_standardizer import MerchantNameStandardizer
-            self.standardizer = MerchantNameStandardizer(cache_enabled=True)
+            self.standardizer = MerchantNameStandardizer(
+                cache_enabled=True,
+                cache_manager=self.cache_manager  # Pass cache_manager
+            )
             logger.info("✅ CategoryAnalyzer: Merchant name standardization enabled")
+
+            # Log cache status
+            if self.cache_manager:
+                logger.info("  Using PostgreSQL cache for merchant names")
+            else:
+                logger.info("  Using file cache for merchant names")
+
         except ImportError:
             logger.warning("⚠️ CategoryAnalyzer: MerchantNameStandardizer not available")
             self.standardizer = None
@@ -873,24 +889,39 @@ class CategoryAnalyzer:
         if merchant_df.empty:
             return {}
 
-        # Filter for team fans
+        # Filter for team fans with minimum 1% audience percentage
         team_data = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['COMPOSITE_INDEX'] > 0)
+            (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
+            (merchant_df['COMPOSITE_INDEX'] > 0) &
+            (merchant_df['PERC_AUDIENCE'] >= 0.01)  # NEW: 1% minimum threshold
             ]
 
         if team_data.empty:
-            return {}
+            # If no merchants meet the 1% threshold, provide a fallback message
+            logger.warning(f"No merchants found with >= 1% audience for {self.team_name}")
+            return {
+                'merchant': None,
+                'composite_index': 0,
+                'explanation': f"No brands met the minimum 1% audience threshold for {self.team_short} fans",
+                'sub_explanation': "Consider lowering audience requirements or expanding to adjacent categories",
+                'full_recommendation': {
+                    'main': f"No brands met the minimum 1% audience threshold for {self.team_short} fans",
+                    'sub_bullet': "Consider lowering audience requirements or expanding to adjacent categories"
+                }
+            }
 
-        # Find merchant with highest composite index
+        # Find merchant with highest composite index (among those meeting threshold)
         best_merchant = team_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
         merchant_name = best_merchant['MERCHANT']  # Now returns standardized name
         composite_index = float(best_merchant['COMPOSITE_INDEX'])
+        perc_audience = float(best_merchant['PERC_AUDIENCE'])
 
-        # Generate recommendation text (now with standardized name)
+        # Generate recommendation text (now with standardized name and audience %)
         main_recommendation = (
             f"The {self.team_short} should target {merchant_name} for a sponsorship "
-            f"based on having the highest composite index of {composite_index:.0f}"
+            f"based on having the highest composite index of {composite_index:.0f} "
+            f"among brands reaching at least 1% of fans ({perc_audience * 100:.1f}% audience)"
         )
 
         # Sub-explanation
@@ -903,6 +934,7 @@ class CategoryAnalyzer:
         return {
             'merchant': merchant_name,  # Now standardized name
             'composite_index': composite_index,
+            'audience_percentage': perc_audience,  # NEW: Include for reference
             'explanation': main_recommendation,
             'sub_explanation': sub_explanation,
             'full_recommendation': {
@@ -1066,9 +1098,9 @@ class CategoryAnalyzer:
         established_candidates = category_df[
             base_filter &
             (category_df['PERC_AUDIENCE'] >= established_cat_threshold) &
-            (category_df['CATEGORY'].isin(self.allowed_custom)) &
-            (~category_df['CATEGORY'].isin(self.excluded_custom)) &
-            (~category_df['CATEGORY'].isin(category_names_to_exclude))
+            (category_df['CATEGORY'].str.strip().isin(self.allowed_custom)) &  # FIXED
+            (~category_df['CATEGORY'].str.strip().isin(self.excluded_custom)) &  # FIXED
+            (~category_df['CATEGORY'].str.strip().isin(category_names_to_exclude))  # FIXED
             ].copy()
 
         # Verify merchant threshold for each candidate
@@ -1114,10 +1146,10 @@ class CategoryAnalyzer:
             emerging_candidates = category_df[
                 base_filter &
                 (category_df['PERC_AUDIENCE'] >= emerging_cat_threshold) &
-                (category_df['CATEGORY'].isin(self.allowed_custom)) &
-                (~category_df['CATEGORY'].isin(self.excluded_custom)) &
-                (~category_df['CATEGORY'].isin(category_names_to_exclude)) &
-                (~category_df['CATEGORY'].isin(selected_category_names))  # Exclude already selected
+                (category_df['CATEGORY'].str.strip().isin(self.allowed_custom)) &  # FIXED
+                (~category_df['CATEGORY'].str.strip().isin(self.excluded_custom)) &  # FIXED
+                (~category_df['CATEGORY'].str.strip().isin(category_names_to_exclude)) &  # FIXED
+                (~category_df['CATEGORY'].isin(selected_category_names))
                 ].copy()
 
             if not emerging_candidates.empty:

@@ -317,6 +317,15 @@ class PowerPointBuilder:
             logger.error(f"Error building presentation: {str(e)}")
             raise
 
+        finally:
+            # ADD THIS: Clean up connection pool after all processing
+            try:
+                from data_processors.snowflake_connector import close_pool
+                close_pool()
+                logger.info("✓ Snowflake connection pool closed")
+            except Exception as e:
+                logger.debug(f"Error closing pool: {e}")
+
     def _create_demographic_overview_slide(self):
         """
         NEW: Create the demographic overview slide with AI insights
@@ -713,7 +722,6 @@ class PowerPointBuilder:
                 WHERE {category_where}
                 AND AUDIENCE = '{self.category_analyzer.audience_name}'
                 ORDER BY PERC_AUDIENCE DESC
-                LIMIT 100
             """)
 
             # NEW: Load LAST_FULL_YEAR data for specific insights
@@ -727,7 +735,6 @@ class PowerPointBuilder:
                 WHERE {category_where}
                 AND AUDIENCE = '{self.category_analyzer.audience_name}'
                 ORDER BY PERC_AUDIENCE DESC
-                LIMIT 100
             """)
 
             # Add config for custom categories temporarily
@@ -936,7 +943,6 @@ class PowerPointBuilder:
 
         return font_status
 
-
 def build_report(team_key: str, **kwargs) -> Path:
     """
     Convenience function to build a complete PowerPoint report
@@ -948,22 +954,34 @@ def build_report(team_key: str, **kwargs) -> Path:
     Returns:
         Path to generated PowerPoint file
     """
-    # Extract job_id and callback if provided in kwargs
-    job_id = kwargs.pop('job_id', None)
-    cache_manager = kwargs.pop('cache_manager', None)
-    progress_callback = kwargs.pop('progress_callback', None)
+    try:
+        # Extract job_id and callback if provided in kwargs
+        job_id = kwargs.pop('job_id', None)
+        cache_manager = kwargs.pop('cache_manager', None)
+        progress_callback = kwargs.pop('progress_callback', None)
 
-    builder = PowerPointBuilder(team_key, job_id=job_id, cache_manager=cache_manager, progress_callback=progress_callback)
+        builder = PowerPointBuilder(team_key, job_id=job_id, cache_manager=cache_manager,
+                                    progress_callback=progress_callback)
 
-    # Log font status
-    font_status = builder.check_font_installation()
-    if not font_status['font_available']:
-        logger.warning(f"Font '{DEFAULT_FONT_FAMILY}' not installed on system")
-        logger.info("Installation instructions:")
-        for instruction in font_status['instructions']:
-            logger.info(f"  {instruction}")
+        # Log font status
+        font_status = builder.check_font_installation()
+        if not font_status['font_available']:
+            logger.warning(f"Font '{DEFAULT_FONT_FAMILY}' not installed on system")
+            logger.info("Installation instructions:")
+            for instruction in font_status['instructions']:
+                logger.info(f"  {instruction}")
 
-    return builder.build_presentation(**kwargs)
+        return builder.build_presentation(**kwargs)
+
+    finally:
+        # Clean up connection pool after report generation
+        try:
+            from data_processors.snowflake_connector import close_pool
+            close_pool()
+            logger.info("✓ Snowflake connection pool closed")
+        except Exception as e:
+            logger.debug(f"Error closing connection pool: {e}")
+            # Don't raise - we want the report to still return successfully
 
 
 def validate_fonts_before_build():

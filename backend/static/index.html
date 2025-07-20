@@ -149,6 +149,7 @@
         .radio-option {
             display: flex;
             align-items: center;
+            justify-content: center;
             padding: 0.6rem 0.9rem;  /* Reduced padding */
             border: 2px solid #e2e8f0;
             border-radius: 8px;
@@ -164,8 +165,7 @@
         }
 
         .radio-option input[type="radio"] {
-            width: auto;
-            margin-right: 0.4rem;
+            display: none;
         }
 
         .radio-option.selected {
@@ -385,6 +385,213 @@
             font-size: 0.8rem;
         }
 
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #0066FF 0%, #0052CC 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .modal-subtitle {
+            padding: 1rem 2rem 0;
+            color: #4a5568;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-subtitle p {
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+        }
+
+        .modal-subtitle span {
+            font-weight: 600;
+            color: #0066FF;
+        }
+
+        .modal-close {
+            color: white;
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            transform: scale(1.1);
+        }
+
+        .modal-body {
+            padding: 2rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        /* Brands grid */
+        .brands-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .brand-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .brand-card:hover {
+            border-color: #0066FF;
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0, 102, 255, 0.15);
+        }
+
+        .brand-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #0066FF 0%, #0052CC 100%);
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+
+        .brand-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .brand-logo-container {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+
+        .brand-logo {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .brand-logo-placeholder {
+            width: 60px;
+            height: 60px;
+            background: #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a0aec0;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .brand-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+
+        .brand-category {
+            font-size: 0.9rem;
+            color: #718096;
+            margin-bottom: 1rem;
+        }
+
+        .brand-metrics {
+            display: flex;
+            justify-content: space-around;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .metric {
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #0066FF;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: #a0aec0;
+            text-transform: uppercase;
+            margin-top: 0.2rem;
+        }
+
+        /* Loading state for modal */
+        .modal-loading {
+            text-align: center;
+            padding: 4rem;
+            color: #718096;
+        }
+
+        .modal-loading .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 1rem;
+            border: 3px solid rgba(0, 102, 255, 0.2);
+            border-top-color: #0066FF;
+        }
+
+        /* Error state for modal */
+        .modal-error {
+            text-align: center;
+            padding: 3rem;
+            color: #e53e3e;
+        }
+
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .container {
@@ -404,6 +611,20 @@
             .btn {
                 padding: 0.7rem 1.2rem;
                 font-size: 0.95rem;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 5% auto;
+            }
+
+            .brands-grid {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                gap: 1rem;
+            }
+
+            .brand-card {
+                padding: 1rem;
             }
         }
 
@@ -437,11 +658,11 @@
                         <div class="radio-group">
                             <div class="radio-option selected" data-mode="team">
                                 <input type="radio" name="selectMode" value="team" checked>
-                                <label>Team</label>
+                                 Team
                             </div>
                             <div class="radio-option" data-mode="league">
                                 <input type="radio" name="selectMode" value="league">
-                                <label>League</label>
+                                League
                             </div>
                         </div>
                     </div>
@@ -480,8 +701,8 @@
                     PREVIEW - Download Fan Behaviors Slide
                 </button>
 
-                <button class="btn btn-secondary" id="testConnectionBtn">
-                    Test Database Connection
+                <button class="btn btn-secondary" id="hotBrandsBtn">
+                    PREVIEW - Hot Brand Targets
                 </button>
             </div>
 
@@ -500,6 +721,24 @@
 
             <div class="error-message" id="errorMessage"></div>
             <div class="success-message" id="successMessage"></div>
+        </div>
+    </div>
+
+    <!-- Hot Brands Modal -->
+    <div id="hotBrandsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Hot Brand Targets</h2>
+                <span class="modal-close">&times;</span>
+            </div>
+            <div class="modal-subtitle">
+                <p>Top Sponsorship Recommendations for <span id="modalTeamName"></span></p>
+            </div>
+            <div class="modal-body">
+                <div id="brandsGrid" class="brands-grid">
+                    <!-- Brand cards will be inserted here -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -556,7 +795,16 @@
         // Buttons
         document.getElementById('generateBtn').addEventListener('click', generateReport);
         document.getElementById('previewBtn').addEventListener('click', downloadBehaviorsSlide);
-        document.getElementById('testConnectionBtn').addEventListener('click', testConnection);
+        document.getElementById('hotBrandsBtn').addEventListener('click', showHotBrandsPreview);
+
+        // Modal close handlers
+        document.querySelector('.modal-close').addEventListener('click', closeHotBrandsModal);
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('hotBrandsModal');
+            if (event.target === modal) {
+                closeHotBrandsModal();
+            }
+        });
     }
 
     async function initializeApp() {
@@ -887,78 +1135,76 @@
         }
     }
 
-    // Find the pollJobStatus function in your index.html and replace it with this:
+    async function pollJobStatus(jobId) {
+        console.log(`Starting robust polling for job ${jobId}`);
 
-async function pollJobStatus(jobId) {
-    console.log(`Starting robust polling for job ${jobId}`);
+        let retryCount = 0;
+        const maxRetries = 120;
+        let consecutiveErrors = 0;
 
-    let retryCount = 0;
-    const maxRetries = 120;
-    let consecutiveErrors = 0;
+        const pollInterval = setInterval(async () => {
+            try {
+                // Use the /status endpoint which works reliably in production
+                const response = await fetch(`${API_BASE}/jobs/${jobId}/status`);
 
-    const pollInterval = setInterval(async () => {
-        try {
-            // Use the /status endpoint which works reliably in production
-            const response = await fetch(`${API_BASE}/jobs/${jobId}/status`);
+                if (!response.ok) {
+                    consecutiveErrors++;
+                    console.warn(`Poll failed (${consecutiveErrors}): ${response.status}`);
 
-            if (!response.ok) {
-                consecutiveErrors++;
-                console.warn(`Poll failed (${consecutiveErrors}): ${response.status}`);
+                    // Only error out after multiple consecutive failures
+                    if (consecutiveErrors > 5) {
+                        clearInterval(pollInterval);
+                        showError('Unable to check job status. Please refresh the page.');
+                        resetForm();
+                    }
+                    return;
+                }
 
-                // Only error out after multiple consecutive failures
-                if (consecutiveErrors > 5) {
+                // Reset error counter on success
+                consecutiveErrors = 0;
+
+                const data = await response.json();
+                console.log(`Poll ${retryCount}: ${data.status} - ${data.progress}%`);
+
+                // Reconstruct full job object from status response
+                const jobData = {
+                    status: data.status,
+                    progress: data.progress,
+                    message: data.message,
+                    error: data.error,
+                    job_id: jobId
+                };
+
+                updateProgress(jobData);
+
+                if (data.status === 'completed') {
+                    console.log('Job completed via polling!');
                     clearInterval(pollInterval);
-                    showError('Unable to check job status. Please refresh the page.');
+                    onJobComplete(jobData);
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    onJobFailed(jobData);
+                }
+
+                retryCount++;
+                if (retryCount > maxRetries) {
+                    clearInterval(pollInterval);
+                    showError('Generation timeout. Please try again.');
                     resetForm();
                 }
-                return;
+
+            } catch (error) {
+                console.error('Polling error:', error);
+                consecutiveErrors++;
+
+                if (consecutiveErrors > 5) {
+                    clearInterval(pollInterval);
+                    showError('Lost connection to server. Please check your connection.');
+                    resetForm();
+                }
             }
-
-            // Reset error counter on success
-            consecutiveErrors = 0;
-
-            const data = await response.json();
-            console.log(`Poll ${retryCount}: ${data.status} - ${data.progress}%`);
-
-            // Reconstruct full job object from status response
-            const jobData = {
-                status: data.status,
-                progress: data.progress,
-                message: data.message,
-                error: data.error,
-                job_id: jobId
-            };
-
-            updateProgress(jobData);
-
-            if (data.status === 'completed') {
-                console.log('Job completed via polling!');
-                clearInterval(pollInterval);
-                onJobComplete(jobData);
-            } else if (data.status === 'failed') {
-                clearInterval(pollInterval);
-                onJobFailed(jobData);
-            }
-
-            retryCount++;
-            if (retryCount > maxRetries) {
-                clearInterval(pollInterval);
-                showError('Generation timeout. Please try again.');
-                resetForm();
-            }
-
-        } catch (error) {
-            console.error('Polling error:', error);
-            consecutiveErrors++;
-
-            if (consecutiveErrors > 5) {
-                clearInterval(pollInterval);
-                showError('Lost connection to server. Please check your connection.');
-                resetForm();
-            }
-        }
-    }, ENV.pollInterval || 2000); // Poll every 2 seconds
-}
+        }, ENV.pollInterval || 2000); // Poll every 2 seconds
+    }
 
     function updateProgress(job) {
         const status = job.status || 'processing';
@@ -1061,22 +1307,6 @@ async function pollJobStatus(jobId) {
         setTimeout(hideMessages, 2000);
     }
 
-    async function testConnection(event) {
-        const btn = event.target;
-        btn.disabled = true;
-        btn.innerHTML = 'Testing...<span class="spinner"></span>';
-
-        try {
-            await checkConnection();
-            showSuccess('Connection test completed');
-        } catch (error) {
-            showError('Connection test failed');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = 'Test Database Connection';
-        }
-    }
-
     function showError(message) {
         const errorDiv = document.getElementById('errorMessage');
         errorDiv.textContent = message;
@@ -1136,6 +1366,89 @@ async function pollJobStatus(jobId) {
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
+    }
+
+    // Function to show hot brands preview
+    async function showHotBrandsPreview() {
+        const teamKey = document.getElementById('team').value;
+
+        if (!teamKey) {
+            showError('Please select a team first');
+            return;
+        }
+
+        const modal = document.getElementById('hotBrandsModal');
+        const brandsGrid = document.getElementById('brandsGrid');
+        const modalTeamName = document.getElementById('modalTeamName');
+
+        // Get team name
+        const teamName = teams.find(t => t.key === teamKey)?.name || teamKey;
+        modalTeamName.textContent = teamName;
+
+        // Show modal with loading state
+        modal.style.display = 'block';
+        brandsGrid.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading brand recommendations...</p></div>';
+
+        try {
+            const response = await fetch(`${API_BASE}/preview/hot-brands/${teamKey}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to load recommendations');
+            }
+
+            // Render brand cards
+            renderBrandCards(data.recommendations);
+
+        } catch (error) {
+            console.error('Error loading hot brands:', error);
+            brandsGrid.innerHTML = `
+                <div class="modal-error">
+                    <p>Failed to load brand recommendations</p>
+                    <p style="font-size: 0.9rem; margin-top: 0.5rem;">${error.message}</p>
+                </div>
+            `;
+        }
+    }
+
+    // Function to render brand cards
+    function renderBrandCards(recommendations) {
+        const brandsGrid = document.getElementById('brandsGrid');
+
+        if (!recommendations || recommendations.length === 0) {
+            brandsGrid.innerHTML = '<div class="modal-error"><p>No recommendations found</p></div>';
+            return;
+        }
+
+        brandsGrid.innerHTML = recommendations.map(brand => `
+            <div class="brand-card">
+                <div class="brand-logo-container">
+                    ${brand.logo_url ?
+                        `<img src="${brand.logo_url}" alt="${brand.merchant}" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                         <div class="brand-logo-placeholder" style="display:none;">No Logo</div>` :
+                        '<div class="brand-logo-placeholder">No Logo</div>'
+                    }
+                </div>
+                <div class="brand-name">${brand.merchant}</div>
+                <div class="brand-category">${brand.category}</div>
+                <div class="brand-metrics">
+                    <div class="metric">
+                        <div class="metric-value">${brand.composite_index}</div>
+                        <div class="metric-label">Composite</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">${brand.affinity_index}</div>
+                        <div class="metric-label">Affinity</div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Function to close modal
+    function closeHotBrandsModal() {
+        const modal = document.getElementById('hotBrandsModal');
+        modal.style.display = 'none';
     }
 
     // Enhanced error logging for production debugging

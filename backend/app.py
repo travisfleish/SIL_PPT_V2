@@ -939,6 +939,341 @@ def cleanup_old_files():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/preview/hot-brands/<team_key>', methods=['GET'])
+def preview_hot_brands(team_key):
+    """Get top sponsorship recommendations for preview - with logo support"""
+    try:
+        # Validate team
+        config_manager = TeamConfigManager()
+        if team_key not in config_manager.list_teams():
+            return jsonify({'error': f'Team {team_key} not found'}), 404
+
+        team_config = config_manager.get_team_config(team_key)
+        logger.info(f"Processing hot brands for {team_config['team_name']}")
+
+        # Initialize cache manager (optional but recommended)
+        cache_manager = None
+        try:
+            from utils.cache_manager import CacheManager
+            from postgresql_job_store import PostgreSQLJobStore
+
+            job_store = PostgreSQLJobStore(os.environ.get('DATABASE_URL'))
+            cache_manager = CacheManager(job_store.pool)
+            logger.info("Cache manager initialized")
+        except Exception as e:
+            logger.warning(f"Cache manager not available: {e}")
+
+        # Initialize LogoManager
+        from utils.logo_manager import LogoManager
+        logo_manager = LogoManager()
+        logger.info("LogoManager initialized")
+
+        # Initialize CategoryAnalyzer with cache manager
+        from data_processors.category_analyzer import CategoryAnalyzer
+
+        analyzer = CategoryAnalyzer(
+            team_name=team_config['team_name'],
+            team_short=team_config.get('team_short', team_config['team_name'].split()[-1]),
+            league=team_config['league'],
+            comparison_population=team_config.get('comparison_population'),
+            cache_manager=cache_manager  # Pass cache manager if available
+        )
+
+        recommendations = []
+        merchants_to_standardize = []
+
+        # Load data from Snowflake
+        from data_processors.snowflake_connector import query_to_dataframe
+
+        view_prefix = team_config['view_prefix']
+
+        # Load all three dataframes as in the working test
+        category_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME")
+        subcategory_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME")
+        merchant_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME")
+
+        # CRITICAL: Strip whitespace from all string columns
+        logger.info("Cleaning data (removing trailing whitespace)...")
+        for df in [category_df, subcategory_df, merchant_df]:
+            string_cols = df.select_dtypes(include=['object']).columns
+            for col in string_cols:
+                df[col] = df[col].str.strip()
+
+        if merchant_df.empty:
+            logger.error("No merchant data found")
+            return jsonify({
+                'team_name': team_config['team_name'],
+                'recommendations': [],
+                'generated_at': datetime.now().isoformat(),
+                'error': 'No merchant data found'
+            })
+
+        logger.info(f"Loaded {len(merchant_df)} merchant records")
+
+        # Process fixed categories
+        fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+
+        for category_key in fixed_categories:
+            try:
+                if category_key not in analyzer.categories:
+                    continue
+
+                category_config = analyzer.categories[category_key]
+                category_names = category_config.get('category_names_in_data', [])
+
+                # Strip whitespace from expected category names
+                category_names = [name.strip() for name in category_names]
+
+                # Filter merchant data
+                category_merchant_df = merchant_df[
+                    merchant_df['CATEGORY'].isin(category_names)
+                ].copy()
+
+                logger.debug(f"Category {category_key}: found {len(category_merchant_df)} merchants")
+
+                if category_merchant_df.empty:
+                    continue
+
+                # Find top merchant by composite index
+                team_merchants = category_merchant_df[
+                    (category_merchant_df['AUDIENCE'] == analyzer.audience_name) &
+                    (category_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
+                    (category_merchant_df['COMPOSITE_INDEX'] > 0) &
+                    (category_merchant_df['PERC_AUDIENCE'] >= 0.01)
+                    ]
+
+                if team_merchants.empty:
+                    continue
+
+                # Get top merchant
+                top_merchant_row = team_merchants.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+
+                merchants_to_standardize.append({
+                    'original_name': top_merchant_row['MERCHANT'],
+                    'category': category_config['display_name'],
+                    'composite_index': int(top_merchant_row['COMPOSITE_INDEX']),
+                    'audience_pct': float(top_merchant_row['PERC_AUDIENCE']) * 100,
+                    'perc_index': int(top_merchant_row.get('PERC_INDEX', 0)),
+                    'spc_index': int(top_merchant_row.get('SPC_INDEX', 0))
+                })
+
+                logger.info(
+                    f"Fixed category {category_config['display_name']}: {top_merchant_row['MERCHANT']} (index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
+
+            except Exception as e:
+                logger.warning(f"Could not analyze category {category_key}: {e}")
+                continue
+
+        # Get custom categories
+        try:
+            custom_categories = analyzer.get_custom_categories(
+                category_df=category_df,
+                merchant_df=merchant_df,
+                is_womens_team=team_config.get('is_womens_team', False),
+                existing_categories=fixed_categories
+            )
+
+            logger.info(f"Found {len(custom_categories)} custom categories")
+
+            # Process top 4 custom categories
+            for custom_cat in custom_categories[:4]:
+                try:
+                    # Strip whitespace from category names
+                    category_names_clean = [name.strip() for name in custom_cat['category_names_in_data']]
+
+                    # Filter merchant data
+                    custom_merchant_df = merchant_df[
+                        merchant_df['CATEGORY'].isin(category_names_clean)
+                    ].copy()
+
+                    if custom_merchant_df.empty:
+                        continue
+
+                    # Find top merchant
+                    team_merchants = custom_merchant_df[
+                        (custom_merchant_df['AUDIENCE'] == analyzer.audience_name) &
+                        (custom_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
+                        (custom_merchant_df['COMPOSITE_INDEX'] > 0) &
+                        (custom_merchant_df['PERC_AUDIENCE'] >= 0.01)
+                        ]
+
+                    if team_merchants.empty:
+                        continue
+
+                    # Get top merchant
+                    top_merchant_row = team_merchants.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+
+                    merchants_to_standardize.append({
+                        'original_name': top_merchant_row['MERCHANT'],
+                        'category': custom_cat['display_name'],
+                        'composite_index': int(top_merchant_row['COMPOSITE_INDEX']),
+                        'audience_pct': float(top_merchant_row['PERC_AUDIENCE']) * 100,
+                        'perc_index': int(top_merchant_row.get('PERC_INDEX', 0)),
+                        'spc_index': int(top_merchant_row.get('SPC_INDEX', 0)),
+                        'is_emerging': custom_cat.get('is_emerging', False)
+                    })
+
+                    logger.info(
+                        f"Custom category {custom_cat['display_name']}: {top_merchant_row['MERCHANT']} (index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
+
+                except Exception as e:
+                    logger.warning(f"Could not analyze custom category {custom_cat['display_name']}: {e}")
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Could not get custom categories: {e}")
+
+        # Import URL encoding for safe logo URLs
+        from urllib.parse import quote
+
+        # Standardize merchant names and add logo URLs
+        logger.info(f"Standardizing {len(merchants_to_standardize)} merchant names and checking logos...")
+
+        if analyzer.standardizer and merchants_to_standardize:
+            names_to_standardize = [m['original_name'] for m in merchants_to_standardize]
+
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                standardized_mapping = loop.run_until_complete(
+                    analyzer.standardizer.standardize_merchants(names_to_standardize)
+                )
+
+                for merchant_info in merchants_to_standardize:
+                    original = merchant_info['original_name']
+                    standardized = standardized_mapping.get(original, original)
+
+                    if standardized != original:
+                        logger.debug(f"Standardized: {original} → {standardized}")
+
+                    # Check if logo exists locally
+                    has_logo = logo_manager.get_logo(standardized) is not None
+
+                    # Generate logo URL if logo exists
+                    logo_url = ''
+                    if has_logo:
+                        encoded_name = quote(standardized)
+                        logo_url = f"/api/logos/{encoded_name}"
+                        logger.debug(f"Logo found for {standardized}: {logo_url}")
+                    else:
+                        logger.debug(f"No logo found for {standardized}")
+
+                    recommendations.append({
+                        'merchant': standardized,
+                        'category': merchant_info['category'],
+                        'subcategory': '',
+                        'composite_index': merchant_info['composite_index'],
+                        'affinity_index': merchant_info['perc_index'],
+                        'spend_index': merchant_info['spc_index'],
+                        'audience_percentage': merchant_info['audience_pct'],
+                        'is_emerging': merchant_info.get('is_emerging', False),
+                        'logo_url': logo_url,
+                        'has_local_logo': has_logo
+                    })
+
+            finally:
+                loop.close()
+        else:
+            # No standardization available
+            for merchant_info in merchants_to_standardize:
+                merchant_name = merchant_info['original_name']
+
+                # Check for logo
+                has_logo = logo_manager.get_logo(merchant_name) is not None
+                logo_url = ''
+                if has_logo:
+                    encoded_name = quote(merchant_name)
+                    logo_url = f"/api/logos/{encoded_name}"
+                    logger.debug(f"Logo found for {merchant_name}: {logo_url}")
+                else:
+                    logger.debug(f"No logo found for {merchant_name}")
+
+                recommendations.append({
+                    'merchant': merchant_name,
+                    'category': merchant_info['category'],
+                    'subcategory': '',
+                    'composite_index': merchant_info['composite_index'],
+                    'affinity_index': merchant_info['perc_index'],
+                    'spend_index': merchant_info['spc_index'],
+                    'audience_percentage': merchant_info['audience_pct'],
+                    'is_emerging': merchant_info.get('is_emerging', False),
+                    'logo_url': logo_url,
+                    'has_local_logo': has_logo
+                })
+
+        # Sort by composite index descending
+        recommendations.sort(key=lambda x: x['composite_index'], reverse=True)
+
+        # Log summary with logo status
+        logger.info(f"Found {len(recommendations)} recommendations for {team_config['team_name']}")
+        logos_found = sum(1 for rec in recommendations if rec.get('has_local_logo'))
+        logger.info(f"Logos found: {logos_found}/{len(recommendations)}")
+
+        for i, rec in enumerate(recommendations[:10], 1):
+            emerging = " ⭐" if rec.get('is_emerging') else ""
+            logo_status = " 🖼️" if rec.get('has_local_logo') else " ❌"
+            logger.info(
+                f"  {i}. {rec['category']}: {rec['merchant']} (index: {rec['composite_index']}){emerging}{logo_status}")
+
+        return jsonify({
+            'team_name': team_config['team_name'],
+            'team_key': team_key,
+            'recommendations': recommendations[:10],  # Return top 10
+            'generated_at': datetime.now().isoformat(),
+            'total_found': len(recommendations),
+            'logos_found': logos_found
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting hot brands preview: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'error': str(e),
+            'team_name': team_config.get('team_name', team_key) if 'team_config' in locals() else team_key,
+            'recommendations': [],
+            'generated_at': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/logos/<merchant_name>', methods=['GET'])
+def serve_logo(merchant_name):
+    """Serve logo file for a merchant"""
+    try:
+        from urllib.parse import unquote
+        from flask import send_file
+        import io
+
+        # Decode the merchant name
+        merchant_name = unquote(merchant_name)
+
+        # Initialize LogoManager
+        from utils.logo_manager import LogoManager
+        logo_manager = LogoManager()
+
+        # Get the logo
+        logo_image = logo_manager.get_logo(merchant_name, size=(200, 200))
+
+        if logo_image:
+            # Convert PIL Image to bytes
+            img_buffer = io.BytesIO()
+            logo_image.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+
+            return send_file(
+                img_buffer,
+                mimetype='image/png',
+                as_attachment=False,
+                download_name=f"{merchant_name}.png"
+            )
+        else:
+            # Return 404 if logo not found
+            return jsonify({'error': f'Logo not found for {merchant_name}'}), 404
+
+    except Exception as e:
+        logger.error(f"Error serving logo for {merchant_name}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
     # Development server
     app.run(host='0.0.0.0', port=5001, debug=True)
