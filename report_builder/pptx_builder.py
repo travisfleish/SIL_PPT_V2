@@ -4,6 +4,7 @@ Main PowerPoint builder that orchestrates the entire presentation generation
 Combines all slide generators to create the complete sponsorship insights report
 UPDATED: Added demographic overview slide with AI insights
 UPDATED: Added support for emerging categories with tiered selection
+UPDATED: Added real-time progress tracking
 """
 
 import logging
@@ -43,16 +44,46 @@ DEFAULT_FONT_FAMILY = "Red Hat Display"
 FALLBACK_FONT = "Arial"
 
 
+def update_progress(progress: int, message: str):
+    """Update job progress if running in a job context"""
+    # Try to import and use the backend's progress update function
+    try:
+        from backend.app import update_job_progress
+        # Get the job_id from the current PowerPointBuilder instance
+        if hasattr(PowerPointBuilder._current_instance, 'job_id') and PowerPointBuilder._current_instance.job_id:
+            update_job_progress(PowerPointBuilder._current_instance.job_id, progress, message)
+            logger.info(f"Progress: {progress}% - {message}")
+    except ImportError:
+        # If we can't import from backend (e.g., running standalone), just log
+        logger.info(f"Progress: {progress}% - {message}")
+    except Exception as e:
+        logger.debug(f"Could not update progress: {e}")
+
+
 class PowerPointBuilder:
     """Main orchestrator for building complete PowerPoint presentations"""
 
-    def __init__(self, team_key: str):
+    # Class variable to store current instance for progress updates
+    _current_instance = None
+
+    def __init__(self, team_key: str, job_id: Optional[str] = None, cache_manager: Optional[Any] = None):
         """
         Initialize the PowerPoint builder with proper 16:9 formatting
 
         Args:
             team_key: Team identifier (e.g., 'utah_jazz', 'dallas_cowboys')
+            job_id: Optional job ID for progress tracking
+            cache_manager: Optional CacheManager instance for caching
         """
+        # Store job_id for progress tracking
+        self.job_id = job_id
+
+        # Store cache_manager for passing to components
+        self.cache_manager = cache_manager
+
+        # Set as current instance for progress updates
+        PowerPointBuilder._current_instance = self
+
         self.team_key = team_key
         self.timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -69,14 +100,16 @@ class PowerPointBuilder:
         # Initialize data processors
         self.merchant_ranker = MerchantRanker(
             team_view_prefix=self.view_prefix,
-            comparison_population=self.team_config['comparison_population']
+            comparison_population=self.team_config['comparison_population'],
+            cache_manager = self.cache_manager
         )
 
         self.category_analyzer = CategoryAnalyzer(
             team_name=self.team_name,
             team_short=self.team_short,
             league=self.league,
-            comparison_population=self.team_config['comparison_population']  # ADD THIS LINE
+            comparison_population=self.team_config['comparison_population'], # ADD THIS LINE
+            cache_manager=self.cache_manager
         )
 
         # Validate and set presentation font
@@ -177,7 +210,7 @@ class PowerPointBuilder:
                            include_custom_categories: bool = True,
                            custom_category_count: Optional[int] = None) -> Path:
         """
-        Build the complete PowerPoint presentation with static slides from layouts
+        Build the complete PowerPoint presentation with real progress tracking
 
         Slide Order:
         1. Title slide
@@ -199,33 +232,78 @@ class PowerPointBuilder:
         logger.info(f"Font: {self.presentation_font}")
 
         try:
-            # 1. Create title slide
+            # Calculate total slides for progress tracking
+            is_womens = self._is_womens_team()
+            fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+            if is_womens:
+                fixed_categories.extend(['beauty', 'health'])
+
+            custom_count = custom_category_count or (2 if is_womens else 4) if include_custom_categories else 0
+            total_categories = len(fixed_categories) + custom_count
+
+            # Progress milestones
+            progress_per_category = 40 // total_categories if total_categories > 0 else 5  # Categories take up ~40% of progress (50-90%)
+
+            # 1. Create title slide (25-30%)
+            update_progress(28, "Creating title slide...")
             self._create_title_slide()
+            update_progress(30, "Title slide completed")
 
-            # 2. Add "How To Use This Report" static slide (using layout 13)
+            # 2. Add "How To Use This Report" static slide (30-32%)
+            update_progress(31, "Adding instructions slide...")
             self._add_static_slide_from_layout(13, "How To Use This Report")
+            update_progress(32, "Instructions slide added")
 
-            # 3. NEW: Create demographic overview slide with AI insights
+            # 3. Create demographic overview slide (32-37%)
+            update_progress(33, "Generating demographic AI insights...")
             self._create_demographic_overview_slide()
+            update_progress(37, "Demographic overview completed")
 
-            # 4. Create detailed demographics slide with all 6 charts
+            # 4. Create detailed demographics slide (37-45%)
+            update_progress(38, "Loading demographic data from Snowflake...")
             self._create_demographics_slide()
+            update_progress(45, "Demographics charts completed")
 
-            # 5. Create behaviors slide
+            # 5. Create behaviors slide (45-50%)
+            update_progress(46, "Analyzing fan behaviors...")
             self._create_behaviors_slide()
+            update_progress(50, "Behaviors slide completed")
 
-            # 6. Create category slides (fixed categories)
-            self._create_fixed_category_slides()
+            # 6. Create category slides (50-85%)
+            current_progress = 50
+            update_progress(current_progress, "Starting category analysis...")
 
-            # 7. Create custom category slides (if requested)
+            # Fixed categories
+            for i, category_key in enumerate(fixed_categories):
+                current_progress = 50 + (i * progress_per_category)
+                update_progress(
+                    current_progress,
+                    f"Analyzing {category_key} category ({i + 1}/{len(fixed_categories)})..."
+                )
+                self._create_category_slide(category_key, is_custom=False)
+                update_progress(
+                    current_progress + progress_per_category - 1,
+                    f"Completed {category_key} slides"
+                )
+
+            # 7. Custom categories (if requested)
             if include_custom_categories:
+                base_progress = 50 + (len(fixed_categories) * progress_per_category)
+                update_progress(base_progress, "Identifying top custom categories...")
                 self._create_custom_category_slides(custom_category_count)
+                update_progress(85, "All custom categories completed")
+            else:
+                update_progress(85, "All categories completed")
 
-            # 8. Add SIL branding slide at the end (using layout 14)
+            # 8. Add SIL branding slide (85-87%)
+            update_progress(86, "Adding branding slide...")
             self._add_static_slide_from_layout(14, "Sports Innovation Lab Branding")
+            update_progress(87, "Branding slide added")
 
-            # 9. Save presentation
+            # 9. Save presentation (87-90%)
+            update_progress(88, "Saving presentation file...")
             output_path = self._save_presentation()
+            update_progress(90, "Presentation saved successfully")
 
             logger.info(f"Presentation completed with {len(self.slides_created)} slides")
             logger.info("Final slide order:")
@@ -289,7 +367,7 @@ class PowerPointBuilder:
                 team_name=self.team_name,
                 league=self.league,
                 use_ai_insights=True,  # Enable AI insights
-                comparison_population = comparison_population  # ADD THIS LINE
+                comparison_population=comparison_population  # ADD THIS LINE
             )
 
             demographic_data = processor.process_all_demographics()
@@ -431,6 +509,7 @@ class PowerPointBuilder:
 
         try:
             # Load demographics data
+            update_progress(39, "Querying demographic data...")
             demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
             query = f"SELECT * FROM {demographics_view}"
             df = query_to_dataframe(query)
@@ -443,16 +522,18 @@ class PowerPointBuilder:
             comparison_population = self.team_config.get('comparison_population')
 
             # Process demographics
+            update_progress(41, "Processing demographic data...")
             processor = DemographicsProcessor(
                 data_source=df,
                 team_name=self.team_name,
                 league=self.league,
-                comparison_population = comparison_population  # ADD THIS LINE
+                comparison_population=comparison_population  # ADD THIS LINE
             )
 
             demographic_data = processor.process_all_demographics()
 
             # Generate charts
+            update_progress(43, "Generating demographic charts...")
             charter = DemographicCharts(
                 team_colors=self.team_config.get('colors'),
                 team_config=self.team_config  # ADD THIS LINE!
@@ -463,6 +544,7 @@ class PowerPointBuilder:
             )
 
             # Create single demographics slide with all 6 charts
+            update_progress(44, "Creating demographics slide...")
             demo_generator = DemographicsSlide(self.presentation)
             demo_generator.default_font = self.presentation_font
 
@@ -484,9 +566,11 @@ class PowerPointBuilder:
         logger.info("Creating behaviors slide...")
 
         try:
+            update_progress(47, "Loading behavior data...")
             behaviors_generator = BehaviorsSlide(self.presentation)
             behaviors_generator.default_font = self.presentation_font
 
+            update_progress(48, "Generating fan wheel visualization...")
             self.presentation = behaviors_generator.generate(
                 self.merchant_ranker,
                 self.team_config
@@ -527,20 +611,27 @@ class PowerPointBuilder:
 
         # Get all data needed for custom category selection
         try:
-            # Load category data
-            category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
-            all_category_df = query_to_dataframe(category_query)
-
-            # NEW: Load merchant data for verification
-            merchant_query = f"SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME"
-            all_merchant_df = query_to_dataframe(merchant_query)
-
-            # Get existing fixed categories
+            # Calculate base progress for custom categories
             fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
             if is_womens_team:
                 fixed_categories.extend(['beauty', 'health'])
 
+            progress_per_category = 35 // (len(fixed_categories) + custom_count) if (
+                                                                                                len(fixed_categories) + custom_count) > 0 else 5
+            base_progress = 50 + (len(fixed_categories) * progress_per_category)
+
+            # Load category data
+            update_progress(base_progress + 1, "Loading category data for custom analysis...")
+            category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
+            all_category_df = query_to_dataframe(category_query)
+
+            # NEW: Load merchant data for verification
+            update_progress(base_progress + 2, "Loading merchant data...")
+            merchant_query = f"SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME"
+            all_merchant_df = query_to_dataframe(merchant_query)
+
             # Get custom categories using the new tiered selection
+            update_progress(base_progress + 3, "Analyzing custom categories...")
             custom_categories = self.category_analyzer.get_custom_categories(
                 category_df=all_category_df,
                 merchant_df=all_merchant_df,  # NEW: Pass merchant data
@@ -557,10 +648,15 @@ class PowerPointBuilder:
                             f"composite: {cat.get('composite_index', 0):.1f})")
 
             # Create slides for each custom category
-            # Create slides for each custom category
             for i, custom_cat in enumerate(custom_categories[:custom_count]):
                 category_name = custom_cat['display_name'].strip()  # Strip here!
                 is_emerging = custom_cat.get('is_emerging', False)
+
+                current_progress = base_progress + 5 + (i * progress_per_category)
+                update_progress(
+                    current_progress,
+                    f"Creating custom category {i + 1}/{custom_count}: {category_name}"
+                )
 
                 logger.info(f"Creating custom category slide {i + 1}: {category_name} "
                             f"{'[EMERGING]' if is_emerging else '[ESTABLISHED]'}")
@@ -851,7 +947,11 @@ def build_report(team_key: str, **kwargs) -> Path:
     Returns:
         Path to generated PowerPoint file
     """
-    builder = PowerPointBuilder(team_key)
+    # Extract job_id if provided in kwargs
+    job_id = kwargs.pop('job_id', None)
+    cache_manager = kwargs.pop('cache_manager', None)
+
+    builder = PowerPointBuilder(team_key, job_id=job_id, cache_manager=cache_manager)
 
     # Log font status
     font_status = builder.check_font_installation()

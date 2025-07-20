@@ -67,7 +67,8 @@ class CategoryAnalyzer:
 
     def __init__(self, team_name: str, team_short: str, league: str,
                  config_path: Optional[Path] = None,
-                 comparison_population: str = None):
+                 comparison_population: str = None,
+                 cache_manager: Optional[Any] = None):  # ADD THIS PARAMETER
         """
         Initialize the category analyzer with merchant name standardization
 
@@ -76,10 +77,15 @@ class CategoryAnalyzer:
             team_short: Short team name (e.g., "Jazz")
             league: League name (e.g., "NBA")
             config_path: Path to categories config file
+            comparison_population: Comparison population string
+            cache_manager: Optional CacheManager instance for caching
         """
         self.team_name = team_name
         self.team_short = team_short
         self.league = league
+
+        # Store cache_manager
+        self.cache_manager = cache_manager
 
         # Standard audiences
         self.audience_name = f"{team_name} Fans"
@@ -91,11 +97,21 @@ class CategoryAnalyzer:
             self.comparison_pop = f"Local Gen Pop (Excl. {team_short})"
         self.league_fans = f"{league} Fans"
 
-        # Initialize merchant name standardizer
+        # Initialize merchant name standardizer with cache_manager
         try:
             from utils.merchant_name_standardizer import MerchantNameStandardizer
-            self.standardizer = MerchantNameStandardizer(cache_enabled=True)
+            self.standardizer = MerchantNameStandardizer(
+                cache_enabled=True,
+                cache_manager=self.cache_manager  # Pass cache_manager
+            )
             logger.info("✅ CategoryAnalyzer: Merchant name standardization enabled")
+
+            # Log cache status
+            if self.cache_manager:
+                logger.info("  Using PostgreSQL cache for merchant names")
+            else:
+                logger.info("  Using file cache for merchant names")
+
         except ImportError:
             logger.warning("⚠️ CategoryAnalyzer: MerchantNameStandardizer not available")
             self.standardizer = None

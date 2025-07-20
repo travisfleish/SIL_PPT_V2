@@ -1,22 +1,18 @@
 # utils/merchant_name_standardizer.py
 """
-Enhanced merchant name standardizer using PostgreSQL cache via CacheManager
-Maintains the same interface as the original but uses centralized caching
+Production-ready merchant name standardizer using OpenAI API
+FIXED VERSION - properly overwrites original columns
 """
 
 import json
 import asyncio
 import logging
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional
 from pathlib import Path
 import pandas as pd
 from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
-
-# Import CacheManager (it should be in the same utils directory)
-if TYPE_CHECKING:
-    from .cache_manager import CacheManager
 
 # Load environment variables
 load_dotenv()
@@ -26,17 +22,16 @@ logger = logging.getLogger(__name__)
 
 class MerchantNameStandardizer:
     """
-    Production merchant name standardizer with PostgreSQL caching
-    Maintains backward compatibility while using centralized cache
+    Production merchant name standardizer with caching and error handling
+    FIXED VERSION - properly overwrites original columns instead of creating new ones
     """
 
-    def __init__(self, cache_enabled: bool = True, cache_manager: Optional['CacheManager'] = None):
+    def __init__(self, cache_enabled: bool = True):
         """
-        Initialize standardizer with OpenAI client and caching
+        Initialize standardizer with OpenAI client and optional caching
 
         Args:
-            cache_enabled: Whether to use caching
-            cache_manager: Optional CacheManager instance. If not provided, falls back to file cache
+            cache_enabled: Whether to use persistent caching
         """
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
@@ -44,90 +39,51 @@ class MerchantNameStandardizer:
 
         self.client = AsyncOpenAI(api_key=api_key)
         self.batch_size = 15  # Optimal batch size for API efficiency
+
+        # Initialize cache
         self.cache_enabled = cache_enabled
+        self.cache_file = Path(__file__).parent.parent / 'cache' / 'merchant_names.json'
+        self.cache = self._load_cache() if cache_enabled else {}
 
-        # Use provided CacheManager or fall back to file-based cache
-        self.cache_manager = cache_manager
-        self.use_postgres_cache = cache_manager is not None
-
-        # Stats tracking
-        self._api_calls = 0
-        self._cache_hits = 0
-        self._cache_misses = 0
-
-        # Initialize file cache as fallback
-        if not self.use_postgres_cache and cache_enabled:
-            self.cache_file = Path(__file__).parent.parent / 'cache' / 'merchant_names.json'
+        # Create cache directory if needed
+        if cache_enabled:
             self.cache_file.parent.mkdir(exist_ok=True)
-            self.file_cache = self._load_file_cache()
-        else:
-            self.file_cache = {}
 
-        logger.info(f"Initialized MerchantNameStandardizer (PostgreSQL cache: {self.use_postgres_cache})")
-
-    def _load_file_cache(self) -> Dict[str, str]:
-        """Load existing cache from file (fallback method)"""
+    def _load_cache(self) -> Dict[str, str]:
+        """Load existing cache from file"""
         try:
             if self.cache_file.exists():
                 with open(self.cache_file, 'r') as f:
                     cache = json.load(f)
-                logger.info(f"Loaded {len(cache)} cached merchant names from file")
+                logger.info(f"Loaded {len(cache)} cached merchant names")
                 return cache
         except Exception as e:
-            logger.warning(f"Failed to load file cache: {e}")
+            logger.warning(f"Failed to load cache: {e}")
+
         return {}
 
-    def _save_file_cache(self):
-        """Persist cache to file (fallback method)"""
-        if not self.cache_enabled or self.use_postgres_cache:
+    def _save_cache(self):
+        """Persist cache to file"""
+        if not self.cache_enabled:
             return
 
         try:
             with open(self.cache_file, 'w') as f:
-                json.dump(self.file_cache, f, indent=2)
-            logger.debug(f"Saved file cache with {len(self.file_cache)} entries")
+                json.dump(self.cache, f, indent=2)
+            logger.debug(f"Saved cache with {len(self.cache)} entries")
         except Exception as e:
-            logger.warning(f"Failed to save file cache: {e}")
+            logger.warning(f"Failed to save cache: {e}")
 
     def get_cached_name(self, original_name: str) -> Optional[str]:
-        """Get standardized name from cache (PostgreSQL or file)"""
+        """Get standardized name from cache"""
         if not self.cache_enabled:
             return None
-
-        if self.use_postgres_cache:
-            # Use PostgreSQL cache
-            standardized, confidence, cache_hit = self.cache_manager.get_merchant_name(original_name)
-            if cache_hit:
-                self._cache_hits += 1
-                return standardized
-            else:
-                self._cache_misses += 1
-                return None
-        else:
-            # Fall back to file cache
-            cached = self.file_cache.get(original_name.upper())
-            if cached:
-                self._cache_hits += 1
-            else:
-                self._cache_misses += 1
-            return cached
+        return self.cache.get(original_name.upper())
 
     def cache_name_mapping(self, original: str, standardized: str):
-        """Cache a name mapping (PostgreSQL or file)"""
-        if not self.cache_enabled:
-            return
-
-        if self.use_postgres_cache:
-            # Use PostgreSQL cache
-            self.cache_manager.set_merchant_name(
-                original,
-                standardized,
-                confidence_score=0.95,
-                source='openai'
-            )
-        else:
-            # Fall back to file cache
-            self.file_cache[original.upper()] = standardized
+        """Cache a name mapping"""
+        if self.cache_enabled:
+            self.cache[original.upper()] = standardized
 
     async def standardize_merchants(self, merchant_names: List[str]) -> Dict[str, str]:
         """
@@ -144,32 +100,16 @@ class MerchantNameStandardizer:
 
         logger.info(f"Standardizing {len(merchant_names)} merchant names...")
 
-        # For PostgreSQL cache, we can use batch lookup for efficiency
-        if self.use_postgres_cache and self.cache_enabled:
-            # Batch lookup from PostgreSQL
-            cache_results = self.cache_manager.get_merchant_names_batch(merchant_names)
+        # Check cache first
+        results = {}
+        uncached_names = []
 
-            results = {}
-            uncached_names = []
-
-            for name in merchant_names:
-                standardized, confidence, cache_hit = cache_results[name]
-                if cache_hit:
-                    results[name] = standardized
-                else:
-                    uncached_names.append(name)
-
-        else:
-            # Original single-lookup logic
-            results = {}
-            uncached_names = []
-
-            for name in merchant_names:
-                cached = self.get_cached_name(name)
-                if cached is not None:
-                    results[name] = cached
-                else:
-                    uncached_names.append(name)
+        for name in merchant_names:
+            cached = self.get_cached_name(name)
+            if cached is not None:
+                results[name] = cached
+            else:
+                uncached_names.append(name)
 
         if uncached_names:
             logger.info(f"Found {len(results)} cached, processing {len(uncached_names)} new names")
@@ -179,20 +119,11 @@ class MerchantNameStandardizer:
             results.update(new_results)
 
             # Update cache
-            if self.use_postgres_cache and self.cache_enabled:
-                # Batch insert for PostgreSQL (more efficient)
-                for original, standardized in new_results.items():
-                    self.cache_manager.set_merchant_name(
-                        original,
-                        standardized,
-                        confidence_score=0.95,
-                        source='openai'
-                    )
-            else:
-                # Original caching logic
-                for original, standardized in new_results.items():
-                    self.cache_name_mapping(original, standardized)
-                self._save_file_cache()
+            for original, standardized in new_results.items():
+                self.cache_name_mapping(original, standardized)
+
+            # Save cache
+            self._save_cache()
         else:
             logger.info(f"All {len(merchant_names)} names found in cache")
 
@@ -238,7 +169,6 @@ class MerchantNameStandardizer:
 
     async def _standardize_batch(self, names: List[str]) -> Dict[str, str]:
         """Standardize a single batch using OpenAI"""
-        self._api_calls += 1
         prompt = self._create_prompt(names)
 
         response = await self.client.chat.completions.create(
@@ -306,7 +236,7 @@ Return JSON mapping each name:
     def standardize_dataframe_column(self, df: pd.DataFrame, column_name: str,
                                      preserve_original: bool = True) -> pd.DataFrame:
         """
-        Standardize a DataFrame column and OVERWRITE the original
+        FIXED VERSION: Standardize a DataFrame column and OVERWRITE the original
 
         Args:
             df: DataFrame containing merchant names
@@ -338,51 +268,26 @@ Return JSON mapping each name:
         finally:
             loop.close()
 
-        # OVERWRITE THE ORIGINAL COLUMN
+        # OVERWRITE THE ORIGINAL COLUMN (this is the key fix)
         df[column_name] = df[column_name].map(name_mapping).fillna(df[column_name])
 
         logger.info(f"Standardized {len(unique_names)} unique merchant names in column '{column_name}'")
         return df
 
-    def get_stats(self) -> Dict[str, any]:
-        """Get standardization statistics"""
-        total_lookups = self._cache_hits + self._cache_misses
-        hit_rate = (self._cache_hits / total_lookups * 100) if total_lookups > 0 else 0
-
-        return {
-            'cache_type': 'PostgreSQL' if self.use_postgres_cache else 'File',
-            'cache_hits': self._cache_hits,
-            'cache_misses': self._cache_misses,
-            'hit_rate': hit_rate,
-            'api_calls': self._api_calls,
-            'api_calls_saved': self._cache_hits
-        }
-
-    def log_performance(self):
-        """Log performance statistics"""
-        stats = self.get_stats()
-        logger.info(f"MerchantNameStandardizer Performance:")
-        logger.info(f"  Cache Type: {stats['cache_type']}")
-        logger.info(f"  Hit Rate: {stats['hit_rate']:.1f}%")
-        logger.info(f"  API Calls: {stats['api_calls']}")
-        logger.info(f"  API Calls Saved: {stats['api_calls_saved']}")
-
 
 # Convenience function for easy integration
-def standardize_merchant_names(names: List[str], cache_enabled: bool = True,
-                               cache_manager: Optional['CacheManager'] = None) -> Dict[str, str]:
+def standardize_merchant_names(names: List[str], cache_enabled: bool = True) -> Dict[str, str]:
     """
     Convenience function for one-off merchant name standardization
 
     Args:
         names: List of merchant names to standardize
         cache_enabled: Whether to use caching
-        cache_manager: Optional CacheManager instance for PostgreSQL caching
 
     Returns:
         Dictionary mapping original names to standardized names
     """
-    standardizer = MerchantNameStandardizer(cache_enabled=cache_enabled, cache_manager=cache_manager)
+    standardizer = MerchantNameStandardizer(cache_enabled=cache_enabled)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -400,9 +305,9 @@ class StandardizedMerchantRanker:
     Example of how to integrate with your existing classes
     """
 
-    def __init__(self, team_view_prefix: str, cache_manager: Optional['CacheManager'] = None):
+    def __init__(self, team_view_prefix: str):
         self.team_view_prefix = team_view_prefix
-        self.standardizer = MerchantNameStandardizer(cache_enabled=True, cache_manager=cache_manager)
+        self.standardizer = MerchantNameStandardizer(cache_enabled=True)
 
     async def get_standardized_merchant_data(self, query_result: pd.DataFrame) -> pd.DataFrame:
         """
@@ -436,43 +341,9 @@ class StandardizedMerchantRanker:
 
 if __name__ == "__main__":
     # Test the integration
-
-    # Example 1: Using file cache (default)
-    print("Testing with file cache:")
     test_names = ["MCDONALD'S", "PANDA EXPRESS", "CHICK-FIL-A", "LULULEMON"]
     results = standardize_merchant_names(test_names)
 
     print("Standardization Results:")
     for orig, std in results.items():
         print(f"  {orig} → {std}")
-
-    # Example 2: Using PostgreSQL cache
-    print("\nTesting with PostgreSQL cache:")
-    try:
-        from postgresql_job_store import PostgreSQLJobStore
-        from cache_manager import CacheManager
-
-        # Initialize with PostgreSQL cache
-        job_store = PostgreSQLJobStore()
-        cache_manager = CacheManager(job_store.pool)
-
-        # Create standardizer with cache manager
-        standardizer = MerchantNameStandardizer(cache_enabled=True, cache_manager=cache_manager)
-
-        # Test standardization
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        try:
-            results = loop.run_until_complete(standardizer.standardize_merchants(test_names))
-            print("PostgreSQL Cache Results:")
-            for orig, std in results.items():
-                print(f"  {orig} → {std}")
-
-            # Show stats
-            standardizer.log_performance()
-        finally:
-            loop.close()
-
-    except ImportError:
-        print("PostgreSQL cache not available, skipping test")

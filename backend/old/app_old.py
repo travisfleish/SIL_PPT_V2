@@ -6,11 +6,39 @@ Provides REST endpoints for the web frontend
 
 import os
 import sys
+from pathlib import Path
+
+# CRITICAL: Set working directory and load environment FIRST
+backend_dir = Path(__file__).parent
+project_dir = backend_dir.parent
+
+# Change to backend directory
+os.chdir(backend_dir)
+
+# Add parent directory to path BEFORE any project imports
+sys.path.insert(0, str(project_dir))
+
+# Load environment variables BEFORE any imports that might use them
+from dotenv import load_dotenv
+
+env_path = project_dir / '.env'
+if not env_path.exists():
+    # Fallback to current directory
+    env_path = Path('.env')
+
+load_dotenv(env_path, override=True)
+
+# Verify environment loaded
+print(f"Starting Flask app...")
+print(f"Working directory: {os.getcwd()}")
+print(f"Env file: {env_path} (exists: {env_path.exists()})")
+print(f"SNOWFLAKE_ACCOUNT: {os.getenv('SNOWFLAKE_ACCOUNT', 'NOT SET')}")
+
+# NOW continue with other imports
 import json
 import logging
 import traceback
-import tempfile  # MOVED HERE - before first use
-from pathlib import Path
+import tempfile
 from datetime import datetime
 from typing import Dict, List, Optional
 from flask import Flask, request, jsonify, send_file, Response, send_from_directory
@@ -19,6 +47,7 @@ import threading
 import queue
 import uuid
 import matplotlib
+
 
 # Configure matplotlib BEFORE importing pyplot
 matplotlib.use('Agg')  # Must be before importing pyplot
@@ -41,12 +70,10 @@ from utils.team_config_manager import TeamConfigManager
 from report_builder.pptx_builder import PowerPointBuilder
 from data_processors.snowflake_connector import test_connection
 from data_processors.merchant_ranker import MerchantRanker
+from postgresql_job_store import PostgreSQLJobStore
 
 import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -88,8 +115,48 @@ initialize_app()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
-# Job tracking
-jobs = {}  # job_id -> job_info
+# Initialize PostgreSQL job storage
+try:
+    job_store = PostgreSQLJobStore(os.environ.get('DATABASE_URL'))
+    logger.info("Successfully connected to PostgreSQL job store")
+except Exception as e:
+    logger.error(f"Failed to initialize PostgreSQL job store: {e}")
+
+
+    # Fallback to in-memory storage
+    class InMemoryJobStore:
+        def __init__(self):
+            self.jobs = {}
+
+        def create_job(self, team_key, options):
+            job_id = str(uuid.uuid4())
+            self.jobs[job_id] = {
+                'job_id': job_id,
+                'team_key': team_key,
+                'status': 'pending',
+                'progress': 0,
+                'options': options,
+                'created_at': datetime.now().isoformat()
+            }
+            return job_id
+
+        def get_job(self, job_id):
+            return self.jobs.get(job_id)
+
+        def update_job(self, job_id, **kwargs):
+            if job_id in self.jobs:
+                self.jobs[job_id].update(kwargs)
+                return True
+            return False
+
+        def list_recent_jobs(self, limit=100):
+            return list(self.jobs.values())[:limit]
+
+
+    job_store = InMemoryJobStore()
+    logger.warning("Using in-memory job store as fallback")
+
+# Keep job_queues for SSE
 job_queues = {}  # job_id -> queue for progress updates
 
 
@@ -99,10 +166,8 @@ class JobManager:
     @staticmethod
     def create_job(team_key: str, options: dict) -> str:
         """Create a new job and return job ID"""
-        job_id = str(uuid.uuid4())
-
-        jobs[job_id] = {
-            'id': job_id,
+        # Create job in PostgreSQL
+        job_id = job_store.create_job(team_key, {
             'team_key': team_key,
             'team_name': None,
             'status': 'pending',
@@ -111,12 +176,12 @@ class JobManager:
             'created_at': datetime.now().isoformat(),
             'completed_at': None,
             'output_file': None,
-            'output_dir': None,  # Added for better tracking
+            'output_dir': None,
             'error': None,
-            'options': options
-        }
+            **options  # Include all options
+        })
 
-        # Create progress queue for this job
+        # Create progress queue for this job (keep in memory for SSE)
         job_queues[job_id] = queue.Queue()
 
         return job_id
@@ -124,10 +189,11 @@ class JobManager:
     @staticmethod
     def update_job(job_id: str, **kwargs):
         """Update job information"""
-        if job_id in jobs:
-            jobs[job_id].update(kwargs)
+        # Update in PostgreSQL
+        success = job_store.update_job(job_id, **kwargs)
 
-            # Send update to queue if exists
+        if success:
+            # Send update to queue if exists (for SSE)
             if job_id in job_queues:
                 try:
                     job_queues[job_id].put_nowait(kwargs)
@@ -239,11 +305,24 @@ def serve_static(path):
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat()
-    })
+    """Health check endpoint with database connectivity check"""
+    try:
+        # Check database connection
+        stats = job_store.get_job_stats()
+
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'jobs': stats,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 503
 
 
 @app.route('/api/debug/fonts', methods=['GET'])
@@ -458,23 +537,26 @@ def generate_behaviors_slide_pptx(team_key: str, team_config: dict) -> Path:
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def get_job_status(job_id):
     """Get job status"""
-    if job_id not in jobs:
+    job = job_store.get_job(job_id)
+
+    if not job:
         return jsonify({'error': 'Job not found'}), 404
 
-    return jsonify(jobs[job_id])
+    return jsonify(job)
 
 
 @app.route('/api/jobs/<job_id>/status', methods=['GET'])
 def get_job_status_simple(job_id):
     """Simple status endpoint for polling fallback"""
-    if job_id not in jobs:
+    job = job_store.get_job(job_id)
+
+    if not job:
         return jsonify({'error': 'Job not found'}), 404
 
-    job = jobs[job_id]
     return jsonify({
-        'status': job['status'],
-        'progress': job['progress'],
-        'message': job['message'],
+        'status': job.get('status'),
+        'progress': job.get('progress'),
+        'message': job.get('message', ''),
         'error': job.get('error')
     })
 
@@ -482,12 +564,16 @@ def get_job_status_simple(job_id):
 @app.route('/api/jobs/<job_id>/progress', methods=['GET'])
 def get_job_progress_stream(job_id):
     """Server-sent events stream for job progress"""
-    if job_id not in jobs:
+    job = job_store.get_job(job_id)
+
+    if not job:
         return jsonify({'error': 'Job not found'}), 404
 
     def generate():
         # Send initial status immediately
-        yield f"data: {json.dumps(jobs[job_id])}\n\n"
+        initial_job = job_store.get_job(job_id)
+        if initial_job:
+            yield f"data: {json.dumps(initial_job)}\n\n".encode('utf-8')
 
         # Get the queue for this job
         job_queue = job_queues.get(job_id)
@@ -499,21 +585,21 @@ def get_job_progress_stream(job_id):
 
         while retry_count < max_retries:
             try:
-                current_job = jobs.get(job_id)
+                current_job = job_store.get_job(job_id)
                 if not current_job:
-                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                    yield f"data: {json.dumps({'error': 'Job not found'})}\n\n".encode('utf-8')
                     break
 
                 # Send update if status changed
                 current_status = current_job.get('status')
                 if current_status != last_status:
-                    yield f"data: {json.dumps(current_job)}\n\n"
+                    yield f"data: {json.dumps(current_job)}\n\n".encode('utf-8')
                     last_status = current_status
 
                 # Check if job is complete
                 if current_status in ['completed', 'failed']:
                     # Send final update
-                    yield f"data: {json.dumps(current_job)}\n\n"
+                    yield f"data: {json.dumps(current_job)}\n\n".encode('utf-8')
                     break
 
                 # Try to get updates from queue
@@ -521,13 +607,15 @@ def get_job_progress_stream(job_id):
                     try:
                         # Non-blocking get
                         update = job_queue.get_nowait()
-                        # Send current state after update
-                        yield f"data: {json.dumps(jobs[job_id])}\n\n"
+                        # Get latest job state from PostgreSQL
+                        latest_job = job_store.get_job(job_id)
+                        if latest_job:
+                            yield f"data: {json.dumps(latest_job)}\n\n".encode('utf-8')
                     except queue.Empty:
                         pass
 
                 # Send heartbeat to keep connection alive
-                yield f": heartbeat\n\n"  # SSE comment to keep alive
+                yield f": heartbeat\n\n".encode('utf-8')  # SSE comment to keep alive
 
                 # Sleep briefly
                 import time
@@ -536,7 +624,7 @@ def get_job_progress_stream(job_id):
 
             except Exception as e:
                 logger.error(f"SSE error for job {job_id}: {str(e)}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield f"data: {json.dumps({'error': str(e)})}\n\n".encode('utf-8')
                 break
 
     # Create response with proper headers
@@ -564,11 +652,12 @@ def download_report(job_id):
     """Download generated PowerPoint file"""
     try:
         # Check if job exists
-        if job_id not in jobs:
+        job = job_store.get_job(job_id)
+
+        if not job:
             logger.error(f"Download attempted for non-existent job: {job_id}")
             return jsonify({'error': 'Job not found'}), 404
 
-        job = jobs[job_id]
         logger.info(f"Download requested for job {job_id}: status={job['status']}, file={job.get('output_file')}")
 
         # Check if job is completed
@@ -622,17 +711,27 @@ def download_report(job_id):
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():
     """List all jobs (recent first)"""
-    job_list = sorted(
-        jobs.values(),
-        key=lambda x: x['created_at'],
-        reverse=True
-    )
+    jobs = job_store.list_recent_jobs(limit=50)
 
-    # Limit to recent jobs
     return jsonify({
-        'jobs': job_list[:50],
+        'jobs': jobs,
         'total': len(jobs)
     })
+
+
+@app.route('/api/admin/jobs/cleanup', methods=['POST'])
+def admin_cleanup_jobs():
+    """Manually trigger cleanup of expired jobs"""
+    try:
+        deleted_count = job_store.cleanup_expired_jobs()
+        return jsonify({
+            'success': True,
+            'deleted': deleted_count,
+            'message': f'Cleaned up {deleted_count} expired jobs'
+        })
+    except Exception as e:
+        logger.error(f"Error cleaning up jobs: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/cleanup-old-files', methods=['POST'])
@@ -650,30 +749,21 @@ def cleanup_old_files():
                 file_path.unlink(missing_ok=True)
                 files_deleted += 1
 
-        # Clean up old job records older than 24 hours
-        jobs_to_delete = []
-        for job_id, job_info in jobs.items():
-            if 'created_at' in job_info:
-                job_time = datetime.fromisoformat(job_info['created_at'])
-                if (datetime.now() - job_time).total_seconds() > 86400:  # 24 hours
-                    jobs_to_delete.append(job_id)
+        # Clean up expired jobs in PostgreSQL
+        jobs_deleted = job_store.cleanup_expired_jobs()
 
-        for job_id in jobs_to_delete:
-            # Delete output file if exists
-            if 'output_file' in jobs[job_id] and jobs[job_id]['output_file']:
-                output_path = Path(jobs[job_id]['output_file'])
-                if output_path.exists():
-                    output_path.unlink(missing_ok=True)
-                    files_deleted += 1
+        # Clean up orphaned queues
+        job_ids_in_db = {job['job_id'] for job in job_store.list_recent_jobs(limit=1000)}
+        queues_to_delete = [job_id for job_id in job_queues if job_id not in job_ids_in_db]
 
-            # Remove from tracking
-            jobs.pop(job_id, None)
+        for job_id in queues_to_delete:
             job_queues.pop(job_id, None)
 
         return jsonify({
             'status': 'success',
             'files_deleted': files_deleted,
-            'jobs_cleaned': len(jobs_to_delete)
+            'jobs_cleaned': jobs_deleted,
+            'queues_cleaned': len(queues_to_delete)
         })
 
     except Exception as e:

@@ -11,7 +11,7 @@ import pandas as pd
 import yaml
 import logging
 import asyncio
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 class MerchantRanker:
     """Analyze and rank merchants by community with merchant name standardization"""
 
-    def __init__(self, team_view_prefix: str, comparison_population: str = None):
+    def __init__(self, team_view_prefix: str, comparison_population: str = None, cache_manager: Optional[Any] = None):
         """
         Initialize merchant ranker
 
         Args:
             team_view_prefix: Snowflake view prefix for the team (REQUIRED)
             comparison_population: Comparison population string from config
+            cache_manager: Optional CacheManager instance for caching
         """
         if not team_view_prefix:
             raise ValueError("team_view_prefix is required")
@@ -35,16 +36,29 @@ class MerchantRanker:
         self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_ALL_TIME"
         self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
 
+        # Store cache_manager
+        self.cache_manager = cache_manager
+
         # Store comparison population - no default!
         self.comparison_population = comparison_population
         if not self.comparison_population:
             logger.warning("No comparison_population provided - will need to pass explicitly to methods")
 
-        # Initialize merchant name standardizer
+        # Initialize merchant name standardizer with cache_manager
         try:
             from utils.merchant_name_standardizer import MerchantNameStandardizer
-            self.standardizer = MerchantNameStandardizer(cache_enabled=True)
+            self.standardizer = MerchantNameStandardizer(
+                cache_enabled=True,
+                cache_manager=self.cache_manager  # Pass cache_manager
+            )
             logger.info("✅ Merchant name standardization enabled")
+
+            # Log cache status
+            if self.cache_manager:
+                logger.info("  Using PostgreSQL cache for merchant names")
+            else:
+                logger.info("  Using file cache for merchant names")
+
         except ImportError:
             logger.warning("⚠️ MerchantNameStandardizer not available - names will not be standardized")
             self.standardizer = None
