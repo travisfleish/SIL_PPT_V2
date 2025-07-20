@@ -46,18 +46,16 @@ FALLBACK_FONT = "Arial"
 
 def update_progress(progress: int, message: str):
     """Update job progress if running in a job context"""
-    # Try to import and use the backend's progress update function
-    try:
-        from backend.app import update_job_progress
-        # Get the job_id from the current PowerPointBuilder instance
-        if hasattr(PowerPointBuilder._current_instance, 'job_id') and PowerPointBuilder._current_instance.job_id:
-            update_job_progress(PowerPointBuilder._current_instance.job_id, progress, message)
-            logger.info(f"Progress: {progress}% - {message}")
-    except ImportError:
-        # If we can't import from backend (e.g., running standalone), just log
-        logger.info(f"Progress: {progress}% - {message}")
-    except Exception as e:
-        logger.debug(f"Could not update progress: {e}")
+    # Use the callback if available
+    if (hasattr(PowerPointBuilder._current_instance, 'progress_callback') and
+            PowerPointBuilder._current_instance.progress_callback):
+        try:
+            PowerPointBuilder._current_instance.progress_callback(progress, message)
+        except Exception as e:
+            logger.debug(f"Error calling progress callback: {e}")
+
+    # Always log the progress
+    logger.info(f"Progress: {progress}% - {message}")
 
 
 class PowerPointBuilder:
@@ -66,7 +64,7 @@ class PowerPointBuilder:
     # Class variable to store current instance for progress updates
     _current_instance = None
 
-    def __init__(self, team_key: str, job_id: Optional[str] = None, cache_manager: Optional[Any] = None):
+    def __init__(self, team_key: str, job_id: Optional[str] = None, cache_manager: Optional[Any] = None, progress_callback: Optional[callable] = None):
         """
         Initialize the PowerPoint builder with proper 16:9 formatting
 
@@ -83,6 +81,9 @@ class PowerPointBuilder:
 
         # Set as current instance for progress updates
         PowerPointBuilder._current_instance = self
+
+        # Store progress callback
+        self.progress_callback = progress_callback
 
         self.team_key = team_key
         self.timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -947,11 +948,12 @@ def build_report(team_key: str, **kwargs) -> Path:
     Returns:
         Path to generated PowerPoint file
     """
-    # Extract job_id if provided in kwargs
+    # Extract job_id and callback if provided in kwargs
     job_id = kwargs.pop('job_id', None)
     cache_manager = kwargs.pop('cache_manager', None)
+    progress_callback = kwargs.pop('progress_callback', None)
 
-    builder = PowerPointBuilder(team_key, job_id=job_id, cache_manager=cache_manager)
+    builder = PowerPointBuilder(team_key, job_id=job_id, cache_manager=cache_manager, progress_callback=progress_callback)
 
     # Log font status
     font_status = builder.check_font_installation()

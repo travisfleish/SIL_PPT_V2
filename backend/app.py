@@ -92,11 +92,11 @@ def unregister_active_job(job_id: str):
     """Unregister a job when complete"""
     _active_jobs.pop(job_id, None)
 
-
-def update_job_progress(job_id: str, progress: int, message: str):
-    """Update progress for an active job"""
-    if job_id in _active_jobs:
-        _active_jobs[job_id].update_job(job_id, progress=progress, message=message)
+#
+# def update_job_progress(job_id: str, progress: int, message: str):
+#     """Update progress for an active job"""
+#     if job_id in _active_jobs:
+#         _active_jobs[job_id].update_job(job_id, progress=progress, message=message)
 
 
 def initialize_app():
@@ -265,12 +265,18 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
                               progress=20,
                               message='Initializing PowerPoint builder...')
 
-        # Pass job_id and cache_manager to PowerPointBuilder
-        builder = PowerPointBuilder(team_key, job_id=job_id, cache_manager=cache_manager)
+        def progress_callback(progress: int, message: str):
+            """Callback to update job progress from PowerPointBuilder"""
+            JobManager.update_job(job_id, progress=progress, message=message)
+            logger.debug(f"Progress callback: {progress}% - {message}")
 
-        JobManager.update_job(job_id,
-                              progress=25,
-                              message='PowerPoint builder ready, starting slide generation...')
+        # Pass job_id, cache_manager, AND progress_callback to PowerPointBuilder
+        builder = PowerPointBuilder(
+            team_key,
+            job_id=job_id,
+            cache_manager=cache_manager,
+            progress_callback=progress_callback
+        )
 
         # Step 4: Build presentation
         # The builder will now update progress from 25% to 90%

@@ -970,7 +970,7 @@ async function pollJobStatus(jobId) {
 
         if (job.team_name) {
             document.getElementById('progressDetails').textContent =
-                `Generating report for ${job.team_name}`;
+                `Generating report for ${job.team_name} | Progress: ${progress}%`;
         } else {
             document.getElementById('progressDetails').textContent =
                 `Status: ${status} | Progress: ${progress}%`;
