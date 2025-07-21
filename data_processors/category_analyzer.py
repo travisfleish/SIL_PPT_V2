@@ -688,22 +688,49 @@ class CategoryAnalyzer:
         if subcategory_df.empty:
             return None
 
-        if category_config.get('is_custom', False):
-            category_names = [category_config['display_name']]
-        else:
-            category_names = category_config.get('category_names_in_data', [])
-
-        category_filter = subcategory_df['CATEGORY'].isin(category_names)
-
+        # Get NBA comparison data first
         nba_comp = subcategory_df[
             (subcategory_df['AUDIENCE'] == self.audience_name) &
-            (subcategory_df['COMPARISON_POPULATION'] == self.league_fans) &
-            category_filter
+            (subcategory_df['COMPARISON_POPULATION'] == self.league_fans)
             ]
 
         if nba_comp.empty:
             return None
 
+        # Now apply subcategory filtering based on category config
+        subcategory_config = category_config.get('subcategories', {})
+        included = subcategory_config.get('include', [])
+        excluded = subcategory_config.get('exclude', [])
+
+        # Filter the NBA comparison data
+        if included:
+            # Get all included subcategory names
+            included_names = []
+            for sub in included:
+                if isinstance(sub, dict):
+                    key_in_data = sub.get('key_in_data', '')
+                    if isinstance(key_in_data, list):
+                        included_names.extend(key_in_data)
+                    else:
+                        included_names.append(key_in_data)
+                else:
+                    included_names.append(sub)
+
+            # Filter to only included subcategories
+            nba_comp = nba_comp[nba_comp['SUBCATEGORY'].isin(included_names)]
+            logger.debug(f"League comparison: Filtered to {len(included_names)} included subcategories")
+
+        elif excluded:
+            # Filter out excluded subcategories
+            nba_comp = nba_comp[~nba_comp['SUBCATEGORY'].isin(excluded)]
+            logger.debug(f"League comparison: Excluded subcategories: {excluded}")
+
+        # If no data left after filtering, return None
+        if nba_comp.empty:
+            logger.debug("League comparison: No data after subcategory filtering")
+            return None
+
+        # Continue with finding the best index
         index_columns = ['PERC_INDEX', 'SPC_INDEX', 'SPP_INDEX', 'PPC_INDEX', 'COMPOSITE_INDEX']
 
         max_value = 0

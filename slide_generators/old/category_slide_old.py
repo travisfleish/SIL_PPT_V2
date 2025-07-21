@@ -913,7 +913,7 @@ class CategorySlide(BaseSlide):
         p.font.size = Pt(48)
         p.font.color.rgb = RGBColor(150, 150, 150)
 
-    def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str, team_short: str, category_name: str):
+    def _add_brand_insights(self, slide, results: Dict[str, Any], team_name: str, team_short: str, category_name: str, team_config: Dict[str, Any]):
         """Add brand-specific insights with updated formatting to match reference"""
         # Top Brand Insights section
         insights_title = slide.shapes.add_textbox(
@@ -948,7 +948,7 @@ class CategorySlide(BaseSlide):
             if i == 0:  # First insight - Highest % of Fans
                 # Add the label in bold
                 run1 = p.add_run()
-                run1.text = "• Highest % of Fans: "
+                run1.text = f"• Highest % of Fans: "
                 run1.font.name = self.default_font
                 run1.font.size = Pt(12)  # Increased from 10 to match Top Brand Target
                 run1.font.bold = True
@@ -1019,7 +1019,7 @@ class CategorySlide(BaseSlide):
             elif i == 3:  # Fourth insight - NBA/League comparison
                 # Add the label in bold
                 run1 = p.add_run()
-                run1.text = f"• Highest % of Fans Index vs NBA: "
+                run1.text = f"• Highest % of Fans Index vs {team_config.get('league', 'NBA')}: "
                 run1.font.name = self.default_font
                 run1.font.size = Pt(12)
                 run1.font.bold = True
@@ -1038,7 +1038,8 @@ class CategorySlide(BaseSlide):
                     if match:
                         percent = match.group(1)
                         brand = match.group(2).strip()
-                        run2.text = f"{team_short} fans are {percent}% more likely to spend on {brand} than the average NBA fan"
+                        league = team_config.get('league', 'NBA')
+                        run2.text = f"{team_short} fans are {percent}% more likely to spend on {brand} than the average {league} fan"
                     else:
                         run2.text = insight_text
                 else:

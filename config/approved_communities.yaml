@@ -229,10 +229,6 @@ approved_communities:
     action: "Buys"
     category: "lifestyle"
 
-  - name: "Values Driven"
-    action: "Shops"
-    category: "lifestyle"
-
   # Travel Communities
   - name: "Budget Travelers"
     action: "Travels"
