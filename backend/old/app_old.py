@@ -48,7 +48,6 @@ import queue
 import uuid
 import matplotlib
 
-
 # Configure matplotlib BEFORE importing pyplot
 matplotlib.use('Agg')  # Must be before importing pyplot
 
@@ -65,6 +64,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # Import font manager BEFORE other visualization imports
 from utils.font_manager import font_manager
+from utils.cache_manager import CacheManager  # Add CacheManager import
 
 from utils.team_config_manager import TeamConfigManager
 from report_builder.pptx_builder import PowerPointBuilder
@@ -74,10 +74,29 @@ from postgresql_job_store import PostgreSQLJobStore
 
 import os
 
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# GLOBAL PROGRESS TRACKING
+# This allows PowerPointBuilder to update progress without circular imports
+_active_jobs = {}
+
+
+def register_active_job(job_id: str, job_manager):
+    """Register a job for progress tracking"""
+    _active_jobs[job_id] = job_manager
+
+
+def unregister_active_job(job_id: str):
+    """Unregister a job when complete"""
+    _active_jobs.pop(job_id, None)
+
+#
+# def update_job_progress(job_id: str, progress: int, message: str):
+#     """Update progress for an active job"""
+#     if job_id in _active_jobs:
+#         _active_jobs[job_id].update_job(job_id, progress=progress, message=message)
 
 
 def initialize_app():
@@ -115,12 +134,20 @@ initialize_app()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
-# Initialize PostgreSQL job storage
+# Initialize PostgreSQL job storage and CacheManager
+cache_manager = None  # Initialize as None, will be set if PostgreSQL succeeds
+
 try:
     job_store = PostgreSQLJobStore(os.environ.get('DATABASE_URL'))
     logger.info("Successfully connected to PostgreSQL job store")
+
+    # Initialize CacheManager using the same connection pool
+    cache_manager = CacheManager(job_store.pool)
+    logger.info("Successfully initialized CacheManager with PostgreSQL backend")
+
 except Exception as e:
     logger.error(f"Failed to initialize PostgreSQL job store: {e}")
+    cache_manager = None  # Set to None for fallback
 
 
     # Fallback to in-memory storage
@@ -202,41 +229,73 @@ class JobManager:
 
 
 def generate_pptx_worker(job_id: str, team_key: str, options: dict):
-    """Worker function to generate PowerPoint in background"""
+    """Worker function to generate PowerPoint in background with real progress tracking"""
     try:
-        # Get team configuration
+        # Register this job for progress tracking
+        register_active_job(job_id, JobManager)
+
+        # Step 1: Load team configuration (5%)
+        JobManager.update_job(job_id,
+                              status='running',
+                              progress=5,
+                              message='Loading team configuration...')
+
         config_manager = TeamConfigManager()
         team_config = config_manager.get_team_config(team_key)
 
         JobManager.update_job(job_id,
                               team_name=team_config['team_name'],
-                              status='running',
-                              progress=10,
-                              message='Connecting to database...')
+                              progress=8,
+                              message=f'Loaded configuration for {team_config["team_name"]}')
 
-        # Test connection
+        # Step 2: Test database connection (10%)
+        JobManager.update_job(job_id,
+                              progress=10,
+                              message='Connecting to Snowflake database...')
+
         if not test_connection():
             raise Exception("Failed to connect to Snowflake")
 
         JobManager.update_job(job_id,
-                              progress=20,
-                              message='Loading data...')
+                              progress=15,
+                              message='Database connection established successfully')
 
-        # Create builder
-        builder = PowerPointBuilder(team_key)
-
-        # Build presentation with progress updates
+        # Step 3: Initialize PowerPoint builder (20%)
         JobManager.update_job(job_id,
-                              progress=40,
-                              message='Generating slides...')
+                              progress=20,
+                              message='Initializing PowerPoint builder...')
 
+        def progress_callback(progress: int, message: str):
+            """Callback to update job progress from PowerPointBuilder"""
+            JobManager.update_job(job_id, progress=progress, message=message)
+            logger.debug(f"Progress callback: {progress}% - {message}")
+
+        # Pass job_id, cache_manager, AND progress_callback to PowerPointBuilder
+        builder = PowerPointBuilder(
+            team_key,
+            job_id=job_id,
+            cache_manager=cache_manager,
+            progress_callback=progress_callback
+        )
+
+        # Step 4: Build presentation
+        # The builder will now update progress from 25% to 90%
         output_path = builder.build_presentation(
             include_custom_categories=not options.get('skip_custom', False),
             custom_category_count=options.get('custom_count')
         )
 
+        # Step 5: Finalize (90-100%)
+        JobManager.update_job(job_id,
+                              progress=90,
+                              message='Finalizing presentation...')
+
         # Ensure output_path is a Path object
         output_path = Path(output_path)
+
+        JobManager.update_job(job_id,
+                              progress=95,
+                              message='Saving presentation metadata...')
 
         # Store both the file path and directory for better tracking
         JobManager.update_job(job_id,
@@ -259,6 +318,10 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
                               message='Generation failed',
                               error=str(e),
                               completed_at=datetime.now().isoformat())
+
+    finally:
+        # Always unregister the job when done
+        unregister_active_job(job_id)
 
 
 # ===== FRONTEND SERVING ROUTES =====
@@ -308,11 +371,22 @@ def health_check():
     """Health check endpoint with database connectivity check"""
     try:
         # Check database connection
-        stats = job_store.get_job_stats()
+        stats = job_store.get_job_stats() if hasattr(job_store, 'get_job_stats') else {
+            'total': len(job_store.jobs) if hasattr(job_store, 'jobs') else 0}
+
+        # Check cache status if available
+        cache_status = 'not configured'
+        if cache_manager:
+            try:
+                cache_stats = cache_manager.get_cache_stats()
+                cache_status = 'connected'
+            except:
+                cache_status = 'error'
 
         return jsonify({
             'status': 'healthy',
             'database': 'connected',
+            'cache': cache_status,
             'jobs': stats,
             'timestamp': datetime.now().isoformat()
         })
@@ -320,6 +394,7 @@ def health_check():
         return jsonify({
             'status': 'unhealthy',
             'database': 'disconnected',
+            'cache': 'not configured',
             'error': str(e),
             'timestamp': datetime.now().isoformat()
         }), 503
@@ -349,6 +424,31 @@ def debug_fonts():
         })
     except Exception as e:
         logger.error(f"Font debug error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/debug/cache', methods=['GET'])
+def debug_cache():
+    """Debug endpoint to check cache status"""
+    try:
+        if not cache_manager:
+            return jsonify({
+                'status': 'not configured',
+                'message': 'CacheManager not initialized (PostgreSQL fallback mode)'
+            })
+
+        stats = cache_manager.get_cache_stats()
+
+        return jsonify({
+            'status': 'connected',
+            'stats': stats,
+            'message': 'Cache is operational'
+        })
+    except Exception as e:
+        logger.error(f"Cache debug error: {str(e)}")
         return jsonify({
             'status': 'error',
             'error': str(e)
@@ -512,8 +612,9 @@ def generate_behaviors_slide_pptx(team_key: str, team_config: dict) -> Path:
         comparison_pop = team_config.get('comparison_population')
 
         merchant_ranker = MerchantRanker(
-            team_view_prefix=view_prefix,  # Note: PowerPointBuilder uses 'team_view_prefix'
-            comparison_population=comparison_pop
+            team_view_prefix=view_prefix,
+            comparison_population=comparison_pop,
+            cache_manager=cache_manager  # Pass cache_manager
         )
 
         # Generate slide EXACTLY like PowerPointBuilder does
@@ -723,7 +824,7 @@ def list_jobs():
 def admin_cleanup_jobs():
     """Manually trigger cleanup of expired jobs"""
     try:
-        deleted_count = job_store.cleanup_expired_jobs()
+        deleted_count = job_store.cleanup_expired_jobs() if hasattr(job_store, 'cleanup_expired_jobs') else 0
         return jsonify({
             'success': True,
             'deleted': deleted_count,
@@ -731,6 +832,64 @@ def admin_cleanup_jobs():
         })
     except Exception as e:
         logger.error(f"Error cleaning up jobs: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/cache/stats', methods=['GET'])
+def admin_cache_stats():
+    """Get cache statistics for admin monitoring"""
+    try:
+        if not cache_manager:
+            return jsonify({
+                'status': 'not configured',
+                'message': 'Cache not available in fallback mode'
+            })
+
+        stats = cache_manager.get_cache_stats()
+
+        # Calculate totals
+        total_hits = sum(s.get('hits', 0) for s in stats.values())
+        total_misses = sum(s.get('misses', 0) for s in stats.values())
+        total_entries = sum(s.get('entries', 0) for s in stats.values())
+        total_space_mb = sum(s.get('space_mb', 0) for s in stats.values())
+
+        overall_hit_rate = (total_hits / (total_hits + total_misses) * 100) if (total_hits + total_misses) > 0 else 0
+
+        return jsonify({
+            'status': 'success',
+            'overall': {
+                'hit_rate': overall_hit_rate,
+                'total_hits': total_hits,
+                'total_misses': total_misses,
+                'total_entries': total_entries,
+                'total_space_mb': total_space_mb
+            },
+            'by_type': stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/cache/cleanup', methods=['POST'])
+def admin_cache_cleanup():
+    """Clean up expired cache entries"""
+    try:
+        if not cache_manager:
+            return jsonify({
+                'status': 'not configured',
+                'message': 'Cache not available in fallback mode'
+            })
+
+        cleaned = cache_manager.clean_expired_entries()
+
+        return jsonify({
+            'status': 'success',
+            'cleaned': cleaned,
+            'message': f'Cleaned up expired entries from cache'
+        })
+    except Exception as e:
+        logger.error(f"Error cleaning cache: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -750,7 +909,7 @@ def cleanup_old_files():
                 files_deleted += 1
 
         # Clean up expired jobs in PostgreSQL
-        jobs_deleted = job_store.cleanup_expired_jobs()
+        jobs_deleted = job_store.cleanup_expired_jobs() if hasattr(job_store, 'cleanup_expired_jobs') else 0
 
         # Clean up orphaned queues
         job_ids_in_db = {job['job_id'] for job in job_store.list_recent_jobs(limit=1000)}
@@ -759,17 +918,362 @@ def cleanup_old_files():
         for job_id in queues_to_delete:
             job_queues.pop(job_id, None)
 
+        # Clean up cache if available
+        cache_cleaned = {}
+        if cache_manager:
+            try:
+                cache_cleaned = cache_manager.clean_expired_entries()
+            except:
+                pass
+
         return jsonify({
             'status': 'success',
             'files_deleted': files_deleted,
             'jobs_cleaned': jobs_deleted,
-            'queues_cleaned': len(queues_to_delete)
+            'queues_cleaned': len(queues_to_delete),
+            'cache_cleaned': cache_cleaned
         })
 
     except Exception as e:
         logger.error(f"Cleanup error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/preview/hot-brands/<team_key>', methods=['GET'])
+def preview_hot_brands(team_key):
+    """Get top sponsorship recommendations for preview - with logo support"""
+    try:
+        # Validate team
+        config_manager = TeamConfigManager()
+        if team_key not in config_manager.list_teams():
+            return jsonify({'error': f'Team {team_key} not found'}), 404
+
+        team_config = config_manager.get_team_config(team_key)
+        logger.info(f"Processing hot brands for {team_config['team_name']}")
+
+        # Initialize cache manager (optional but recommended)
+        cache_manager = None
+        try:
+            from utils.cache_manager import CacheManager
+            from postgresql_job_store import PostgreSQLJobStore
+
+            job_store = PostgreSQLJobStore(os.environ.get('DATABASE_URL'))
+            cache_manager = CacheManager(job_store.pool)
+            logger.info("Cache manager initialized")
+        except Exception as e:
+            logger.warning(f"Cache manager not available: {e}")
+
+        # Initialize LogoManager
+        from utils.logo_manager import LogoManager
+        logo_manager = LogoManager()
+        logger.info("LogoManager initialized")
+
+        # Initialize CategoryAnalyzer with cache manager
+        from data_processors.category_analyzer import CategoryAnalyzer
+
+        analyzer = CategoryAnalyzer(
+            team_name=team_config['team_name'],
+            team_short=team_config.get('team_short', team_config['team_name'].split()[-1]),
+            league=team_config['league'],
+            comparison_population=team_config.get('comparison_population'),
+            cache_manager=cache_manager  # Pass cache manager if available
+        )
+
+        recommendations = []
+        merchants_to_standardize = []
+
+        # Load data from Snowflake
+        from data_processors.snowflake_connector import query_to_dataframe
+
+        view_prefix = team_config['view_prefix']
+
+        # Load all three dataframes as in the working test
+        category_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME")
+        subcategory_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME")
+        merchant_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME")
+
+        # CRITICAL: Strip whitespace from all string columns
+        logger.info("Cleaning data (removing trailing whitespace)...")
+        for df in [category_df, subcategory_df, merchant_df]:
+            string_cols = df.select_dtypes(include=['object']).columns
+            for col in string_cols:
+                df[col] = df[col].str.strip()
+
+        if merchant_df.empty:
+            logger.error("No merchant data found")
+            return jsonify({
+                'team_name': team_config['team_name'],
+                'recommendations': [],
+                'generated_at': datetime.now().isoformat(),
+                'error': 'No merchant data found'
+            })
+
+        logger.info(f"Loaded {len(merchant_df)} merchant records")
+
+        # Process fixed categories
+        fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+
+        for category_key in fixed_categories:
+            try:
+                if category_key not in analyzer.categories:
+                    continue
+
+                category_config = analyzer.categories[category_key]
+                category_names = category_config.get('category_names_in_data', [])
+
+                # Strip whitespace from expected category names
+                category_names = [name.strip() for name in category_names]
+
+                # Filter merchant data
+                category_merchant_df = merchant_df[
+                    merchant_df['CATEGORY'].isin(category_names)
+                ].copy()
+
+                logger.debug(f"Category {category_key}: found {len(category_merchant_df)} merchants")
+
+                if category_merchant_df.empty:
+                    continue
+
+                # Find top merchant by composite index
+                team_merchants = category_merchant_df[
+                    (category_merchant_df['AUDIENCE'] == analyzer.audience_name) &
+                    (category_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
+                    (category_merchant_df['COMPOSITE_INDEX'] > 0) &
+                    (category_merchant_df['PERC_AUDIENCE'] >= 0.01)
+                    ]
+
+                if team_merchants.empty:
+                    continue
+
+                # Get top merchant
+                top_merchant_row = team_merchants.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+
+                merchants_to_standardize.append({
+                    'original_name': top_merchant_row['MERCHANT'],
+                    'category': category_config['display_name'],
+                    'composite_index': int(top_merchant_row['COMPOSITE_INDEX']),
+                    'audience_pct': float(top_merchant_row['PERC_AUDIENCE']) * 100,
+                    'perc_index': int(top_merchant_row.get('PERC_INDEX', 0)),
+                    'spc_index': int(top_merchant_row.get('SPC_INDEX', 0))
+                })
+
+                logger.info(
+                    f"Fixed category {category_config['display_name']}: {top_merchant_row['MERCHANT']} (index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
+
+            except Exception as e:
+                logger.warning(f"Could not analyze category {category_key}: {e}")
+                continue
+
+        # Get custom categories
+        try:
+            custom_categories = analyzer.get_custom_categories(
+                category_df=category_df,
+                merchant_df=merchant_df,
+                is_womens_team=team_config.get('is_womens_team', False),
+                existing_categories=fixed_categories
+            )
+
+            logger.info(f"Found {len(custom_categories)} custom categories")
+
+            # Process top 4 custom categories
+            for custom_cat in custom_categories[:4]:
+                try:
+                    # Strip whitespace from category names
+                    category_names_clean = [name.strip() for name in custom_cat['category_names_in_data']]
+
+                    # Filter merchant data
+                    custom_merchant_df = merchant_df[
+                        merchant_df['CATEGORY'].isin(category_names_clean)
+                    ].copy()
+
+                    if custom_merchant_df.empty:
+                        continue
+
+                    # Find top merchant
+                    team_merchants = custom_merchant_df[
+                        (custom_merchant_df['AUDIENCE'] == analyzer.audience_name) &
+                        (custom_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
+                        (custom_merchant_df['COMPOSITE_INDEX'] > 0) &
+                        (custom_merchant_df['PERC_AUDIENCE'] >= 0.01)
+                        ]
+
+                    if team_merchants.empty:
+                        continue
+
+                    # Get top merchant
+                    top_merchant_row = team_merchants.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+
+                    merchants_to_standardize.append({
+                        'original_name': top_merchant_row['MERCHANT'],
+                        'category': custom_cat['display_name'],
+                        'composite_index': int(top_merchant_row['COMPOSITE_INDEX']),
+                        'audience_pct': float(top_merchant_row['PERC_AUDIENCE']) * 100,
+                        'perc_index': int(top_merchant_row.get('PERC_INDEX', 0)),
+                        'spc_index': int(top_merchant_row.get('SPC_INDEX', 0)),
+                        'is_emerging': custom_cat.get('is_emerging', False)
+                    })
+
+                    logger.info(
+                        f"Custom category {custom_cat['display_name']}: {top_merchant_row['MERCHANT']} (index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
+
+                except Exception as e:
+                    logger.warning(f"Could not analyze custom category {custom_cat['display_name']}: {e}")
+                    continue
+
+        except Exception as e:
+            logger.warning(f"Could not get custom categories: {e}")
+
+        # Import URL encoding for safe logo URLs
+        from urllib.parse import quote
+
+        # Standardize merchant names and add logo URLs
+        logger.info(f"Standardizing {len(merchants_to_standardize)} merchant names and checking logos...")
+
+        if analyzer.standardizer and merchants_to_standardize:
+            names_to_standardize = [m['original_name'] for m in merchants_to_standardize]
+
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                standardized_mapping = loop.run_until_complete(
+                    analyzer.standardizer.standardize_merchants(names_to_standardize)
+                )
+
+                for merchant_info in merchants_to_standardize:
+                    original = merchant_info['original_name']
+                    standardized = standardized_mapping.get(original, original)
+
+                    if standardized != original:
+                        logger.debug(f"Standardized: {original} → {standardized}")
+
+                    # Check if logo exists locally
+                    has_logo = logo_manager.get_logo(standardized) is not None
+
+                    # Generate logo URL if logo exists
+                    logo_url = ''
+                    if has_logo:
+                        encoded_name = quote(standardized)
+                        logo_url = f"/api/logos/{encoded_name}"
+                        logger.debug(f"Logo found for {standardized}: {logo_url}")
+                    else:
+                        logger.debug(f"No logo found for {standardized}")
+
+                    recommendations.append({
+                        'merchant': standardized,
+                        'category': merchant_info['category'],
+                        'subcategory': '',
+                        'composite_index': merchant_info['composite_index'],
+                        'affinity_index': merchant_info['perc_index'],
+                        'spend_index': merchant_info['spc_index'],
+                        'audience_percentage': merchant_info['audience_pct'],
+                        'is_emerging': merchant_info.get('is_emerging', False),
+                        'logo_url': logo_url,
+                        'has_local_logo': has_logo
+                    })
+
+            finally:
+                loop.close()
+        else:
+            # No standardization available
+            for merchant_info in merchants_to_standardize:
+                merchant_name = merchant_info['original_name']
+
+                # Check for logo
+                has_logo = logo_manager.get_logo(merchant_name) is not None
+                logo_url = ''
+                if has_logo:
+                    encoded_name = quote(merchant_name)
+                    logo_url = f"/api/logos/{encoded_name}"
+                    logger.debug(f"Logo found for {merchant_name}: {logo_url}")
+                else:
+                    logger.debug(f"No logo found for {merchant_name}")
+
+                recommendations.append({
+                    'merchant': merchant_name,
+                    'category': merchant_info['category'],
+                    'subcategory': '',
+                    'composite_index': merchant_info['composite_index'],
+                    'affinity_index': merchant_info['perc_index'],
+                    'spend_index': merchant_info['spc_index'],
+                    'audience_percentage': merchant_info['audience_pct'],
+                    'is_emerging': merchant_info.get('is_emerging', False),
+                    'logo_url': logo_url,
+                    'has_local_logo': has_logo
+                })
+
+        # Sort by composite index descending
+        recommendations.sort(key=lambda x: x['composite_index'], reverse=True)
+
+        # Log summary with logo status
+        logger.info(f"Found {len(recommendations)} recommendations for {team_config['team_name']}")
+        logos_found = sum(1 for rec in recommendations if rec.get('has_local_logo'))
+        logger.info(f"Logos found: {logos_found}/{len(recommendations)}")
+
+        for i, rec in enumerate(recommendations[:10], 1):
+            emerging = " ⭐" if rec.get('is_emerging') else ""
+            logo_status = " 🖼️" if rec.get('has_local_logo') else " ❌"
+            logger.info(
+                f"  {i}. {rec['category']}: {rec['merchant']} (index: {rec['composite_index']}){emerging}{logo_status}")
+
+        return jsonify({
+            'team_name': team_config['team_name'],
+            'team_key': team_key,
+            'recommendations': recommendations[:10],  # Return top 10
+            'generated_at': datetime.now().isoformat(),
+            'total_found': len(recommendations),
+            'logos_found': logos_found
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting hot brands preview: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'error': str(e),
+            'team_name': team_config.get('team_name', team_key) if 'team_config' in locals() else team_key,
+            'recommendations': [],
+            'generated_at': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/logos/<merchant_name>', methods=['GET'])
+def serve_logo(merchant_name):
+    """Serve logo file for a merchant"""
+    try:
+        from urllib.parse import unquote
+        from flask import send_file
+        import io
+
+        # Decode the merchant name
+        merchant_name = unquote(merchant_name)
+
+        # Initialize LogoManager
+        from utils.logo_manager import LogoManager
+        logo_manager = LogoManager()
+
+        # Get the logo
+        logo_image = logo_manager.get_logo(merchant_name, size=(200, 200))
+
+        if logo_image:
+            # Convert PIL Image to bytes
+            img_buffer = io.BytesIO()
+            logo_image.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+
+            return send_file(
+                img_buffer,
+                mimetype='image/png',
+                as_attachment=False,
+                download_name=f"{merchant_name}.png"
+            )
+        else:
+            # Return 404 if logo not found
+            return jsonify({'error': f'Logo not found for {merchant_name}'}), 404
+
+    except Exception as e:
+        logger.error(f"Error serving logo for {merchant_name}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # Development server

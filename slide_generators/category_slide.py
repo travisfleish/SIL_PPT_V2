@@ -409,7 +409,7 @@ class CategorySlide(BaseSlide):
         for paragraph in text_frame.paragraphs:
             for run in paragraph.runs:
                 run.font.name = "Red Hat Display"  # Use base font name
-                run.font.size = Pt(28)
+                run.font.size = Pt(24)
                 run.font.bold = True
                 run.font.italic = True  # Now this works!
                 run.font.color.rgb = RGBColor(0, 0, 0)
@@ -429,7 +429,7 @@ class CategorySlide(BaseSlide):
 
         p = text_frame.paragraphs[0]
         p.font.name = "Red Hat Display"
-        p.font.size = Pt(28)
+        p.font.size = Pt(26)
         p.font.bold = True
         p.font.italic = True
         p.font.color.rgb = RGBColor(0, 0, 0)
@@ -445,7 +445,7 @@ class CategorySlide(BaseSlide):
 
         p = text_frame.paragraphs[0]
         p.font.name = "Red Hat Display"
-        p.font.size = Pt(28)
+        p.font.size = Pt(26)
         p.font.bold = True
         p.font.italic = True
         p.font.color.rgb = RGBColor(0, 0, 0)
@@ -475,10 +475,10 @@ class CategorySlide(BaseSlide):
         """Add category insights section - UPDATED WITH ALL FORMATTING FIXES"""
 
         # Adjust vertical position based on whether it's an emerging category
-        title_y = Inches(3.2) if is_emerging else Inches(2.8)
-        insights_y = Inches(3.6) if is_emerging else Inches(3.2)
-        nba_label_y = Inches(5.8) if is_emerging else Inches(5.4)
-        nba_box_y = Inches(6.2) if is_emerging else Inches(5.8)
+        title_y = Inches(3.2) if is_emerging else Inches(2.6)
+        insights_y = Inches(3.6) if is_emerging else Inches(3.0)
+        nba_label_y = Inches(5.8) if is_emerging else Inches(5.2)
+        nba_box_y = Inches(6.2) if is_emerging else Inches(5.6)
 
         # Insights title
         insights_title = slide.shapes.add_textbox(
@@ -917,7 +917,7 @@ class CategorySlide(BaseSlide):
         """Add brand-specific insights with updated formatting to match reference"""
         # Top Brand Insights section
         insights_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(2.6),
+            Inches(0.5), Inches(2.4),
             Inches(4), Inches(0.3)
         )
         insights_title.text_frame.text = "Top Brand Insights"
@@ -928,7 +928,7 @@ class CategorySlide(BaseSlide):
 
         # Insights box - extended width to be closer to logos/table
         insights_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(3.0),
+            Inches(0.7), Inches(2.8),
             Inches(5.5), Inches(1.6)  # Extended width from 4.5 to 5.5
         )
 
@@ -961,7 +961,7 @@ class CategorySlide(BaseSlide):
                     percent = merchant_df.iloc[0]['Percent of Fans Who Spend']
                     # UPDATED: Use format_percent_of_fans here too
                     formatted_percent = format_percent_of_fans(percent)
-                    run2.text = f"{formatted_percent} of {team_name} fans spend at {top_brand}"
+                    run2.text = f"{formatted_percent} of {team_short} fans spend at {top_brand}"
                 else:
                     # Fallback to formatting the existing insight
                     formatted_insight = process_insight_text(insight)
@@ -1194,6 +1194,7 @@ class CategorySlide(BaseSlide):
 
         # UPDATED: Standardized recommendation format with composite index
         team_name = team_config.get('team_name', 'Team')
+        team_short = team_config.get('team_name_short', team_name.split()[-1])
         composite_index_raw = recommendation.get('composite_index', 0)
         try:
             composite_index = int(round(float(composite_index_raw)))
@@ -1205,7 +1206,7 @@ class CategorySlide(BaseSlide):
 
         # Add the beginning of the sentence
         run1 = p1.add_run()
-        run1.text = f"• The {team_name} should target "
+        run1.text = f"• The {team_short} should target "
         run1.font.name = self.default_font
         run1.font.size = Pt(12)
         run1.font.bold = False

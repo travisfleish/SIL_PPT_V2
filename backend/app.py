@@ -941,7 +941,7 @@ def cleanup_old_files():
 
 @app.route('/api/preview/hot-brands/<team_key>', methods=['GET'])
 def preview_hot_brands(team_key):
-    """Get top sponsorship recommendations for preview - with logo support"""
+    """Get top sponsorship recommendations for preview - with logo support and subcategory filtering"""
     try:
         # Validate team
         config_manager = TeamConfigManager()
@@ -976,7 +976,7 @@ def preview_hot_brands(team_key):
             team_short=team_config.get('team_short', team_config['team_name'].split()[-1]),
             league=team_config['league'],
             comparison_population=team_config.get('comparison_population'),
-            cache_manager=cache_manager  # Pass cache manager if available
+            cache_manager=cache_manager
         )
 
         recommendations = []
@@ -987,7 +987,7 @@ def preview_hot_brands(team_key):
 
         view_prefix = team_config['view_prefix']
 
-        # Load all three dataframes as in the working test
+        # Load all required dataframes
         category_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME")
         subcategory_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME")
         merchant_df = query_to_dataframe(f"SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME")
@@ -1010,7 +1010,7 @@ def preview_hot_brands(team_key):
 
         logger.info(f"Loaded {len(merchant_df)} merchant records")
 
-        # Process fixed categories
+        # Process fixed categories with subcategory filtering
         fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
 
         for category_key in fixed_categories:
@@ -1024,25 +1024,39 @@ def preview_hot_brands(team_key):
                 # Strip whitespace from expected category names
                 category_names = [name.strip() for name in category_names]
 
-                # Filter merchant data
+                # Get merchants for this category
                 category_merchant_df = merchant_df[
                     merchant_df['CATEGORY'].isin(category_names)
                 ].copy()
 
-                logger.debug(f"Category {category_key}: found {len(category_merchant_df)} merchants")
-
                 if category_merchant_df.empty:
+                    logger.debug(f"No merchants found for category {category_key}")
                     continue
 
-                # Find top merchant by composite index
-                team_merchants = category_merchant_df[
-                    (category_merchant_df['AUDIENCE'] == analyzer.audience_name) &
-                    (category_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
-                    (category_merchant_df['COMPOSITE_INDEX'] > 0) &
-                    (category_merchant_df['PERC_AUDIENCE'] >= 0.01)
-                    ]
+                # CRITICAL: Apply subcategory filtering
+                filtered_category_merchant_df = analyzer._filter_merchants_by_subcategory(
+                    category_merchant_df,
+                    subcategory_df,
+                    category_config
+                )
+
+                logger.info(f"Category {category_key}: {len(category_merchant_df)} → "
+                           f"{len(filtered_category_merchant_df)} merchants after filtering")
+
+                if filtered_category_merchant_df.empty:
+                    logger.warning(f"All merchants filtered out for category {category_key}")
+                    continue
+
+                # Find top merchant by composite index from FILTERED data
+                team_merchants = filtered_category_merchant_df[
+                    (filtered_category_merchant_df['AUDIENCE'] == analyzer.audience_name) &
+                    (filtered_category_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
+                    (filtered_category_merchant_df['COMPOSITE_INDEX'] > 0) &
+                    (filtered_category_merchant_df['PERC_AUDIENCE'] >= 0.01)
+                ]
 
                 if team_merchants.empty:
+                    logger.debug(f"No qualifying merchants for {category_key} after filters")
                     continue
 
                 # Get top merchant
@@ -1058,10 +1072,13 @@ def preview_hot_brands(team_key):
                 })
 
                 logger.info(
-                    f"Fixed category {category_config['display_name']}: {top_merchant_row['MERCHANT']} (index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
+                    f"Fixed category {category_config['display_name']}: {top_merchant_row['MERCHANT']} "
+                    f"(index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
 
             except Exception as e:
                 logger.warning(f"Could not analyze category {category_key}: {e}")
+                import traceback
+                logger.debug(traceback.format_exc())
                 continue
 
         # Get custom categories
@@ -1081,7 +1098,7 @@ def preview_hot_brands(team_key):
                     # Strip whitespace from category names
                     category_names_clean = [name.strip() for name in custom_cat['category_names_in_data']]
 
-                    # Filter merchant data
+                    # Get merchants for this custom category
                     custom_merchant_df = merchant_df[
                         merchant_df['CATEGORY'].isin(category_names_clean)
                     ].copy()
@@ -1089,13 +1106,32 @@ def preview_hot_brands(team_key):
                     if custom_merchant_df.empty:
                         continue
 
-                    # Find top merchant
-                    team_merchants = custom_merchant_df[
-                        (custom_merchant_df['AUDIENCE'] == analyzer.audience_name) &
-                        (custom_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
-                        (custom_merchant_df['COMPOSITE_INDEX'] > 0) &
-                        (custom_merchant_df['PERC_AUDIENCE'] >= 0.01)
-                        ]
+                    # Create a minimal category config for custom categories
+                    custom_cat_config = {
+                        'display_name': custom_cat['display_name'],
+                        'category_names_in_data': custom_cat['category_names_in_data'],
+                        'subcategories': custom_cat.get('subcategories', {'include': [], 'exclude': []}),
+                        'is_custom': True
+                    }
+
+                    # Apply subcategory filtering to custom categories too
+                    filtered_custom_merchant_df = analyzer._filter_merchants_by_subcategory(
+                        custom_merchant_df,
+                        subcategory_df,
+                        custom_cat_config
+                    )
+
+                    if filtered_custom_merchant_df.empty:
+                        logger.warning(f"All merchants filtered out for custom category {custom_cat['display_name']}")
+                        continue
+
+                    # Find top merchant from FILTERED data
+                    team_merchants = filtered_custom_merchant_df[
+                        (filtered_custom_merchant_df['AUDIENCE'] == analyzer.audience_name) &
+                        (filtered_custom_merchant_df['COMPARISON_POPULATION'] == analyzer.comparison_pop) &
+                        (filtered_custom_merchant_df['COMPOSITE_INDEX'] > 0) &
+                        (filtered_custom_merchant_df['PERC_AUDIENCE'] >= 0.01)
+                    ]
 
                     if team_merchants.empty:
                         continue
@@ -1114,10 +1150,13 @@ def preview_hot_brands(team_key):
                     })
 
                     logger.info(
-                        f"Custom category {custom_cat['display_name']}: {top_merchant_row['MERCHANT']} (index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
+                        f"Custom category {custom_cat['display_name']}: {top_merchant_row['MERCHANT']} "
+                        f"(index: {top_merchant_row['COMPOSITE_INDEX']:.0f})")
 
                 except Exception as e:
                     logger.warning(f"Could not analyze custom category {custom_cat['display_name']}: {e}")
+                    import traceback
+                    logger.debug(traceback.format_exc())
                     continue
 
         except Exception as e:
@@ -1274,6 +1313,7 @@ def serve_logo(merchant_name):
     except Exception as e:
         logger.error(f"Error serving logo for {merchant_name}: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Development server
     app.run(host='0.0.0.0', port=5001, debug=True)

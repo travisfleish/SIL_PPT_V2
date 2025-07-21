@@ -219,7 +219,7 @@ class CategorySlide(BaseSlide):
         # Initialize LogoManager
         self.logo_manager = LogoManager()
 
-        # Colors for the slide - UPDATED with EQUAL color
+        # Colors for the slide - UPDATED with EQUAL color and emerging category
         self.colors = {
             'header_bg': RGBColor(240, 240, 240),
             'header_border': RGBColor(200, 200, 200),
@@ -228,7 +228,8 @@ class CategorySlide(BaseSlide):
             'positive': RGBColor(0, 176, 80),  # Green
             'negative': RGBColor(255, 0, 0),  # Red
             'equal': RGBColor(184, 134, 11),  # Dark yellow for EQUAL
-            'neutral': RGBColor(0, 0, 0)  # Black
+            'neutral': RGBColor(0, 0, 0),  # Black
+            'emerging_bg': RGBColor(217, 217, 217)  # Light gray for emerging category
         }
 
     def generate(self,
@@ -250,6 +251,9 @@ class CategorySlide(BaseSlide):
         team_name = team_config.get('team_name', 'Team')
         team_short = team_config.get('team_name_short', team_name.split()[-1])
 
+        # Check if this is an emerging category
+        is_emerging = analysis_results.get('is_emerging', False)
+
         # Use the content layout (SIL white layout #12)
         slide = self.add_content_slide()
         logger.info(f"Added category slide for {analysis_results['display_name']} using SIL white layout")
@@ -257,12 +261,15 @@ class CategorySlide(BaseSlide):
         # Add header
         self._add_header(slide, team_name, analysis_results['slide_title'])
 
-        # Add title - UPDATED to use "Category Analysis: [CATEGORY]"
-        category_title = f"Category Analysis: {analysis_results['display_name']}"
-        self._add_title(slide, category_title)
+        # Add title with special handling for emerging categories
+        if is_emerging:
+            self._add_emerging_category_title(slide, analysis_results['display_name'])
+        else:
+            category_title = f"Category Analysis: {analysis_results['display_name']}"
+            self._add_title(slide, category_title)
 
-        # Add category insights (left side) - UPDATED with formatting fixes
-        self._add_category_insights(slide, analysis_results, team_short, team_config)
+        # Add category insights (left side) - adjusted position for emerging categories
+        self._add_category_insights(slide, analysis_results, team_short, team_config, is_emerging=is_emerging)
 
         # Add category metrics table (top right) - pass results for category name
         self._add_category_table(slide, analysis_results)
@@ -402,17 +409,80 @@ class CategorySlide(BaseSlide):
         for paragraph in text_frame.paragraphs:
             for run in paragraph.runs:
                 run.font.name = "Red Hat Display"  # Use base font name
-                run.font.size = Pt(28)
+                run.font.size = Pt(26)
                 run.font.bold = True
                 run.font.italic = True  # Now this works!
                 run.font.color.rgb = RGBColor(0, 0, 0)
             paragraph.line_spacing = 1.0  # Adjust line spacing if needed
 
-    def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str, team_config: Dict[str, Any]):
+    def _add_emerging_category_title(self, slide, category_name: str):
+        """Add special title formatting for emerging categories"""
+
+        # Main title: "Emerging Category:"
+        title_box = slide.shapes.add_textbox(
+            Inches(0.6), Inches(1.3),
+            Inches(5.3), Inches(0.5)
+        )
+
+        text_frame = title_box.text_frame
+        text_frame.text = "Emerging Category:"
+
+        p = text_frame.paragraphs[0]
+        p.font.name = "Red Hat Display"
+        p.font.size = Pt(28)
+        p.font.bold = True
+        p.font.italic = True
+        p.font.color.rgb = RGBColor(0, 0, 0)
+
+        # Category name on second line
+        category_box = slide.shapes.add_textbox(
+            Inches(0.6), Inches(1.8),
+            Inches(5.3), Inches(0.6)
+        )
+
+        text_frame = category_box.text_frame
+        text_frame.text = category_name
+
+        p = text_frame.paragraphs[0]
+        p.font.name = "Red Hat Display"
+        p.font.size = Pt(28)
+        p.font.bold = True
+        p.font.italic = True
+        p.font.color.rgb = RGBColor(0, 0, 0)
+
+        # Explanatory subtext
+        subtext_box = slide.shapes.add_textbox(
+            Inches(0.6), Inches(2.4),
+            Inches(5.3), Inches(0.6)
+        )
+
+        text_frame = subtext_box.text_frame
+        text_frame.word_wrap = True
+        text_frame.text = (
+            "The Emerging Category is where at least 10% of your fans are "
+            "spending, but where there isn't one clear brand leader, and the "
+            "category has room to grow"
+        )
+
+        p = text_frame.paragraphs[0]
+        p.font.name = "Red Hat Display"
+        p.font.size = Pt(12)
+        p.font.italic = True
+        p.font.color.rgb = RGBColor(0, 0, 0)
+
+    def _add_category_insights(self, slide, results: Dict[str, Any], team_short: str,
+                               team_config: Dict[str, Any], is_emerging: bool = False):
         """Add category insights section - UPDATED WITH ALL FORMATTING FIXES"""
-        # Insights title - moved down
+
+        # Adjust vertical position based on whether it's an emerging category
+        title_y = Inches(3.2) if is_emerging else Inches(2.8)
+        insights_y = Inches(3.6) if is_emerging else Inches(3.2)
+        nba_label_y = Inches(5.8) if is_emerging else Inches(5.4)
+        nba_box_y = Inches(6.2) if is_emerging else Inches(5.8)
+
+        # Insights title
         insights_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(2.8),  # Moved down from 1.5
+            Inches(0.5), title_y,
             Inches(4), Inches(0.3)
         )
         insights_title.text_frame.text = "Category Insights:"
@@ -437,10 +507,10 @@ class CategorySlide(BaseSlide):
             else:
                 regular_insights.append(cleaned_insight)
 
-        # Regular insights box - moved down
+        # Regular insights box
         insights_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(3.2),  # Moved down from 1.9
-            Inches(4.5), Inches(3.0)  # Reduced height to make room for NBA section
+            Inches(0.7), insights_y,
+            Inches(4.5), Inches(3.0)
         )
 
         text_frame = insights_box.text_frame
@@ -456,9 +526,9 @@ class CategorySlide(BaseSlide):
 
         # Add NBA comparison section if there are NBA insights
         if nba_insights:
-            # NBA comparison label - moved down
+            # NBA comparison label
             nba_label = slide.shapes.add_textbox(
-                Inches(0.5), Inches(5.4),  # Moved down from 5.2
+                Inches(0.5), nba_label_y,
                 Inches(4), Inches(0.3)
             )
             nba_label.text_frame.text = f"{team_short} Fans vs. {team_config.get('league', 'NBA')} Fans:"
@@ -467,10 +537,10 @@ class CategorySlide(BaseSlide):
             p.font.size = Pt(14)
             p.font.bold = True
 
-            # NBA insights box - moved down
+            # NBA insights box
             nba_box = slide.shapes.add_textbox(
-                Inches(0.7), Inches(5.8),  # Moved down from 5.6
-                Inches(4.5), Inches(1.2)  # Reduced height slightly
+                Inches(0.7), nba_box_y,
+                Inches(4.5), Inches(1.2)
             )
 
             nba_text_frame = nba_box.text_frame
@@ -488,6 +558,7 @@ class CategorySlide(BaseSlide):
         """Add category metrics table (adjusted for 16:9) with formatting fixes"""
         # Extract metrics from results
         metrics = results['category_metrics']
+        is_emerging = results.get('is_emerging', False)
 
         # Table position - adjusted to prevent bleeding and moved down
         left = Inches(6.2)  # Moved left to fit better
@@ -530,9 +601,15 @@ class CategorySlide(BaseSlide):
         table.cell(1, 2).text = self._format_metric_value(metrics.format_likelihood())
         table.cell(1, 3).text = self._format_metric_value(metrics.format_purchases())
 
-        # Format data cells
+        # Format data cells - special handling for emerging categories
         for i in range(4):
-            self._format_data_cell(table.cell(1, i))
+            cell = table.cell(1, i)
+            self._format_data_cell(cell)
+
+            # Add gray background for emerging category data row
+            if is_emerging and i == 0:  # Only for the category name cell
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = RGBColor(217, 217, 217)  # Light gray background
 
     def _add_subcategory_table(self, slide, subcategory_stats: pd.DataFrame):
         """Add subcategory statistics table (adjusted for 16:9) with formatting fixes"""
@@ -589,6 +666,30 @@ class CategorySlide(BaseSlide):
             # Format cells
             for col in range(4):
                 self._format_data_cell(table.cell(row_idx, col))
+
+        # ADD EXPLANATORY TEXT BELOW THE TABLE
+        # Calculate position below the table
+        explanation_top = top + table_height + Inches(0.1)  # Add small gap after table
+
+        # Add explanatory text
+        explanation_box = slide.shapes.add_textbox(
+            left, explanation_top,
+            width, Inches(0.3)
+        )
+
+        text_frame = explanation_box.text_frame
+        text_frame.word_wrap = True
+
+        # Set the explanatory text
+        text_frame.text = "Subcategories shown in descending order by composite index"
+
+        # Format the text
+        p = text_frame.paragraphs[0]
+        p.font.name = self.default_font  # Red Hat Display
+        p.font.size = Pt(10)
+        p.font.italic = True
+        p.font.color.rgb = RGBColor(100, 100, 100)  # Gray color for de-emphasis
+        p.alignment = PP_ALIGN.LEFT  # Left align to match table
 
     def _has_colored_background(self, image: Image.Image, threshold: int = 240) -> bool:
         """

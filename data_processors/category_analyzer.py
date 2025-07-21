@@ -150,30 +150,39 @@ class CategoryAnalyzer:
             if df is not None and not df.empty:
                 self._clean_dataframe(df)
 
-        # OPTIMIZATION: First identify which merchants we'll actually use
+        # Filter merchant data based on subcategory exclusions/inclusions
+        filtered_merchant_df = self._filter_merchants_by_subcategory(merchant_df, subcategory_df, category_config)
+        filtered_merchant_last_year_df = None
+        if merchant_last_year_df is not None and not merchant_last_year_df.empty:
+            filtered_merchant_last_year_df = self._filter_merchants_by_subcategory(
+                merchant_last_year_df, subcategory_last_year_df, category_config
+            )
+
+        # OPTIMIZATION: First identify which merchants we'll actually use (from filtered data)
         merchants_to_standardize = self._identify_merchants_to_standardize(
-            merchant_df,
-            merchant_last_year_df
+            filtered_merchant_df,
+            filtered_merchant_last_year_df
         )
 
         logger.info(f"🎯 Identified {len(merchants_to_standardize)} merchants to standardize "
-                    f"(out of {len(merchant_df['MERCHANT'].unique()) if not merchant_df.empty else 0} total)")
+                    f"(out of {len(filtered_merchant_df['MERCHANT'].unique()) if not filtered_merchant_df.empty else 0} filtered merchants)")
 
         # OPTIMIZATION: Only standardize the merchants we need
         if merchants_to_standardize and self.standardizer:
-            merchant_df = self._standardize_selected_merchants(merchant_df, merchants_to_standardize)
-            if merchant_last_year_df is not None and not merchant_last_year_df.empty:
-                merchant_last_year_df = self._standardize_selected_merchants(
-                    merchant_last_year_df, merchants_to_standardize
+            filtered_merchant_df = self._standardize_selected_merchants(filtered_merchant_df, merchants_to_standardize)
+            if filtered_merchant_last_year_df is not None and not filtered_merchant_last_year_df.empty:
+                filtered_merchant_last_year_df = self._standardize_selected_merchants(
+                    filtered_merchant_last_year_df, merchants_to_standardize
                 )
 
         # Store raw data for validation (AFTER selective standardization)
         self.raw_data = {
             'category': category_df,
             'subcategory': subcategory_df,
-            'merchant': merchant_df,
+            'merchant': filtered_merchant_df,  # Store filtered version
+            'merchant_original': merchant_df,  # Keep original for reference
             'subcategory_last_year': subcategory_last_year_df,
-            'merchant_last_year': merchant_last_year_df
+            'merchant_last_year': filtered_merchant_last_year_df
         }
 
         # Continue with analysis
@@ -191,12 +200,13 @@ class CategoryAnalyzer:
             category_df, subcategory_df, subcategory_last_year_df
         )
 
-        merchant_stats = self._get_merchant_stats(merchant_df)
+        # Use filtered merchant data for all merchant analysis
+        merchant_stats = self._get_merchant_stats(filtered_merchant_df)
         merchant_insights = self._generate_merchant_insights(
-            merchant_stats, merchant_df, merchant_last_year_df
+            merchant_stats, filtered_merchant_df, filtered_merchant_last_year_df
         )
 
-        recommendation = self._get_sponsorship_recommendation(merchant_df)
+        recommendation = self._get_sponsorship_recommendation(filtered_merchant_df)
 
         validation_report = None
         if validate:
@@ -351,6 +361,81 @@ class CategoryAnalyzer:
 
         if 'AUDIENCE' in df.columns:
             df.dropna(subset=['AUDIENCE'], inplace=True)
+
+    def _filter_merchants_by_subcategory(self, merchant_df: pd.DataFrame,
+                                         subcategory_df: pd.DataFrame,
+                                         category_config: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Filter merchants based on subcategory inclusion/exclusion rules
+        """
+        if merchant_df.empty:
+            return merchant_df
+
+        # Get subcategory configuration
+        subcategory_config = category_config.get('subcategories', {})
+        included = subcategory_config.get('include', [])
+        excluded = subcategory_config.get('exclude', [])
+
+        # If no filtering rules, return original
+        if not included and not excluded:
+            return merchant_df
+
+        # If SUBCATEGORY column exists in merchant data, use it directly
+        if 'SUBCATEGORY' in merchant_df.columns:
+            filtered_df = merchant_df.copy()
+
+            if included:
+                # Get all included subcategory names
+                included_names = []
+                for sub in included:
+                    if isinstance(sub, dict):
+                        key_in_data = sub.get('key_in_data', '')
+                        if isinstance(key_in_data, list):
+                            included_names.extend(key_in_data)
+                        else:
+                            included_names.append(key_in_data)
+                    else:
+                        included_names.append(sub)
+
+                # Filter to only included subcategories
+                before_count = len(filtered_df)
+                filtered_df = filtered_df[filtered_df['SUBCATEGORY'].isin(included_names)]
+                after_count = len(filtered_df)
+                logger.info(f"Filtered merchants to {len(included_names)} included subcategories "
+                            f"({before_count} → {after_count} records)")
+
+            elif excluded:
+                # Filter out excluded subcategories
+                before_count = len(filtered_df)
+                filtered_df = filtered_df[~filtered_df['SUBCATEGORY'].isin(excluded)]
+                after_count = len(filtered_df)
+
+                # Log what was actually excluded
+                excluded_count = before_count - after_count
+                if excluded_count > 0:
+                    logger.info(f"Excluded {excluded_count} merchant records from subcategories: {excluded}")
+
+                    # Show which merchants were excluded (for debugging)
+                    excluded_merchants = merchant_df[merchant_df['SUBCATEGORY'].isin(excluded)]
+                    if not excluded_merchants.empty:
+                        unique_excluded = excluded_merchants['MERCHANT'].nunique()
+                        logger.info(f"  Removed {unique_excluded} unique merchants")
+
+                        # Log specific subcategory counts
+                        for subcat in excluded:
+                            subcat_count = len(merchant_df[merchant_df['SUBCATEGORY'] == subcat])
+                            if subcat_count > 0:
+                                logger.info(f"  - {subcat}: {subcat_count} records")
+
+            return filtered_df
+
+        # If SUBCATEGORY column doesn't exist in merchant_df
+        else:
+            logger.warning("SUBCATEGORY column not found in merchant_df - unable to filter by subcategory")
+            logger.info("Available columns in merchant_df: " + ", ".join(merchant_df.columns.tolist()))
+
+            # Return original dataframe since we can't filter without subcategory info
+            return merchant_df
 
     def _get_category_metrics(self, df: pd.DataFrame,
                               category_config: Dict[str, Any]) -> CategoryMetrics:
@@ -612,7 +697,7 @@ class CategoryAnalyzer:
 
         nba_comp = subcategory_df[
             (subcategory_df['AUDIENCE'] == self.audience_name) &
-            (subcategory_df['COMPARISON_POPULATION'] == 'NBA Fans') &
+            (subcategory_df['COMPARISON_POPULATION'] == self.league_fans) &
             category_filter
             ]
 
@@ -661,27 +746,27 @@ class CategoryAnalyzer:
 
         if best_index_name == 'PERC_INDEX':
             return (
-                f"{self.team_name} fans are {index_diff:.0f}% more likely "
+                f"{self.team_short} fans are {index_diff:.0f}% more likely "
                 f"to spend on {subcategory_name} when compared to the NBA average"
             )
         elif best_index_name == 'SPC_INDEX':
             return (
-                f"{self.team_name} fans have {index_diff:.0f}% higher spending per customer "
+                f"{self.team_short} fans have {index_diff:.0f}% higher spending per customer "
                 f"on {subcategory_name} when compared to the NBA average"
             )
         elif best_index_name == 'SPP_INDEX':
             return (
-                f"{self.team_name} fans spend {index_diff:.0f}% more per purchase "
+                f"{self.team_short} fans spend {index_diff:.0f}% more per purchase "
                 f"on {subcategory_name} when compared to the NBA average"
             )
         elif best_index_name == 'PPC_INDEX':
             return (
-                f"{self.team_name} fans make {index_diff:.0f}% more purchases "
+                f"{self.team_short} fans make {index_diff:.0f}% more purchases "
                 f"of {subcategory_name} when compared to the NBA average"
             )
         else:
             return (
-                f"{self.team_name} fans show {index_diff:.0f}% higher overall engagement "
+                f"{self.team_short} fans show {index_diff:.0f}% higher overall engagement "
                 f"with {subcategory_name} when compared to the NBA average"
             )
 
@@ -720,7 +805,7 @@ class CategoryAnalyzer:
 
         top_merchant = merchant_table.iloc[0]
         insights.append(
-            f"{top_merchant['Percent of Fans Who Spend']} of {self.team_name} fans "
+            f"{top_merchant['Percent of Fans Who Spend']} of {self.team_short} fans "
             f"spent at {top_merchant['Brand']}"
         )
 
