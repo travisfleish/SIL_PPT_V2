@@ -233,8 +233,8 @@ categories:
 
   # NEW: Athletic category with renamed display name
   athletic:
-    display_name: "Athletic Goods & Gears"
-    slide_title: "Athletic Goods & Gears Sponsor Analysis"
+    display_name: "Athletic Goods & Gear"
+    slide_title: "Athletic Goods & Gear Sponsor Analysis"
     category_names_in_data:
       - "Athletic"
     subcategories:

@@ -248,7 +248,7 @@ class CategorySlide(MockBaseSlide):
         width = Inches(5.3)
 
         title_box = slide.shapes.add_textbox(
-            Inches(0.6), Inches(1.2),  # Y position you can adjust
+            Inches(0.6), Inches(1.3),
             width, Inches(1.8)
         )
 
@@ -273,17 +273,86 @@ class CategorySlide(MockBaseSlide):
         for paragraph in text_frame.paragraphs:
             for run in paragraph.runs:
                 run.font.name = "Red Hat Display"
-                run.font.size = Pt(24)  # Font size you can adjust
+                run.font.size = Pt(26)
                 run.font.bold = True
                 run.font.italic = True
                 run.font.color.rgb = RGBColor(0, 0, 0)
             paragraph.line_spacing = 1.0
 
     def _add_emerging_category_title(self, slide, category_name):
-        """Add special title formatting for emerging categories"""
+        """Add special title formatting for emerging categories with logo"""
+
+        # Add the emerging arrow logo first - need to go up to project root
+        # Try multiple possible paths
+        possible_paths = [
+            # From project root
+            Path(__file__).parent.parent.parent / "assets" / "logos" / "general" / "emerging_arrow.png",
+            # Relative from current directory
+            Path("../../assets/logos/general/emerging_arrow.png"),
+            # Direct path
+            Path("/Users/travisfleisher/PycharmProjects/PPT_Generator_SIL/assets/logos/general/emerging_arrow.png"),
+            # Original path (in case running from different location)
+            Path("assets/logos/general/emerging_arrow.png")
+        ]
+
+        logo_path = None
+        for path in possible_paths:
+            if path.exists():
+                logo_path = path
+                break
+
+        # Extensive debugging for logo path
+        logger.info("=" * 60)
+        logger.info("LOGO PATH DEBUGGING:")
+        logger.info(f"Script file location: {Path(__file__)}")
+        logger.info(f"Script parent dir: {Path(__file__).parent}")
+        logger.info(f"Project root should be: {Path(__file__).parent.parent.parent}")
+        logger.info("Trying paths:")
+        for i, path in enumerate(possible_paths):
+            logger.info(f"  Path {i+1}: {path}")
+            logger.info(f"    - Absolute: {path.absolute()}")
+            logger.info(f"    - Exists: {path.exists()}")
+
+        if logo_path:
+            logger.info(f"✅ Found logo at: {logo_path}")
+        else:
+            logger.warning("❌ Logo not found in any of the expected locations")
+
+        logger.info("=" * 60)
+
+        # Check if logo exists and add it
+        if logo_path and logo_path.exists():
+            try:
+                # Add logo at top left, similar to reference image
+                pic = slide.shapes.add_picture(
+                    str(logo_path),
+                    Inches(2.2),  # Left margin
+                    Inches(0.8),  # Top position
+                    height=Inches(0.4)  # Height - width will scale proportionally
+                )
+                logger.info("✅ Successfully added emerging arrow logo to slide")
+            except Exception as e:
+                logger.error(f"❌ Failed to add emerging arrow logo: {e}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+        else:
+            logger.warning(f"⚠️ Emerging arrow logo not found")
+            logger.info("Adding placeholder chevron shape instead")
+            # Add a placeholder shape to represent the logo
+            logo_placeholder = slide.shapes.add_shape(
+                MSO_SHAPE.CHEVRON,
+                Inches(0.6), Inches(0.8),
+                Inches(0.5), Inches(0.5)
+            )
+            logo_placeholder.fill.solid()
+            logo_placeholder.fill.fore_color.rgb = RGBColor(50, 50, 50)
+            logo_placeholder.line.color.rgb = RGBColor(0, 0, 0)
+            logger.info("✅ Added chevron placeholder for missing logo")
+
         # Main title: "Emerging Category:"
         title_box = slide.shapes.add_textbox(
-            Inches(0.6), Inches(1.2),
+            Inches(0.6), Inches(1.3),
             Inches(5.3), Inches(0.5)
         )
 
@@ -292,14 +361,14 @@ class CategorySlide(MockBaseSlide):
 
         p = text_frame.paragraphs[0]
         p.font.name = "Red Hat Display"
-        p.font.size = Pt(24)
+        p.font.size = Pt(26)
         p.font.bold = True
         p.font.italic = True
         p.font.color.rgb = RGBColor(0, 0, 0)
 
         # Category name on second line
         category_box = slide.shapes.add_textbox(
-            Inches(0.6), Inches(1.8),
+            Inches(0.6), Inches(1.725),
             Inches(5.3), Inches(0.6)
         )
 
@@ -308,14 +377,14 @@ class CategorySlide(MockBaseSlide):
 
         p = text_frame.paragraphs[0]
         p.font.name = "Red Hat Display"
-        p.font.size = Pt(24)
+        p.font.size = Pt(26)
         p.font.bold = True
         p.font.italic = True
         p.font.color.rgb = RGBColor(0, 0, 0)
 
         # Explanatory subtext
         subtext_box = slide.shapes.add_textbox(
-            Inches(0.6), Inches(2.4),
+            Inches(0.6), Inches(2.3),
             Inches(5.3), Inches(0.6)
         )
 
@@ -336,10 +405,10 @@ class CategorySlide(MockBaseSlide):
     def _add_category_insights(self, slide, results, team_short, team_config, is_emerging=False):
         """Add category insights section"""
         # Adjust vertical position based on whether it's an emerging category
-        title_y = Inches(3.2) if is_emerging else Inches(2.4)
-        insights_y = Inches(3.6) if is_emerging else Inches(2.8)
-        nba_label_y = Inches(5.8) if is_emerging else Inches(5.4)
-        nba_box_y = Inches(6.2) if is_emerging else Inches(5.8)
+        title_y = Inches(3.2) if is_emerging else Inches(2.6)
+        insights_y = Inches(3.6) if is_emerging else Inches(3.0)
+        nba_label_y = Inches(5.8) if is_emerging else Inches(5.2)
+        nba_box_y = Inches(6.2) if is_emerging else Inches(5.6)
 
         # Insights title
         insights_title = slide.shapes.add_textbox(
@@ -377,7 +446,8 @@ class CategorySlide(MockBaseSlide):
                 Inches(0.5), nba_label_y,
                 Inches(4), Inches(0.3)
             )
-            nba_label.text_frame.text = f"{team_short} Fans vs. NBA Fans:"
+            league = team_config.get('league', 'NBA')
+            nba_label.text_frame.text = f"{team_short} Fans vs. {league} Fans:"
             p = nba_label.text_frame.paragraphs[0]
             p.font.name = self.default_font
             p.font.size = Pt(14)
@@ -694,7 +764,7 @@ class CategorySlide(MockBaseSlide):
 
         # Hot Brand Target header
         target_title = slide.shapes.add_textbox(
-            Inches(0.5), Inches(5.1),
+            Inches(0.5), Inches(5.0),
             Inches(2.0), Inches(0.3)
         )
         target_title.text_frame.text = "Hot Brand Target:"
@@ -706,7 +776,7 @@ class CategorySlide(MockBaseSlide):
         # Add X logo placeholder
         logo_size = Inches(0.5)
         logo_x = Inches(2.4)
-        logo_y = Inches(5.025)
+        logo_y = Inches(4.925)
 
         # Add circle for logo
         circle = slide.shapes.add_shape(
@@ -736,7 +806,7 @@ class CategorySlide(MockBaseSlide):
 
         # Recommendation content
         rec_box = slide.shapes.add_textbox(
-            Inches(0.7), Inches(5.6),
+            Inches(0.7), Inches(5.5),
             Inches(5.5), Inches(1.2)
         )
 
@@ -810,72 +880,137 @@ class CategorySlide(MockBaseSlide):
         cell.vertical_anchor = MSO_ANCHOR.MIDDLE
 
 
-def create_mock_data():
+def create_mock_data(is_emerging=False):
     """Create mock data for testing"""
 
-    # Mock subcategory data
-    subcategory_data = pd.DataFrame({
-        'Subcategory': ['Hotels', 'Airlines', 'Car Rentals', 'Vacation Rentals', 'Cruises'],
-        'Percent of Fans Who Spend': [22.5, 18.3, 15.7, 12.4, 8.9],
-        'Likelihood to spend (vs. Local Gen Pop)': ['15% More likely', '12% More likely', '8% More likely', 'EQUAL', '5% Less likely'],
-        'Purchases Per Fan (vs. Gen Pop)': ['20% More purchases', '15% More purchases', '10% More purchases', '5% More purchases', 'EQUAL']
-    })
+    if is_emerging:
+        # Mock data for emerging category (Sportstainment)
+        subcategory_data = pd.DataFrame({
+            'Subcategory': ['Pickleball & Racket Sports', 'Indoor Entertainment', 'Golf Resorts', 'Ski Resorts'],
+            'Percent of Fans Who Spend': [4.5, 5.0, 10.0, 9.0],
+            'Likelihood to spend (vs. Local Gen Pop)': ['614% More likely', '484% More likely', '423% More likely', '382% More likely'],
+            'Purchases Per Fan (vs. Gen Pop)': ['18% More purchases', '19% More purchases', '52% More purchases', '38% More purchases']
+        })
 
-    # Mock merchant/brand data
-    merchant_data = pd.DataFrame({
-        'Rank': [1, 2, 3, 4, 5],
-        'Brand': ['American Airlines', 'Delta', 'United Airlines', 'Budget', 'Allegiant Air'],
-        'Percent of Fans Who Spend': [8.0, 4.8, 4.2, 3.5, 2.9],
-        'Likelihood to spend (vs. Local Gen Pop)': ['16% Less likely', '13% Less likely', '9% More likely', '62% More likely', '108% More likely'],
-        'Purchases Per Fan (vs. Gen Pop)': ['47% Less purchases', '43% Less purchases', '55% Less purchases', '18% More purchases', '9% More purchases']
-    })
+        # Mock merchant/brand data for emerging category
+        merchant_data = pd.DataFrame({
+            'Rank': [1, 2, 3, 4, 5],
+            'Brand': ['TopGolf', 'iFLY', 'Life Time Fitness', 'Main Event', 'Dave & Busters'],
+            'Percent of Fans Who Spend': [3.2, 2.8, 2.1, 1.9, 1.5],
+            'Likelihood to spend (vs. Local Gen Pop)': ['108% More likely', '216% More likely', '89% More likely', '124% More likely', '156% More likely'],
+            'Purchases Per Fan (vs. Gen Pop)': ['12% More purchases', '25% More purchases', '18% More purchases', '8% More purchases', '15% More purchases']
+        })
 
-    # Mock category metrics
-    category_metrics = MockCategoryMetrics(
-        percent_audience=35.2,
-        percent_index=18,
-        composite_index=125,
-        spc=22,
-        ppc=15
-    )
+        # Mock category metrics for emerging
+        category_metrics = MockCategoryMetrics(
+            percent_audience=20.0,
+            percent_index=370,
+            composite_index=125,
+            spc=52,
+            ppc=52
+        )
 
-    # Mock recommendation
-    recommendation = {
-        'merchant': 'Celebrity Cruises',
-        'composite_index': 194
-    }
+        # Mock recommendation for emerging
+        recommendation = {
+            'merchant': 'Life Time Fitness',
+            'composite_index': 189
+        }
 
-    # Mock analysis results
-    analysis_results = {
-        'display_name': 'Travel',
-        'slide_title': 'Sponsor Spending Analysis: Travel',
-        'is_emerging': False,  # Set to True to test emerging category
-        'category_metrics': category_metrics,
-        'subcategory_stats': subcategory_data,
-        'merchant_stats': (merchant_data, merchant_data['Brand'].tolist()),
-        'insights': [
-            "Panthers fans spend 22% more on travel than the local gen pop",
-            "Hotels represent the highest subcategory with 23% of fans spending",
-            "Panthers fans make 15% more travel purchases per year compared to local gen pop",
-            "Airlines show strong growth potential with 18% fan engagement",
-            "Panthers fans are 25% more likely to spend on travel compared to NBA fans",
-            "Average travel spend per Panthers fan is $2,450 annually vs NBA average of $1,960"
-        ],
-        'merchant_insights': [
-            "8% of Carolina Panthers fans spend at American Airlines",
-            "Panthers fans make an average of 4 purchases per year at Allegiant Air",
-            "Panthers fans spent an average of $1,499 per fan on Allegiant Air per year",
-            "Panthers fans are 125% more likely to spend on American Airlines than the average NBA fan"
-        ],
-        'recommendation': recommendation
-    }
+        # Mock analysis results for emerging category
+        analysis_results = {
+            'display_name': 'Sportstainment',
+            'slide_title': 'Sportstainment Sponsor Analysis',
+            'is_emerging': True,  # This is the emerging category
+            'category_metrics': category_metrics,
+            'subcategory_stats': subcategory_data,
+            'merchant_stats': (merchant_data, merchant_data['Brand'].tolist()),
+            'insights': [
+                "Jazz fans are 370% more likely to spend on Sportstainment than the local gen pop",
+                "Jazz fans make an average of 52% more purchases per fan on Sportstainment than the local gen pop",
+                "Jazz fans are more than 7.1X more likely to spend on Pickleball & Racket Sports vs. the local gen pop",
+                "Jazz fans spend an average of $469 per fan per year on Ski Resorts",
+                "Utah Jazz fans are 89% more likely to spend on Ski Resorts when compared to the NBA average"
+            ],
+            'merchant_insights': [
+                "3% of Jazz fans spend at TopGolf",
+                "Jazz fans make an average of 6 purchases per year at Life Time Fitness",
+                "Jazz fans spent an average of $892 per fan on Life Time Fitness per year",
+                "Jazz fans are 216% more likely to spend on iFLY than the average NBA fan"
+            ],
+            'recommendation': recommendation
+        }
 
-    # Mock team config
-    team_config = {
-        'team_name': 'Carolina Panthers',
-        'team_name_short': 'Panthers',
-        'league': 'NFL'
-    }
+        # Mock team config
+        team_config = {
+            'team_name': 'Utah Jazz',
+            'team_name_short': 'Jazz',
+            'league': 'NBA'
+        }
+
+    else:
+        # Original mock data for regular category
+        subcategory_data = pd.DataFrame({
+            'Subcategory': ['Hotels', 'Airlines', 'Car Rentals', 'Vacation Rentals', 'Cruises'],
+            'Percent of Fans Who Spend': [22.5, 18.3, 15.7, 12.4, 8.9],
+            'Likelihood to spend (vs. Local Gen Pop)': ['15% More likely', '12% More likely', '8% More likely', 'EQUAL', '5% Less likely'],
+            'Purchases Per Fan (vs. Gen Pop)': ['20% More purchases', '15% More purchases', '10% More purchases', '5% More purchases', 'EQUAL']
+        })
+
+        # Mock merchant/brand data
+        merchant_data = pd.DataFrame({
+            'Rank': [1, 2, 3, 4, 5],
+            'Brand': ['American Airlines', 'Delta', 'United Airlines', 'Budget', 'Allegiant Air'],
+            'Percent of Fans Who Spend': [8.0, 4.8, 4.2, 3.5, 2.9],
+            'Likelihood to spend (vs. Local Gen Pop)': ['16% Less likely', '13% Less likely', '9% More likely', '62% More likely', '108% More likely'],
+            'Purchases Per Fan (vs. Gen Pop)': ['47% Less purchases', '43% Less purchases', '55% Less purchases', '18% More purchases', '9% More purchases']
+        })
+
+        # Mock category metrics
+        category_metrics = MockCategoryMetrics(
+            percent_audience=35.2,
+            percent_index=18,
+            composite_index=125,
+            spc=22,
+            ppc=15
+        )
+
+        # Mock recommendation
+        recommendation = {
+            'merchant': 'Celebrity Cruises',
+            'composite_index': 194
+        }
+
+        # Mock analysis results
+        analysis_results = {
+            'display_name': 'Travel',
+            'slide_title': 'Sponsor Spending Analysis: Travel',
+            'is_emerging': False,
+            'category_metrics': category_metrics,
+            'subcategory_stats': subcategory_data,
+            'merchant_stats': (merchant_data, merchant_data['Brand'].tolist()),
+            'insights': [
+                "Panthers fans spend 22% more on travel than the local gen pop",
+                "Hotels represent the highest subcategory with 23% of fans spending",
+                "Panthers fans make 15% more travel purchases per year compared to local gen pop",
+                "Airlines show strong growth potential with 18% fan engagement",
+                "Panthers fans are 25% more likely to spend on travel compared to NBA fans",
+                "Average travel spend per Panthers fan is $2,450 annually vs NBA average of $1,960"
+            ],
+            'merchant_insights': [
+                "8% of Carolina Panthers fans spend at American Airlines",
+                "Panthers fans make an average of 4 purchases per year at Allegiant Air",
+                "Panthers fans spent an average of $1,499 per fan on Allegiant Air per year",
+                "Panthers fans are 125% more likely to spend on American Airlines than the average NBA fan"
+            ],
+            'recommendation': recommendation
+        }
+
+        # Mock team config
+        team_config = {
+            'team_name': 'Carolina Panthers',
+            'team_name_short': 'Panthers',
+            'league': 'NFL'
+        }
 
     return analysis_results, team_config
 
@@ -884,8 +1019,38 @@ def main():
     """Main function to generate test slides"""
     print("Generating test category and brand slides...")
 
-    # Create mock data
-    analysis_results, team_config = create_mock_data()
+    # Set up more detailed logging for debugging
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # Log current environment
+    logger.info("=" * 60)
+    logger.info("ENVIRONMENT INFO:")
+    logger.info(f"Script location: {Path(__file__).absolute()}")
+    logger.info(f"Current working directory: {Path.cwd()}")
+    logger.info(f"Python executable: {sys.executable}")
+    logger.info("=" * 60)
+
+    # Ensure the assets directory structure exists
+    assets_path = Path("assets/logos/general")
+    logger.info(f"Creating directory structure: {assets_path}")
+    assets_path.mkdir(parents=True, exist_ok=True)
+
+    # Check what's in the directory
+    logger.info("Checking assets directory contents:")
+    if assets_path.exists():
+        logger.info(f"Directory {assets_path} exists")
+        contents = list(assets_path.iterdir())
+        if contents:
+            logger.info(f"Contents of {assets_path}:")
+            for item in contents:
+                logger.info(f"  - {item.name}")
+        else:
+            logger.info(f"Directory {assets_path} is empty")
+    else:
+        logger.warning(f"Directory {assets_path} does not exist after creation attempt!")
 
     # Create presentation
     presentation = Presentation()
@@ -893,29 +1058,46 @@ def main():
     # Create slide generator
     generator = CategorySlide(presentation)
 
-    # Generate the category analysis slide
-    print("Creating category analysis slide...")
-    presentation = generator.generate(analysis_results, team_config)
+    print("\n1. Creating REGULAR category slides (Travel)...")
+    # Create regular category data
+    regular_data, regular_team = create_mock_data(is_emerging=False)
 
-    # Generate the brand analysis slide
-    print("Creating brand analysis slide...")
-    presentation = generator.generate_brand_slide(analysis_results, team_config)
+    # Generate regular category analysis slide
+    presentation = generator.generate(regular_data, regular_team)
+
+    # Generate regular brand analysis slide
+    presentation = generator.generate_brand_slide(regular_data, regular_team)
+
+    print("\n2. Creating EMERGING category slides (Sportstainment)...")
+    # Create emerging category data
+    emerging_data, emerging_team = create_mock_data(is_emerging=True)
+
+    # Generate emerging category analysis slide
+    presentation = generator.generate(emerging_data, emerging_team)
+
+    # Generate emerging brand analysis slide
+    presentation = generator.generate_brand_slide(emerging_data, emerging_team)
 
     # Save the presentation
-    output_path = "test_category_slides.pptx"
+    output_path = "test_category_slides_with_emerging.pptx"
     presentation.save(output_path)
 
-    print(f"✅ Test slides saved to: {output_path}")
+    print(f"\n✅ Test slides saved to: {output_path}")
+    print("\nThe presentation now contains 4 slides:")
+    print("  - Slide 1: Regular Category Analysis (Travel)")
+    print("  - Slide 2: Regular Brand Analysis (Travel)")
+    print("  - Slide 3: EMERGING Category Analysis (Sportstainment)")
+    print("  - Slide 4: EMERGING Brand Analysis (Sportstainment)")
+
+    print("\nNOTE: Check the console output above for detailed logo path debugging.")
+    print("      If the logo file is not found, make sure to place it at:")
+    print(f"      {Path('assets/logos/general/emerging_arrow.png').absolute()}")
+
     print("\nYou can now:")
-    print("1. Open the PowerPoint file to see both slides")
-    print("2. Modify the formatting parameters in the code")
-    print("3. Change the mock data to test different scenarios")
-    print("4. Set 'is_emerging': True to test emerging category formatting")
-    print("\nKey formatting locations:")
-    print("- Title Y position: _add_title() method, Inches(1.2)")
-    print("- Title font size: _add_title() method, Pt(24)")
-    print("- Brand logos Y position: _add_brand_logos() method, Inches(1.2)")
-    print("- Table positions: Various top parameters in table methods")
+    print("1. Open the PowerPoint file to see all slides")
+    print("2. Compare regular vs emerging category formatting")
+    print("3. Check if the logo appears on the emerging category slide")
+    print("4. Adjust formatting parameters as needed")
 
 
 if __name__ == "__main__":

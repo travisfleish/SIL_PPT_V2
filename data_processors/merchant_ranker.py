@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 class MerchantRanker:
     """Analyze and rank merchants by community with merchant name standardization"""
 
+    EXCLUDED_MERCHANTS = ['LEVELUP']
+
     def __init__(self, team_view_prefix: str, comparison_population: str = None, cache_manager: Optional[Any] = None):
         """
         Initialize merchant ranker
@@ -229,16 +231,6 @@ class MerchantRanker:
                                           exclude_live_entertainment_sports: bool = True) -> pd.DataFrame:
         """
         Get top merchants for specified communities with standardized names
-
-        Args:
-            communities: List of community names
-            comparison_pop: Comparison population name (uses instance default if not provided)
-            min_audience_count: Minimum audience count for merchant relevance
-            top_n_per_community: Number of top merchants per community
-            exclude_live_entertainment_sports: Exclude professional sports from Live Entertainment Seekers
-
-        Returns:
-            DataFrame with top merchants for each community (with standardized names)
         """
         # Use instance comparison_population if not provided
         if comparison_pop is None:
@@ -258,7 +250,13 @@ class MerchantRanker:
                         AND LOWER(SUBCATEGORY) LIKE '%professional sports%')
             """
 
-        # Removed COMPOSITE_INDEX since it doesn't exist in merchant view
+        # ADD THIS: Merchant exclusion clause
+        merchant_exclusion = ""
+        if self.EXCLUDED_MERCHANTS:
+            excluded_list = "', '".join([m.upper() for m in self.EXCLUDED_MERCHANTS])
+            merchant_exclusion = f"AND UPPER(MERCHANT) NOT IN ('{excluded_list}')"
+
+        # UPDATE THE QUERY to include merchant exclusion
         query = f"""
         WITH ranked_merchants AS (
             SELECT 
@@ -277,6 +275,7 @@ class MerchantRanker:
                 AND COMPARISON_POPULATION = '{comparison_pop}'
                 AND AUDIENCE_COUNT >= {min_audience_count}
                 {exclusion_clause}
+                {merchant_exclusion}
         )
         SELECT 
             COMMUNITY,
@@ -298,6 +297,10 @@ class MerchantRanker:
             logger.info("Excluding professional sports subcategory from Live Entertainment Seekers")
         logger.info("Ranking merchants by PERC_AUDIENCE")
 
+        # LOG THE EXCLUSION
+        if self.EXCLUDED_MERCHANTS:
+            logger.info(f"Excluding merchants: {self.EXCLUDED_MERCHANTS}")
+
         from data_processors.snowflake_connector import query_to_dataframe
 
         df = query_to_dataframe(query)
@@ -314,6 +317,7 @@ class MerchantRanker:
                            comparison_pop: str = None) -> pd.DataFrame:
         """
         Get data formatted for fan wheel visualization with standardized merchant names
+        Enhanced to ensure no duplicate merchants across communities
 
         Args:
             min_audience_pct: Minimum audience percentage threshold (20%)
@@ -321,7 +325,7 @@ class MerchantRanker:
             comparison_pop: Comparison population (uses instance default if not provided)
 
         Returns:
-            DataFrame with one merchant per community for fan wheel (standardized names)
+            DataFrame with one unique merchant per community for fan wheel
         """
         # Get top communities
         communities_df = self.get_top_communities(
@@ -333,17 +337,17 @@ class MerchantRanker:
         if communities_df.empty:
             raise ValueError("No communities found matching criteria")
 
-        # Get top merchant for each community (with professional sports excluded)
+        # Get top N merchants for each community (fetch more than needed for fallback)
         communities = communities_df['COMMUNITY'].tolist()
         merchants_df = self.get_top_merchants_for_communities(
             communities=communities,
             comparison_pop=comparison_pop,
-            top_n_per_community=1,
+            top_n_per_community=5,  # Fetch top 5 to have fallback options
             exclude_live_entertainment_sports=True
         )
 
         # Merge community data with merchant data
-        result = merchants_df.merge(
+        merchants_with_community_data = merchants_df.merge(
             communities_df[['COMMUNITY', 'PERC_INDEX', 'COMPOSITE_INDEX']].rename(
                 columns={
                     'PERC_INDEX': 'COMMUNITY_PERC_INDEX',
@@ -354,8 +358,40 @@ class MerchantRanker:
             how='left'
         )
 
+        # Implement greedy selection to ensure unique merchants
+        selected_merchants = {}  # {community: merchant_row}
+        used_merchants = set()
+
+        # Sort by COMPOSITE_INDEX to prioritize higher-value communities
+        communities_sorted = communities_df.sort_values('COMPOSITE_INDEX', ascending=False)
+
+        for _, community_row in communities_sorted.iterrows():
+            community = community_row['COMMUNITY']
+
+            # Get all merchants for this community, sorted by PERC_AUDIENCE
+            community_merchants = merchants_with_community_data[
+                merchants_with_community_data['COMMUNITY'] == community
+                ].sort_values('PERC_AUDIENCE', ascending=False)
+
+            # Find the first merchant not yet used
+            for _, merchant_row in community_merchants.iterrows():
+                merchant = merchant_row['MERCHANT']
+
+                if merchant not in used_merchants:
+                    selected_merchants[community] = merchant_row
+                    used_merchants.add(merchant)
+                    break
+            else:
+                # If all merchants are used, log warning and skip this community
+                logger.warning(f"No unique merchant found for community: {community}")
+
+        # Convert selected merchants to DataFrame
+        if not selected_merchants:
+            raise ValueError("No unique merchants could be assigned to communities")
+
+        result = pd.DataFrame(list(selected_merchants.values()))
+
         # Generate behavior text using approved communities action verbs
-        # Now uses standardized merchant names for behavior text
         result['behavior'] = result.apply(
             lambda row: self._generate_behavior_from_community(row['COMMUNITY'], row['MERCHANT']),
             axis=1
@@ -433,14 +469,6 @@ class MerchantRanker:
                                           comparison_pop: str = None) -> pd.DataFrame:
         """
         Get top merchants with standardized names for any category/analysis
-
-        Args:
-            category_filter: Optional category filter (e.g., "Restaurants", "Auto")
-            top_n: Number of top merchants to return
-            comparison_pop: Comparison population name (uses instance default if not provided)
-
-        Returns:
-            DataFrame with top merchants and standardized names
         """
         # Use instance comparison_population if not provided
         if comparison_pop is None:
@@ -453,6 +481,12 @@ class MerchantRanker:
         category_clause = ""
         if category_filter:
             category_clause = f"AND UPPER(CATEGORY) LIKE '%{category_filter.upper()}%'"
+
+        # ADD THIS: Merchant exclusion
+        merchant_exclusion = ""
+        if self.EXCLUDED_MERCHANTS:
+            excluded_list = "', '".join([m.upper() for m in self.EXCLUDED_MERCHANTS])
+            merchant_exclusion = f"AND UPPER(MERCHANT) NOT IN ('{excluded_list}')"
 
         query = f"""
         SELECT 
@@ -467,6 +501,7 @@ class MerchantRanker:
         WHERE 
             COMPARISON_POPULATION = '{comparison_pop}'
             {category_clause}
+            {merchant_exclusion}
         ORDER BY PERC_AUDIENCE DESC
         LIMIT {top_n}
         """

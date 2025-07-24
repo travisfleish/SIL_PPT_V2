@@ -418,6 +418,25 @@ class CategorySlide(BaseSlide):
     def _add_emerging_category_title(self, slide, category_name: str):
         """Add special title formatting for emerging categories"""
 
+        # Add the emerging arrow logo first
+        logo_path = Path("assets/logos/general/emerging_arrow.png")
+
+        # Check if logo exists and add it
+        if logo_path.exists():
+            try:
+                # Add logo at top left, similar to reference image
+                pic = slide.shapes.add_picture(
+                    str(logo_path),
+                    Inches(2.2),  # Left margin
+                    Inches(0.8),  # Top position
+                    height=Inches(0.3)  # Height - width will scale proportionally
+                )
+                logger.info("Added emerging arrow logo to slide")
+            except Exception as e:
+                logger.error(f"Failed to add emerging arrow logo: {e}")
+        else:
+            logger.warning(f"Emerging arrow logo not found at {logo_path}")
+
         # Main title: "Emerging Category:"
         title_box = slide.shapes.add_textbox(
             Inches(0.6), Inches(1.3),
@@ -436,7 +455,7 @@ class CategorySlide(BaseSlide):
 
         # Category name on second line
         category_box = slide.shapes.add_textbox(
-            Inches(0.6), Inches(1.8),
+            Inches(0.6), Inches(1.725),
             Inches(5.3), Inches(0.6)
         )
 
@@ -452,7 +471,7 @@ class CategorySlide(BaseSlide):
 
         # Explanatory subtext
         subtext_box = slide.shapes.add_textbox(
-            Inches(0.6), Inches(2.4),
+            Inches(0.6), Inches(2.3),
             Inches(5.3), Inches(0.6)
         )
 

@@ -61,6 +61,9 @@ class CategoryMetrics:
 class CategoryAnalyzer:
     """OPTIMIZED: Analyzes category spending data with selective merchant name standardization"""
 
+    # Add this constant
+    EXCLUDED_MERCHANTS = ['LEVELUP']  # Add more merchants here if needed
+
     def __init__(self, team_name: str, team_short: str, league: str,
                  config_path: Optional[Path] = None,
                  comparison_population: str = None,
@@ -129,6 +132,21 @@ class CategoryAnalyzer:
         self.max_reasonable_index = 1000
         self.min_significant_difference = 0
 
+    def _exclude_merchants(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Remove excluded merchants from DataFrame"""
+        if 'MERCHANT' not in df.columns or df.empty or not self.EXCLUDED_MERCHANTS:
+            return df
+
+        # Create case-insensitive exclusion
+        excluded_upper = [m.upper() for m in self.EXCLUDED_MERCHANTS]
+        mask = ~df['MERCHANT'].str.upper().isin(excluded_upper)
+
+        excluded_count = len(df) - mask.sum()
+        if excluded_count > 0:
+            logger.info(f"Excluded {excluded_count} records for merchants: {self.EXCLUDED_MERCHANTS}")
+
+        return df[mask]
+
     def analyze_category(self,
                          category_key: str,
                          category_df: pd.DataFrame,
@@ -149,6 +167,11 @@ class CategoryAnalyzer:
         for df in [category_df, subcategory_df, merchant_df, subcategory_last_year_df, merchant_last_year_df]:
             if df is not None and not df.empty:
                 self._clean_dataframe(df)
+
+        # EXCLUDE MERCHANTS BEFORE ANY OTHER PROCESSING
+        merchant_df = self._exclude_merchants(merchant_df)
+        if merchant_last_year_df is not None:
+            merchant_last_year_df = self._exclude_merchants(merchant_last_year_df)
 
         # Filter merchant data based on subcategory exclusions/inclusions
         filtered_merchant_df = self._filter_merchants_by_subcategory(merchant_df, subcategory_df, category_config)
@@ -1042,12 +1065,28 @@ class CategoryAnalyzer:
         if subcategory in self.subcategory_overrides:
             return self.subcategory_overrides[subcategory]
 
+        # For custom categories, check category_names_in_data FIRST
+        # This ensures we use the actual data name, not the display name
         if category_config.get('is_custom', False):
+            # Check against all category names in the data
+            category_names = category_config.get('category_names_in_data', [])
+            for cat_name in category_names:
+                if subcategory.startswith(f"{cat_name} - "):
+                    return subcategory.split(" - ", 1)[1]
+
+            # Fallback to display name check (keeping for backward compatibility)
             category_name = category_config.get('display_name', '')
             if subcategory.startswith(f"{category_name} - "):
                 return subcategory.replace(f"{category_name} - ", "")
             return subcategory
 
+        # Check against all category names in the data (for non-custom categories)
+        category_names = category_config.get('category_names_in_data', [])
+        for cat_name in category_names:
+            if subcategory.startswith(f"{cat_name} - "):
+                return subcategory.split(" - ", 1)[1]
+
+        # Fallback to generic splitting
         if " - " in subcategory:
             return subcategory.split(" - ", 1)[1]
 
@@ -1064,6 +1103,11 @@ class CategoryAnalyzer:
             (merchant_df['AUDIENCE'] == self.audience_name) &
             (merchant_df['CATEGORY'].str.strip() == category_name_clean)
             ]
+
+        # Apply merchant exclusion
+        if self.EXCLUDED_MERCHANTS and not category_merchants.empty:
+            excluded_upper = [m.upper() for m in self.EXCLUDED_MERCHANTS]
+            category_merchants = category_merchants[~category_merchants['MERCHANT'].str.upper().isin(excluded_upper)]
 
         if category_merchants.empty:
             logger.debug(f"No merchants found for category '{category_name}'")
