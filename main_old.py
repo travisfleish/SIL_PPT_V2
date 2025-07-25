@@ -10,8 +10,6 @@ from pathlib import Path
 from datetime import datetime
 import traceback
 from typing import Optional, List, Dict
-from pptx import Presentation
-from pptx.util import Inches
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent))
@@ -66,152 +64,6 @@ def validate_team(team_key: str) -> bool:
     except Exception as e:
         print(f"\n❌ Error validating team: {str(e)}")
         return False
-
-
-def generate_single_slide(team_key: str,
-                         slide_type: str,
-                         output_dir: Optional[Path] = None) -> Path:
-    """
-    Generate a single slide for testing/preview
-
-    Args:
-        team_key: Team identifier
-        slide_type: Type of slide (demographics, behaviors, category:NAME)
-        output_dir: Optional output directory
-
-    Returns:
-        Path to generated PowerPoint file
-    """
-    print(f"\n{'=' * 60}")
-    print(f"GENERATING SINGLE SLIDE: {slide_type.upper()}")
-    print(f"{'=' * 60}")
-
-    # Get team info
-    config_manager = TeamConfigManager()
-    team_config = config_manager.get_team_config(team_key)
-
-    print(f"\nTeam: {team_config['team_name']}")
-    print(f"Slide Type: {slide_type}")
-
-    # Test connection
-    print("\n🔍 Testing Snowflake connection...")
-    if not test_connection():
-        raise Exception("Failed to connect to Snowflake")
-    print("✅ Connected to Snowflake")
-
-    # Create presentation with SIL template
-    print("\n📊 Creating presentation...")
-
-    # Load the SIL template
-    TEMPLATE_PATH = Path(__file__).parent / 'templates' / 'sil_combined_template.pptx'
-    if TEMPLATE_PATH.exists():
-        pres = Presentation(str(TEMPLATE_PATH))
-        logging.info("Loaded SIL template")
-    else:
-        pres = Presentation()
-        logging.warning("Template not found, using blank presentation")
-
-    # Set 16:9 dimensions
-    pres.slide_width = Inches(13.333)
-    pres.slide_height = Inches(7.5)
-
-    # Create output directory
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_base = output_dir or Path('output')
-    slide_output_dir = output_base / f'single_slides/{team_key}_{timestamp}'
-    slide_output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate the specific slide
-    if slide_type == 'demographics':
-        from slide_generators.demographics_slide import DemographicsSlide
-        from data_processors.demographic_processor import DemographicsProcessor
-        from data_processors.snowflake_connector import query_to_dataframe
-        from visualizations.demographic_charts import DemographicCharts
-
-        print("\n📈 Processing demographics data...")
-
-        # Get demographics view name using TeamConfigManager
-        demographics_view = config_manager.get_view_name(team_key, 'demographics')
-        query = f"SELECT * FROM {demographics_view}"
-        print(f"   • Querying view: {demographics_view}")
-
-        df = query_to_dataframe(query)
-        print(f"   • Fetched {len(df):,} records")
-
-        # Process with DemographicsProcessor
-        processor = DemographicsProcessor(
-            data_source=df,
-            team_name=team_config['team_name'],
-            league=team_config['league'],
-            comparison_population=team_config.get('comparison_population')
-        )
-        data = processor.process_all_demographics()
-
-        # Generate charts
-        chart_dir = slide_output_dir / 'charts'
-        chart_dir.mkdir(exist_ok=True)
-
-        print("\n📊 Generating demographic charts...")
-        charter = DemographicCharts(
-            team_colors=team_config.get('colors'),
-            team_config=team_config
-        )
-        charts = charter.create_all_demographic_charts(
-            data,
-            output_dir=chart_dir
-        )
-        print(f"   • Generated {len(charts)} charts")
-
-        generator = DemographicsSlide(pres)
-        pres = generator.generate(data, chart_dir, team_config)
-
-    elif slide_type == 'behaviors':
-        from slide_generators.behaviors_slide import BehaviorsSlide
-        from data_processors.merchant_ranker import MerchantRanker
-
-        print("\n🎯 Processing behaviors data...")
-        ranker = MerchantRanker(
-            team_view_prefix=team_config['view_prefix'],
-            comparison_population=team_config.get('comparison_population')
-        )
-
-        generator = BehaviorsSlide(pres)
-        pres = generator.generate(ranker, team_config)
-
-    elif slide_type.startswith('category:'):
-        from slide_generators.category_slide import CategorySlide
-        from data_processors.category_analyzer import CategoryAnalyzer
-
-        category_name = slide_type.split(':', 1)[1]
-        print(f"\n📊 Processing category: {category_name}")
-
-        analyzer = CategoryAnalyzer(
-            team_name=team_config['team_name'],
-            team_short=team_config['team_name_short'],
-            league=team_config['league'],
-            comparison_population=team_config['comparison_population']
-        )
-        analyzer.connect()
-        analysis = analyzer.analyze_category(category_name)
-        analyzer.disconnect()
-
-        if not analysis:
-            raise ValueError(f"Category '{category_name}' not found or has no data")
-
-        generator = CategorySlide(pres)
-        pres = generator.generate(analysis, team_config, 0)
-
-    else:
-        raise ValueError(f"Unknown slide type: {slide_type}")
-
-    # Save the presentation
-    output_file = slide_output_dir / f'{team_key}_{slide_type.replace(":", "_")}_{timestamp}.pptx'
-    pres.save(str(output_file))
-
-    print(f"\n✅ SUCCESS! Slide generated:")
-    print(f"📁 {output_file}")
-
-    return output_file
 
 
 def generate_report(team_key: str,
@@ -382,19 +234,16 @@ Examples:
   python main.py utah_jazz                        # Single team
   python main.py utah_jazz dallas_cowboys         # Multiple teams (space-separated)
   python main.py utah_jazz,dallas_cowboys         # Multiple teams (comma-separated)
-  python main.py utah_jazz demographics           # Single slide for a team
-  python main.py utah_jazz behaviors              # Behaviors slide only
-  python main.py utah_jazz category:Restaurants  # Specific category slide
+  python main.py "utah_jazz, dallas_cowboys"      # Multiple teams (comma with spaces - use quotes)
+  python main.py utah_jazz --no-custom            # Generate without custom categories
+  python main.py utah_jazz --custom-count 2       # Generate with only 2 custom categories
   python main.py --list-teams                     # List all available teams
-  python main.py --list-slides                    # List available slide types
         """
     )
 
-    # Arguments - support both teams and slide type
-    parser.add_argument('teams', nargs='*', help='Team key(s) - space or comma-separated, optionally followed by slide type')
-    parser.add_argument('--slide', help='Generate single slide type (demographics, behaviors, category:NAME)')
+    # Arguments - Changed to accept multiple teams
+    parser.add_argument('teams', nargs='*', help='Team key(s) - space or comma-separated')
     parser.add_argument('--list-teams', action='store_true', help='List all available teams')
-    parser.add_argument('--list-slides', action='store_true', help='List available slide types')
     parser.add_argument('--no-custom', dest='skip_custom', action='store_true',
                         help='Skip custom category slides')
     parser.add_argument('--custom-count', type=int, help='Number of custom categories to include')
@@ -423,17 +272,6 @@ Examples:
 
             return 0
 
-        # List slides
-        if args.list_slides:
-            print("\n📋 Available slide types:")
-            print("   • demographics    - Fan demographic analysis")
-            print("   • behaviors       - Fan behavior wheel and community indices")
-            print("   • category:NAME   - Specific category analysis (e.g., category:Restaurants)")
-            print("\n   Fixed categories:")
-            print("     - Restaurants, Athleisure, Finance, Gambling, Travel, Auto")
-            print("   \n   For custom categories, generate a full report first to see available options.")
-            return 0
-
         # Test connection
         if args.test_connection:
             print("\n🔍 Testing Snowflake connection...")
@@ -448,59 +286,6 @@ Examples:
         if not args.teams:
             parser.print_help()
             return 1
-
-        # Check if this is a single slide request
-        # Pattern: team_name slide_type (e.g., "utah_jazz demographics")
-        if len(args.teams) == 2 and not ',' in args.teams[0] and args.teams[1] in ['demographics', 'behaviors'] or (len(args.teams) == 2 and args.teams[1].startswith('category:')):
-            # Single slide generation
-            team_key = args.teams[0]
-            slide_type = args.teams[1]
-
-            # Validate team
-            if not validate_team(team_key):
-                return 1
-
-            # Generate single slide
-            start_time = datetime.now()
-
-            slide_path = generate_single_slide(
-                team_key=team_key,
-                slide_type=slide_type,
-                output_dir=args.output_dir
-            )
-
-            # Calculate duration
-            duration = datetime.now() - start_time
-            seconds = int(duration.total_seconds())
-
-            print(f"\n⏱️  Generation time: {seconds}s")
-            print(f"📝 Log file: {log_file}")
-
-            return 0
-
-        # Check if --slide option is used
-        if args.slide:
-            # Using --slide option with team(s)
-            teams_to_process = []
-            for team_arg in args.teams:
-                if ',' in team_arg:
-                    teams_to_process.extend([t.strip() for t in team_arg.split(',')])
-                else:
-                    teams_to_process.append(team_arg.strip())
-
-            # Generate single slide for each team
-            for team_key in teams_to_process:
-                if not validate_team(team_key):
-                    continue
-
-                print(f"\nGenerating {args.slide} slide for {team_key}...")
-                generate_single_slide(
-                    team_key=team_key,
-                    slide_type=args.slide,
-                    output_dir=args.output_dir
-                )
-
-            return 0
 
         # Parse teams - could be space-separated or comma-separated
         teams_to_process = []

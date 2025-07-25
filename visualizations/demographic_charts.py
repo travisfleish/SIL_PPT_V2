@@ -1,4 +1,4 @@
-# visualizations/demographic_charts_fixed.py
+# visualizations/demographic_charts.py
 """
 Fixed demographic visualization with proper text scaling and correct aspect ratios
 Matches PowerPoint placeholder dimensions exactly
