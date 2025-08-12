@@ -181,6 +181,7 @@ def generate_single_slide(team_key: str,
     elif slide_type.startswith('category:'):
         from slide_generators.category_slide import CategorySlide
         from data_processors.category_analyzer import CategoryAnalyzer
+        from data_processors.snowflake_connector import query_to_dataframe
 
         category_name = slide_type.split(':', 1)[1]
         print(f"\n📊 Processing category: {category_name}")
@@ -191,9 +192,61 @@ def generate_single_slide(team_key: str,
             league=team_config['league'],
             comparison_population=team_config['comparison_population']
         )
-        analyzer.connect()
-        analysis = analyzer.analyze_category(category_name)
-        analyzer.disconnect()
+        
+        # Fetch the required data for the category
+        view_prefix = team_config['view_prefix']
+        
+        # Get category configuration to find the category names in data
+        category_config = analyzer.categories.get(category_name.lower(), {})
+        cat_names = category_config.get('category_names_in_data', [category_name])
+        
+        if not cat_names:
+            raise ValueError(f"No configuration found for category: {category_name}")
+        
+        # Build WHERE clause
+        category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat.strip()}'" for cat in cat_names])
+        
+        # Load data
+        category_df = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME 
+            WHERE {category_where}
+        """)
+        
+        subcategory_df = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
+            WHERE {category_where}
+        """)
+        
+        merchant_df = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
+            WHERE {category_where}
+            AND AUDIENCE = '{analyzer.audience_name}'
+            ORDER BY PERC_AUDIENCE DESC
+        """)
+        
+        # Load LAST_FULL_YEAR data for specific insights
+        subcategory_last_year_df = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
+            WHERE {category_where}
+        """)
+        
+        merchant_last_year_df = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
+            WHERE {category_where}
+            AND AUDIENCE = '{analyzer.audience_name}'
+            ORDER BY PERC_AUDIENCE DESC
+        """)
+        
+        # Analyze category with the fetched data
+        analysis = analyzer.analyze_category(
+            category_key=category_name.lower(),
+            category_df=category_df,
+            subcategory_df=subcategory_df,
+            merchant_df=merchant_df,
+            subcategory_last_year_df=subcategory_last_year_df,
+            merchant_last_year_df=merchant_last_year_df,
+            validate=False
+        )
 
         if not analysis:
             raise ValueError(f"Category '{category_name}' not found or has no data")
