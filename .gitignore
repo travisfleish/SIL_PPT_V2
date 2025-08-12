@@ -121,7 +121,7 @@ secrets/
 
 # Uncomment these if you want to re-ignore them later:
 # output/
-# *.pptx
+*.pptx
 # *.png
 # *.jpg
 # *.jpeg
