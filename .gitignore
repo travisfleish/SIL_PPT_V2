@@ -120,7 +120,7 @@ secrets/
 # *.xlsx, *.json — needed for data
 
 # Uncomment these if you want to re-ignore them later:
-# output/
+output/
 *.pptx
 # *.png
 # *.jpg
