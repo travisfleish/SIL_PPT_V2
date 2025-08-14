@@ -2,24 +2,36 @@
 
 ## Executive Summary
 
-An automated system that transforms Snowflake fan behavior data into professional PowerPoint presentations for sports teams to identify and pitch potential sponsors. Currently configured for Utah Jazz and Dallas Cowboys, designed to scale to 100+ teams.
+An automated system that transforms Snowflake fan behavior data into professional PowerPoint presentations for sports teams to identify and pitch potential sponsors. Features both command-line and web-based interfaces, with a scalable backend architecture supporting real-time job processing, caching, and deployment to cloud platforms.
 
 ## Problem Understanding
 
-The manual creation of sponsorship insights reports is time-intensive and inconsistent across teams. This system reduces report generation from hours to minutes while maintaining professional quality and ensuring data-driven sponsorship recommendations.
+The manual creation of sponsorship insights reports is time-intensive and inconsistent across teams. This system reduces report generation from hours to minutes while maintaining professional quality and ensuring data-driven sponsorship recommendations. The new infrastructure addresses scalability, user experience, and operational efficiency challenges.
 
 ## Architecture Overview
 
 ```
-sports-innovation-lab-pptx/
-├── main.py                     # Entry point for report generation
+SIL_PPT_V2/
+├── main.py                     # Command-line entry point for report generation
 ├── quick_start.py              # Interactive testing and development
 ├── requirements.txt            # Python dependencies
 ├── .env                        # Environment configuration (create from template)
 ├── .gitignore                  # Git exclusions
+├── render.yaml                 # Render.com deployment configuration
+│
+├── backend/                    # Flask web backend
+│   ├── app.py                 # Main Flask application with REST API
+│   ├── postgresql_job_store.py # PostgreSQL job queue and storage
+│   ├── static/                # Static assets for web interface
+│   ├── assets/                # Backend-specific assets
+│   └── output/                # Generated presentations storage
+│
+├── frontend/                   # Web-based user interface
+│   ├── index.html             # Main web application
+│   └── index_old.html         # Previous version
 │
 ├── config/                     # Configuration files
-│   ├── teams.yaml             # Team configurations and branding
+│   ├── team_config.yaml       # Team configurations and branding
 │   ├── categories.yaml        # Category definitions and thresholds
 │   └── approved_communities.yaml  # Approved fan community mappings
 │
@@ -47,8 +59,19 @@ sports-innovation-lab-pptx/
 │   ├── team_config_manager.py # Team configuration management
 │   ├── logo_manager.py        # Logo downloading and caching
 │   ├── merchant_name_standardizer.py  # Brand name standardization
-│   ├── chart_generator.py     # Chart creation utilities
+│   ├── cache_manager.py       # PostgreSQL-based caching system
+│   ├── font_manager.py        # Font management and fallbacks
+│   ├── ai_generators.py       # AI-powered content generation
 │   └── tests/                 # Utility validation tests
+│
+├── visualizations/            # Chart and visualization generation
+│   ├── base_chart.py          # Base chart functionality
+│   ├── fan_wheel.py           # Fan wheel visualization
+│   ├── demographic_charts.py  # Demographic chart generation
+│   └── community_index_chart.py # Community index charts
+│
+├── ai_insights/               # AI-powered insights generation
+│   └── demographic_insights_generator.py # Demographic insights
 │
 ├── templates/                 # PowerPoint templates
 │   └── sil_combined_template.pptx  # SIL branded template
@@ -59,42 +82,65 @@ sports-innovation-lab-pptx/
 ├── output/                    # Generated presentations
 │   └── [team]_[timestamp]/    # Team-specific output directories
 │
-└── logs/                      # Application logs
+├── cache/                     # Local cache storage
+├── logs/                      # Application logs
+└── .venv/                     # Python virtual environment
 ```
 
 ## Key Features
 
-### 1. Automated Data Pipeline
-- **Snowflake Integration**: Direct connection to `SIL__TB_OTT_TEST.SC_TWINBRAINAI`
-- **Dynamic View Naming**: Handles team-specific view prefixes (`V_UTAH_JAZZ_SIL_`, `V_DALLAS_COWBOYS_`)
-- **Data Validation**: Comprehensive error handling and data quality checks
+### 1. Dual Interface Architecture
+- **Command-Line Interface**: Traditional CLI for automation and scripting
+- **Web Interface**: Modern React-like web application for interactive use
+- **API Backend**: RESTful Flask API supporting both interfaces
 
-### 2. Professional PowerPoint Generation
+### 2. Scalable Backend Infrastructure
+- **Flask Web Server**: Production-ready web backend with CORS support
+- **PostgreSQL Job Store**: Persistent job queue with connection pooling
+- **Job Management**: Async job processing with progress tracking
+- **Connection Pooling**: Optimized database connections for high throughput
+
+### 3. Advanced Caching System
+- **PostgreSQL Cache Backend**: Persistent caching across application restarts
+- **Multi-Level Caching**: Merchant names, AI insights, Snowflake results, logos
+- **Cache Statistics**: Performance monitoring and hit/miss tracking
+- **Automatic Expiration**: TTL-based cache invalidation
+
+### 4. Automated Data Pipeline
+- **Snowflake Integration**: Direct connection to `SIL__TB_OTT_TEST.SC_TWINBRAINAI`
+- **Dynamic View Naming**: Handles team-specific view prefixes
+- **Data Validation**: Comprehensive error handling and data quality checks
+- **Connection Pooling**: Optimized for concurrent requests
+
+### 5. Professional PowerPoint Generation
 - **Template Integration**: Uses SIL branded template with consistent styling
 - **16:9 Format**: Modern widescreen presentations
 - **Font Management**: Red Hat Display with Arial fallback
 - **Responsive Layouts**: Adapts to content length and team branding
 
-### 3. Dynamic Visualizations
-- **Fan Wheel**: Circular brand affinity visualization (5.8" diameter)
+### 6. Dynamic Visualizations
+- **Fan Wheel**: Circular brand affinity visualization with logo support
 - **Demographic Charts**: Age, income, occupation comparisons
 - **Community Index**: Top 10 fan communities with composite scoring
 - **Category Analysis**: Detailed spending pattern breakdowns
 
-### 4. AI-Powered Insights
+### 7. AI-Powered Insights
 - **OpenAI Integration**: Automated insight generation for each category
 - **Logo Management**: Automatic brand logo fetching via Clearbit/Brandfetch APIs
 - **Merchant Standardization**: Consistent brand name formatting
+- **Insight Generation**: Context-aware content creation
 
-### 5. Scalable Architecture
-- **Configuration-Driven**: YAML-based team and category management
-- **Modular Design**: Independent slide generators for easy maintenance
-- **Factory Pattern**: Extensible slide creation system
+### 8. Cloud Deployment Ready
+- **Render.com Support**: Production deployment configuration
+- **Environment Management**: Secure configuration handling
+- **Scalability**: Horizontal scaling support
+- **Health Monitoring**: Built-in health checks and monitoring
 
 ## Installation & Setup
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.11+
+- PostgreSQL database (for job store and caching)
 - Snowflake account access
 - OpenAI API key (optional, for AI insights)
 - Red Hat Display font (recommended)
@@ -102,9 +148,9 @@ sports-innovation-lab-pptx/
 ### 1. Environment Setup
 ```bash
 git clone <repository-url>
-cd sports-innovation-lab-pptx
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+cd SIL_PPT_V2
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -119,74 +165,134 @@ SNOWFLAKE_WAREHOUSE=COMPUTE_WH
 SNOWFLAKE_DATABASE=SIL__TB_OTT_TEST
 SNOWFLAKE_SCHEMA=SC_TWINBRAINAI
 
+# PostgreSQL Configuration (for job store and caching)
+DATABASE_URL=postgresql://username:password@host:port/database
+
 # Optional: OpenAI for AI insights
 OPENAI_API_KEY=your_openai_key
+
+# Flask Configuration
+FLASK_ENV=development
+FLASK_DEBUG=true
 ```
 
-### 3. Font Installation (Recommended)
+### 3. Database Setup
+```bash
+# PostgreSQL database required for:
+# - Job queue management
+# - Caching system
+# - Progress tracking
+# - Job history
+```
+
+### 4. Font Installation (Recommended)
 Download and install Red Hat Display font:
 1. Download from [Google Fonts](https://fonts.google.com/specimen/Red+Hat+Display)
 2. Install all .ttf files on your system
 3. Restart Python environment
 
-### 4. Template Setup
+### 5. Template Setup
 Ensure `templates/sil_combined_template.pptx` exists in the project directory.
 
 ## Usage
 
-### Quick Start
+### Command-Line Interface
 ```bash
-# Generate report for Utah Jazz
-python main.py utah_jazz
+# Generate full report for Carolina Panthers
+python main.py carolina_panthers
+
+# Generate single slide for testing
+python main.py carolina_panthers behaviors
 
 # Generate report without custom categories
-python main.py dallas_cowboys --no-custom
+python main.py utah_jazz --no-custom
 
 # Interactive testing mode
 python quick_start.py --interactive
 ```
 
-### Advanced Usage
+### Web Interface
 ```bash
-# Generate with specific custom category count
-python main.py utah_jazz --custom-count 2
+# Start the Flask backend
+cd backend
+python app.py
 
-# Custom output directory
-python main.py utah_jazz --output /path/to/output
-
-# Verbose logging
-python main.py utah_jazz --verbose
-
-# List available teams
-python main.py --list-teams
+# Access web interface at http://localhost:5000
+# Upload team data and generate presentations interactively
 ```
 
-### Development & Testing
+### API Endpoints
 ```bash
-# Interactive development environment
-python quick_start.py --interactive
+# Health check
+GET /health
 
-# Test single slide type
-python quick_start.py --slide demographics utah_jazz
+# Generate presentation
+POST /generate
+{
+  "team_key": "carolina_panthers",
+  "options": {
+    "custom_count": 2,
+    "include_ai": true
+  }
+}
 
-# Test specific categories
-python quick_start.py utah_jazz --categories restaurants finance
+# Check job status
+GET /job/{job_id}
+
+# Download generated presentation
+GET /download/{job_id}
 ```
+
+## New Infrastructure Components
+
+### 1. Flask Web Backend (`backend/app.py`)
+- **RESTful API**: Complete API for web frontend
+- **Job Management**: Async job processing with PostgreSQL backend
+- **File Handling**: Secure file upload/download
+- **Progress Tracking**: Real-time job progress updates
+- **Error Handling**: Comprehensive error management and logging
+
+### 2. PostgreSQL Job Store (`backend/postgresql_job_store.py`)
+- **Job Queue**: Persistent job storage with status tracking
+- **Connection Pooling**: Optimized database connections
+- **Automatic Cleanup**: Expired job cleanup and maintenance
+- **Transaction Safety**: ACID-compliant job operations
+- **Performance Indexes**: Optimized queries for job management
+
+### 3. Advanced Caching System (`utils/cache_manager.py`)
+- **PostgreSQL Backend**: Persistent cache storage
+- **Multi-Type Caching**: Merchant names, AI insights, data results
+- **Cache Statistics**: Performance monitoring and analytics
+- **Automatic Expiration**: TTL-based invalidation
+- **Connection Sharing**: Reuses existing PostgreSQL connections
+
+### 4. Web Frontend (`frontend/index.html`)
+- **Modern UI**: Responsive design with Red Hat Display fonts
+- **Interactive Forms**: Team selection and options configuration
+- **Real-time Updates**: Live progress tracking and status updates
+- **File Management**: Secure file upload and download
+- **Mobile Responsive**: Works on all device sizes
+
+### 5. Deployment Configuration (`render.yaml`)
+- **Render.com Ready**: Production deployment configuration
+- **Gunicorn Server**: Production WSGI server configuration
+- **Environment Variables**: Secure configuration management
+- **Health Checks**: Built-in monitoring and health endpoints
 
 ## Configuration
 
-### Team Configuration (`config/teams.yaml`)
+### Team Configuration (`config/team_config.yaml`)
 ```yaml
-utah_jazz:
-  team_name: "Utah Jazz"
-  team_name_short: "Jazz"
-  team_initials: "UJ"
-  league: "NBA"
-  view_prefix: "V_UTAH_JAZZ_SIL_"
+carolina_panthers:
+  team_name: "Carolina Panthers"
+  team_name_short: "Panthers"
+  team_initials: "CP"
+  league: "NFL"
+  view_prefix: "V_CAROLINA_PANTHERS_SIL_"
   colors:
-    primary: "#1D428A"
-    secondary: "#FFD700"
-    accent: "#00275D"
+    primary: "#0085CA"
+    secondary: "#000000"
+    accent: "#BFC0BF"
 ```
 
 ### Category Configuration (`config/categories.yaml`)
@@ -235,56 +341,97 @@ Generated presentations include:
    - Custom: Top categories by composite index
 7. **Merchant Rankings**: Top 5 brands per category with insights
 
-## Performance Considerations
+## Performance & Scalability
 
 ### Optimization Strategies
-- **Caching**: Logo and data caching to reduce API calls
-- **Lazy Loading**: Charts generated only when needed
-- **Batch Processing**: Multiple categories processed in single database queries
-- **Template Reuse**: Single template loaded for all slides
+- **Connection Pooling**: Database and Snowflake connection optimization
+- **Caching Layer**: Multi-level caching for frequently accessed data
+- **Async Processing**: Non-blocking job processing
+- **Batch Operations**: Efficient database operations
+- **Memory Management**: Optimized for large datasets
 
 ### Scaling Considerations
-- **Database Connection Pooling**: For high-volume usage
-- **Parallel Processing**: Categories can be processed independently
-- **Memory Management**: Large datasets processed in chunks
-- **Error Recovery**: Graceful degradation when data is unavailable
+- **Horizontal Scaling**: Multiple backend instances supported
+- **Database Scaling**: Connection pooling and query optimization
+- **Cache Distribution**: Shared PostgreSQL cache across instances
+- **Load Balancing**: Ready for load balancer integration
+- **Monitoring**: Built-in health checks and performance metrics
 
 ## Error Handling & Logging
 
 ### Comprehensive Logging
 ```python
+# Structured logging with different levels
 # Logs saved to logs/ directory with timestamps
-# Different log levels for development vs production
-# Detailed error traces for debugging
+# Database logging for job tracking
+# Performance metrics and cache statistics
 ```
 
 ### Graceful Degradation
 - **Missing Data**: Slides marked as "Data Unavailable"
-- **API Failures**: Fallback to cached logos or placeholders
-- **Font Issues**: Automatic fallback to Arial
-- **Template Problems**: Blank presentation creation
+- **API Failures**: Fallback to cached data or placeholders
+- **Database Issues**: Connection retry logic and fallbacks
+- **Job Failures**: Comprehensive error reporting and recovery
 
 ## Testing Strategy
 
 ### Unit Tests
 ```bash
-# Test individual slide generators
-python slide_generators/tests/test_demographics.py
-
-# Test data processors
-python data_processors/tests/test_merchant.py
-
-# Test utility functions
-python utils/tests/merchant_name_validation.py
+# Test individual components
+python -m pytest slide_generators/tests/
+python -m pytest data_processors/tests/
+python -m pytest utils/tests/
 ```
 
 ### Integration Tests
 ```bash
-# End-to-end report generation
-python quick_start.py utah_jazz
+# End-to-end testing
+python quick_start.py --test-mode
 
 # Database connectivity
-python -c "from data_processors.snowflake_connector import test_connection; print(test_connection())"
+python -c "from data_processors.snowflake_connector import test_connection; test_connection()"
+
+# Web backend testing
+cd backend && python -m pytest
+```
+
+### Performance Testing
+```bash
+# Load testing for web interface
+# Cache performance validation
+# Database connection stress testing
+```
+
+## Deployment
+
+### Local Development
+```bash
+# Start backend
+cd backend && python app.py
+
+# Start frontend (served by backend)
+# Access at http://localhost:5000
+```
+
+### Production Deployment (Render.com)
+```bash
+# Automatic deployment via Git push
+# Environment variables configured in Render dashboard
+# Health checks and monitoring enabled
+# Auto-scaling based on demand
+```
+
+### Environment Variables
+```bash
+# Required for production
+DATABASE_URL=postgresql://...
+SNOWFLAKE_ACCOUNT=...
+SNOWFLAKE_USER=...
+SNOWFLAKE_PASSWORD=...
+
+# Optional
+OPENAI_API_KEY=...
+FLASK_ENV=production
 ```
 
 ## Business Value
@@ -301,49 +448,44 @@ python -c "from data_processors.snowflake_connector import test_connection; prin
 - **Professional Presentation**: Consistent, high-quality client materials
 - **Competitive Advantage**: Unique fan behavior insights
 
-## Alternative Methods & Trade-offs
+### Operational Benefits
+- **Web Interface**: Non-technical users can generate reports
+- **Job Management**: Track and manage multiple report generations
+- **Caching**: Reduced API calls and improved performance
+- **Monitoring**: Built-in health checks and performance tracking
 
-### Design Decisions
+## Future Enhancements
 
-#### 1. Template-Based vs. Code-Generated Slides
-**Chosen**: Template-based with SIL branding
-- **Pro**: Consistent professional appearance, faster development
-- **Con**: Template dependency, limited layout flexibility
-- **Alternative**: Pure code generation would offer more flexibility but require more design work
-
-#### 2. Snowflake Direct Connection vs. API Layer
-**Chosen**: Direct Snowflake connection
-- **Pro**: Real-time data access, no intermediate API maintenance
-- **Con**: Database credential management, potential connection limits
-- **Alternative**: REST API layer would add security but increase complexity
-
-#### 3. Static vs. Dynamic Category Selection
-**Chosen**: Hybrid approach (fixed + dynamic custom categories)
-- **Pro**: Predictable core content with data-driven customization
-- **Con**: More complex logic than pure static or dynamic approaches
-- **Alternative**: Pure dynamic selection would be more flexible but less predictable
-
-## Potential Improvements
-
-### Near-term Enhancements
-- **Chart Customization**: Team-specific color schemes in visualizations
-- **Interactive Elements**: Clickable logos linking to brand websites
-- **Export Formats**: PDF generation for email distribution
+### Near-term Roadmap
+- **Advanced AI Insights**: More sophisticated content generation
+- **Real-time Updates**: Live data refresh during generation
 - **Batch Processing**: Multiple team reports in single execution
+- **Advanced Analytics**: Machine learning for sponsor matching
 
-### Long-term Roadmap
-- **Web Interface**: Browser-based report generation dashboard
-- **Real-time Updates**: Live data refresh during presentation
-- **Advanced Analytics**: Machine learning for sponsor match scoring
+### Long-term Vision
+- **Mobile App**: Native mobile application
+- **API Marketplace**: Third-party integrations
+- **Advanced Visualizations**: Interactive charts and dashboards
 - **Multi-language Support**: Localized reports for international teams
 
 ## Support & Maintenance
 
 ### Common Issues
 
+#### Database Connection
+```bash
+# Test PostgreSQL connection
+python -c "from backend.postgresql_job_store import PostgreSQLJobStore; ps = PostgreSQLJobStore()"
+
+# Common fixes:
+# - Verify DATABASE_URL in .env
+# - Check database accessibility
+# - Confirm SSL requirements for cloud databases
+```
+
 #### Snowflake Connection
 ```bash
-# Test connection
+# Test Snowflake connection
 python -c "from data_processors.snowflake_connector import test_connection; test_connection()"
 
 # Common fixes:
@@ -352,34 +494,28 @@ python -c "from data_processors.snowflake_connector import test_connection; test
 # - Confirm database schema access
 ```
 
-#### Font Installation
+#### Web Interface Issues
 ```bash
-# Verify font availability
-python report_builder/pptx_builder.py
+# Check backend status
+curl http://localhost:5000/health
 
-# Install Red Hat Display:
-# 1. Download from Google Fonts
-# 2. Install system-wide
-# 3. Restart Python environment
-```
-
-#### Template Issues
-```bash
-# Verify template exists
-ls -la templates/sil_combined_template.pptx
-
-# Test template loading
-python slide_generators/tests/test_demographics_overview_.py
+# Verify environment variables
+# Check database connectivity
+# Review application logs
 ```
 
 ### Monitoring & Alerts
-- **Log Analysis**: Monitor logs/ directory for errors
-- **Data Quality**: Validate team view availability
-- **Performance**: Track report generation times
-- **Error Rates**: Monitor API failures and database timeouts
+- **Health Checks**: Built-in endpoint monitoring
+- **Log Analysis**: Comprehensive logging and error tracking
+- **Performance Metrics**: Cache statistics and job processing times
+- **Database Monitoring**: Connection pool status and query performance
 
 ---
 
 ## Technical Contacts
 
 For technical issues or enhancement requests, consult the project maintainers or create issues in the project repository.
+
+## License
+
+This project is proprietary to Sports Innovation Lab. All rights reserved.

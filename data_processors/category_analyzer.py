@@ -67,6 +67,7 @@ class CategoryAnalyzer:
     def __init__(self, team_name: str, team_short: str, league: str,
                  config_path: Optional[Path] = None,
                  comparison_population: str = None,
+                 audience_name: str = None,
                  cache_manager: Optional[Any] = None):
         """
         Initialize the category analyzer with merchant name standardization
@@ -77,6 +78,7 @@ class CategoryAnalyzer:
             league: League name (e.g., "NBA")
             config_path: Path to categories config file
             comparison_population: Comparison population string
+            audience_name: Custom audience name (e.g., "Oakland Soccer Fans")
             cache_manager: Optional CacheManager instance for caching
         """
         self.team_name = team_name
@@ -84,8 +86,8 @@ class CategoryAnalyzer:
         self.league = league
         self.cache_manager = cache_manager
 
-        # Standard audiences
-        self.audience_name = f"{team_name} Fans"
+        # Use the configured audience name (always provided in team config)
+        self.audience_name = audience_name
         if comparison_population:
             self.comparison_pop = comparison_population
         else:

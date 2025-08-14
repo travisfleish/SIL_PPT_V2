@@ -44,6 +44,7 @@ teams:
       accent: "#00471B"
     audience_name: "Utah Jazz Fans"
     comparison_population: "Local Gen Pop (Excl. Jazz)"
+    category_mode: "standard"  # Back to standard mode for testing
 
   carolina_panthers:
     team_name: "Carolina Panthers"
@@ -56,3 +57,32 @@ teams:
       accent: "#BFC0BF"       # Silver (official)
     audience_name: "Carolina Panthers Fans"
     comparison_population: "Local Gen Pop (Excl. Carolina Panthers Fans)"
+    category_mode: "standard"  # Use existing 6+4 category system
+
+  oakland_roots:
+    team_name: "Oakland Roots"
+    team_name_short: "Roots"
+    league: "USL"
+    view_prefix: "V_OAKLAND_ROOTS_SIL"
+    colors:
+      primary: "#00A651"      # Oakland Roots Green (official)
+      secondary: "#000000"    # Black (official)
+      accent: "#FFFFFF"       # White (accent)
+    audience_name: "Oakland Soccer Fans"  # Key customization - broader segment
+    comparison_population: "Local Gen Pop (Excl. Oakland Soccer Fans)"
+    market_size: "small"      # Flag for potential threshold adjustments
+    
+    # Category customization
+    category_mode: "custom"    # Toggle: "standard" or "custom"
+    custom_categories:
+      count: 6                 # How many categories they want
+      selected_categories:
+        - "Restaurants"            # More relevant than national chains
+        - "Attractions"            # Oakland-specific attractions
+        - "Entertainment & News"   # Local entertainment
+        - "Health"                 # Community health
+        - "Education Resources"    # Local education
+        - "Sportstainment"         # Sports-related entertainment
+      thresholds:
+        min_audience_pct: 0.15     # Lower than major league 0.20
+        min_merchant_audience_pct: 0.05  # Lower than major league 0.10

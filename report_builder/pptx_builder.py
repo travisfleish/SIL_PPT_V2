@@ -109,7 +109,8 @@ class PowerPointBuilder:
             team_name=self.team_name,
             team_short=self.team_short,
             league=self.league,
-            comparison_population=self.team_config['comparison_population'], # ADD THIS LINE
+            comparison_population=self.team_config['comparison_population'],
+            audience_name=self.team_config.get('audience_name'),
             cache_manager=self.cache_manager
         )
 
@@ -219,7 +220,7 @@ class PowerPointBuilder:
         3. Demographic Overview with AI insights (NEW - using layout 11)
         4. Demographics slide with charts
         5. Behaviors slide
-        6-N. Category slides (fixed + custom/emerging)
+        6-N. Category slides (fixed + custom/emerging OR fully custom)
         N+1. "Sports Innovation Lab" branding (using layout 14)
 
         Args:
@@ -233,13 +234,27 @@ class PowerPointBuilder:
         logger.info(f"Font: {self.presentation_font}")
 
         try:
+            # Check category mode from team config
+            category_mode = self.team_config.get('category_mode', 'standard')
+            logger.info(f"Category mode: {category_mode}")
+            
             # Calculate total slides for progress tracking
             is_womens = self._is_womens_team()
-            fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
-            if is_womens:
-                fixed_categories.extend(['beauty', 'health'])
+            
+            if category_mode == 'custom':
+                # Fully custom mode - use team's selected categories
+                custom_categories = self.team_config.get('custom_categories', {}).get('selected_categories', [])
+                fixed_categories = []  # No fixed categories in custom mode
+                custom_count = len(custom_categories)
+                logger.info(f"Custom mode: {custom_count} selected categories")
+            else:
+                # Standard mode - use existing fixed + custom logic
+                fixed_categories = ['restaurants', 'athleisure', 'finance', 'gambling', 'travel', 'auto']
+                if is_womens:
+                    fixed_categories.extend(['beauty', 'health'])
+                custom_count = custom_category_count or (2 if is_womens else 4) if include_custom_categories else 0
+                logger.info(f"Standard mode: {len(fixed_categories)} fixed + {custom_count} custom categories")
 
-            custom_count = custom_category_count or (2 if is_womens else 4) if include_custom_categories else 0
             total_categories = len(fixed_categories) + custom_count
 
             # Progress milestones
@@ -274,7 +289,7 @@ class PowerPointBuilder:
             current_progress = 50
             update_progress(current_progress, "Starting category analysis...")
 
-            # Fixed categories
+            # Fixed categories (only in standard mode)
             for i, category_key in enumerate(fixed_categories):
                 current_progress = 50 + (i * progress_per_category)
                 update_progress(
@@ -287,8 +302,15 @@ class PowerPointBuilder:
                     f"Completed {category_key} slides"
                 )
 
-            # 7. Custom categories (if requested)
-            if include_custom_categories:
+            # 7. Custom categories (if requested) OR fully custom categories
+            if category_mode == 'custom':
+                # Fully custom mode - create slides for team's selected categories
+                base_progress = 50 + (len(fixed_categories) * progress_per_category)
+                update_progress(base_progress, "Creating custom category slides...")
+                self._create_fully_custom_category_slides(custom_categories)
+                update_progress(85, "All custom categories completed")
+            elif include_custom_categories:
+                # Standard mode - use existing custom category logic
                 base_progress = 50 + (len(fixed_categories) * progress_per_category)
                 update_progress(base_progress, "Identifying top custom categories...")
                 self._create_custom_category_slides(custom_category_count)
@@ -680,6 +702,52 @@ class PowerPointBuilder:
 
         except Exception as e:
             logger.error(f"Error creating custom category slides: {str(e)}")
+
+    def _create_fully_custom_category_slides(self, selected_categories: List[str]):
+        """
+        Create slides for fully custom categories selected by the team
+        """
+        logger.info(f"Creating fully custom category slides for {len(selected_categories)} categories...")
+        
+        try:
+            # Calculate progress per category
+            progress_per_category = 35 // len(selected_categories) if len(selected_categories) > 0 else 5
+            base_progress = 50  # Start at 50 since no fixed categories in custom mode
+            
+            # Load category data
+            update_progress(base_progress + 1, "Loading category data for custom analysis...")
+            category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
+            all_category_df = query_to_dataframe(category_query)
+            
+            # Load merchant data
+            update_progress(base_progress + 2, "Loading merchant data...")
+            merchant_query = f"SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME"
+            all_merchant_df = query_to_dataframe(merchant_query)
+            
+            # Create slides for each selected category
+            for i, category_name in enumerate(selected_categories):
+                current_progress = base_progress + 3 + (i * progress_per_category)
+                update_progress(
+                    current_progress,
+                    f"Creating custom category {i + 1}/{len(selected_categories)}: {category_name}"
+                )
+                
+                logger.info(f"Creating fully custom category slide {i + 1}: {category_name}")
+                
+                # Create the category slide
+                self._create_category_slide(
+                    category_key=category_name,
+                    is_custom=True,
+                    custom_cat_info={'display_name': category_name, 'is_emerging': False}
+                )
+                
+                update_progress(
+                    current_progress + progress_per_category - 1,
+                    f"Completed {category_name} slides"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error creating fully custom category slides: {str(e)}")
 
     def _create_category_slide(self, category_key: str, is_custom: bool = False,
                                custom_cat_info: Optional[Dict[str, Any]] = None):

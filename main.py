@@ -190,7 +190,8 @@ def generate_single_slide(team_key: str,
             team_name=team_config['team_name'],
             team_short=team_config['team_name_short'],
             league=team_config['league'],
-            comparison_population=team_config['comparison_population']
+            comparison_population=team_config['comparison_population'],
+            audience_name=team_config.get('audience_name')
         )
         
         # Fetch the required data for the category
@@ -270,7 +271,9 @@ def generate_single_slide(team_key: str,
 def generate_report(team_key: str,
                     skip_custom: bool = False,
                     custom_count: Optional[int] = None,
-                    output_dir: Optional[Path] = None) -> Path:
+                    output_dir: Optional[Path] = None,
+                    category_mode: Optional[str] = None,
+                    custom_categories: Optional[List[str]] = None) -> Path:
     """
     Generate PowerPoint report for a team
 
@@ -279,6 +282,8 @@ def generate_report(team_key: str,
         skip_custom: Whether to skip custom categories
         custom_count: Number of custom categories to include
         output_dir: Optional output directory
+        category_mode: Override category mode ('standard' or 'custom')
+        custom_categories: List of custom categories for custom mode
 
     Returns:
         Path to generated PowerPoint file
@@ -291,9 +296,31 @@ def generate_report(team_key: str,
     config_manager = TeamConfigManager()
     team_config = config_manager.get_team_config(team_key)
 
+    # Override category mode if specified via command line
+    if category_mode:
+        print(f"\n🔄 Overriding category mode: {category_mode}")
+        team_config = team_config.copy()  # Create a copy to avoid modifying original
+        team_config['category_mode'] = category_mode
+        
+        if category_mode == 'custom' and custom_categories:
+            team_config['custom_categories'] = {
+                'count': len(custom_categories),
+                'selected_categories': custom_categories,
+                'thresholds': {
+                    'min_audience_pct': 0.20,  # Default thresholds
+                    'min_merchant_audience_pct': 0.10
+                }
+            }
+            print(f"   • Custom categories: {', '.join(custom_categories)}")
+        elif category_mode == 'standard':
+            # Remove custom category config if switching to standard
+            if 'custom_categories' in team_config:
+                del team_config['custom_categories']
+
     print(f"\nTeam: {team_config['team_name']}")
     print(f"League: {team_config['league']}")
     print(f"View Prefix: {team_config['view_prefix']}")
+    print(f"Category Mode: {team_config.get('category_mode', 'standard')}")
 
     # Test Snowflake connection
     print("\n🔍 Testing Snowflake connection...")
@@ -306,7 +333,21 @@ def generate_report(team_key: str,
     print("This may take several minutes...")
 
     try:
+        # Create a custom TeamConfigManager that returns our modified config
+        class OverrideTeamConfigManager(TeamConfigManager):
+            def __init__(self, override_config):
+                self.override_config = override_config
+                super().__init__()
+            
+            def get_team_config(self, team_key):
+                return self.override_config
+        
+        # Create builder with overridden config
         builder = PowerPointBuilder(team_key)
+        
+        # Override the team config in the builder
+        builder.team_config = team_config
+        builder.config_manager = OverrideTeamConfigManager(team_config)
 
         # Override output directory if specified
         if output_dir:
@@ -344,7 +385,9 @@ def generate_report(team_key: str,
 def generate_multiple_reports(teams: List[str],
                             skip_custom: bool = False,
                             custom_count: Optional[int] = None,
-                            output_dir: Optional[Path] = None) -> Dict[str, Dict]:
+                            output_dir: Optional[Path] = None,
+                            category_mode: Optional[str] = None,
+                            custom_categories: Optional[List[str]] = None) -> Dict[str, Dict]:
     """
     Generate reports for multiple teams
 
@@ -353,6 +396,8 @@ def generate_multiple_reports(teams: List[str],
         skip_custom: Whether to skip custom categories
         custom_count: Number of custom categories to include
         output_dir: Optional output directory
+        category_mode: Override category mode ('standard' or 'custom')
+        custom_categories: List of custom categories for custom mode
 
     Returns:
         Dictionary with results for each team
@@ -381,7 +426,9 @@ def generate_multiple_reports(teams: List[str],
                 team_key=team_key,
                 skip_custom=skip_custom,
                 custom_count=custom_count,
-                output_dir=batch_output_dir
+                output_dir=batch_output_dir,
+                category_mode=category_mode,
+                custom_categories=custom_categories
             )
 
             duration = datetime.now() - start_time
@@ -438,6 +485,11 @@ Examples:
   python main.py utah_jazz demographics           # Single slide for a team
   python main.py utah_jazz behaviors              # Behaviors slide only
   python main.py utah_jazz category:Restaurants  # Specific category slide
+  
+  # Category mode overrides:
+  python main.py utah_jazz --category-mode custom --custom-categories "Restaurants,Athleisure,Finance"
+  python main.py utah_jazz --category-mode standard
+  
   python main.py --list-teams                     # List all available teams
   python main.py --list-slides                    # List available slide types
         """
@@ -451,6 +503,10 @@ Examples:
     parser.add_argument('--no-custom', dest='skip_custom', action='store_true',
                         help='Skip custom category slides')
     parser.add_argument('--custom-count', type=int, help='Number of custom categories to include')
+    parser.add_argument('--category-mode', choices=['standard', 'custom'], 
+                        help='Override category mode: standard (6+4) or custom (selected categories)')
+    parser.add_argument('--custom-categories', type=str, 
+                        help='Comma-separated list of categories for custom mode (e.g., "Restaurants,Athleisure,Finance")')
     parser.add_argument('--output-dir', type=Path, help='Output directory for generated files')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
     parser.add_argument('--test-connection', action='store_true', help='Test Snowflake connection only')
@@ -587,7 +643,9 @@ Examples:
                 teams=teams_to_process,
                 skip_custom=args.skip_custom,
                 custom_count=args.custom_count,
-                output_dir=args.output_dir
+                output_dir=args.output_dir,
+                category_mode=args.category_mode,
+                custom_categories=args.custom_categories.split(',') if args.custom_categories else None
             )
 
             # Check if any failed
@@ -619,7 +677,9 @@ Examples:
                 team_key=team_key,
                 skip_custom=args.skip_custom,
                 custom_count=args.custom_count,
-                output_dir=args.output_dir
+                output_dir=args.output_dir,
+                category_mode=args.category_mode,
+                custom_categories=args.custom_categories.split(',') if args.custom_categories else None
             )
 
             # Calculate duration
