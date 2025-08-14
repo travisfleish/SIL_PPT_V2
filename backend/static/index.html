@@ -1716,10 +1716,14 @@
         if (mode === 'custom') {
             document.getElementById('customCategoriesSection').style.display = 'block';
             loadAvailableCategories();
+            // Change button text when custom categories are selected
+            document.getElementById('generateBtn').textContent = 'Generate Custom Insights Report';
         } else {
             document.getElementById('customCategoriesSection').style.display = 'none';
             selectedCategories = [];
             updateSelectedCategoriesDisplay();
+            // Reset button text to original when standard mode is selected
+            document.getElementById('generateBtn').textContent = 'Generate Full Insights Report';
         }
     }
 
