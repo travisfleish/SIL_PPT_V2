@@ -210,7 +210,9 @@ class PowerPointBuilder:
 
     def build_presentation(self,
                            include_custom_categories: bool = True,
-                           custom_category_count: Optional[int] = None) -> Path:
+                           custom_category_count: Optional[int] = None,
+                           category_mode: Optional[str] = None,
+                           custom_categories: Optional[str] = None) -> Path:
         """
         Build the complete PowerPoint presentation with real progress tracking
 
@@ -226,6 +228,8 @@ class PowerPointBuilder:
         Args:
             include_custom_categories: Whether to include custom categories
             custom_category_count: Number of custom categories (default: 4 for men's, 2 for women's)
+            category_mode: Override category mode ('standard' or 'custom')
+            custom_categories: Comma-separated string of custom category names
 
         Returns:
             Path to the generated PowerPoint file
@@ -234,8 +238,37 @@ class PowerPointBuilder:
         logger.info(f"Font: {self.presentation_font}")
 
         try:
-            # Check category mode from team config
-            category_mode = self.team_config.get('category_mode', 'standard')
+            # Check category mode from team config or override with passed parameters
+            if category_mode:
+                logger.info(f"Overriding category mode: {category_mode}")
+                # Create a temporary override config
+                override_config = self.team_config.copy()
+                override_config['category_mode'] = category_mode
+                
+                if category_mode == 'custom' and custom_categories:
+                    # Parse custom categories from comma-separated string
+                    selected_categories = [cat.strip() for cat in custom_categories.split(',')]
+                    override_config['custom_categories'] = {
+                        'count': len(selected_categories),
+                        'selected_categories': selected_categories,
+                        'thresholds': {
+                            'min_audience_pct': 0.20,  # Default thresholds
+                            'min_merchant_audience_pct': 0.10
+                        }
+                    }
+                    logger.info(f"Custom categories: {', '.join(selected_categories)}")
+                elif category_mode == 'standard':
+                    # Remove custom category config if switching to standard
+                    if 'custom_categories' in override_config:
+                        del override_config['custom_categories']
+                
+                # Use override config for this build
+                build_config = override_config
+            else:
+                # Use team config as-is
+                build_config = self.team_config
+            
+            category_mode = build_config.get('category_mode', 'standard')
             logger.info(f"Category mode: {category_mode}")
             
             # Calculate total slides for progress tracking
@@ -243,7 +276,7 @@ class PowerPointBuilder:
             
             if category_mode == 'custom':
                 # Fully custom mode - use team's selected categories
-                custom_categories = self.team_config.get('custom_categories', {}).get('selected_categories', [])
+                custom_categories = build_config.get('custom_categories', {}).get('selected_categories', [])
                 fixed_categories = []  # No fixed categories in custom mode
                 custom_count = len(custom_categories)
                 logger.info(f"Custom mode: {custom_count} selected categories")

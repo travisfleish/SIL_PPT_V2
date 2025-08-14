@@ -282,7 +282,9 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
         # The builder will now update progress from 25% to 90%
         output_path = builder.build_presentation(
             include_custom_categories=not options.get('skip_custom', False),
-            custom_category_count=options.get('custom_count')
+            custom_category_count=options.get('custom_count'),
+            category_mode=options.get('category_mode', 'standard'),
+            custom_categories=options.get('custom_categories')
         )
 
         # Step 5: Finalize (90-100%)
@@ -536,7 +538,9 @@ def generate_report():
         # Create job
         options = {
             'skip_custom': data.get('skip_custom', False),
-            'custom_count': data.get('custom_count')
+            'custom_count': data.get('custom_count'),
+            'category_mode': data.get('category_mode', 'standard'),
+            'custom_categories': data.get('custom_categories')
         }
 
         job_id = JobManager.create_job(team_key, options)
@@ -976,6 +980,7 @@ def preview_hot_brands(team_key):
             team_short=team_config.get('team_short', team_config['team_name'].split()[-1]),
             league=team_config['league'],
             comparison_population=team_config.get('comparison_population'),
+            audience_name=team_config.get('audience_name'),
             cache_manager=cache_manager
         )
 
@@ -1275,6 +1280,32 @@ def preview_hot_brands(team_key):
             'recommendations': [],
             'generated_at': datetime.now().isoformat()
         }), 500
+
+@app.route('/api/categories', methods=['GET'])
+def get_available_categories():
+    """Get list of available categories for custom selection"""
+    try:
+        import yaml
+        from pathlib import Path
+        
+        # Load categories from config file
+        config_path = Path(__file__).parent.parent / 'config' / 'categories.yaml'
+        
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+        
+        # Get allowed_for_custom categories and sort alphabetically
+        allowed_categories = config.get('allowed_for_custom', [])
+        allowed_categories.sort()
+        
+        return jsonify({
+            'categories': allowed_categories,
+            'total': len(allowed_categories)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error loading categories: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logos/<merchant_name>', methods=['GET'])
 def serve_logo(merchant_name):
