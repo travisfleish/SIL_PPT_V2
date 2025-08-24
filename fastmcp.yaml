@@ -1,0 +1,81 @@
+name: sports-innovation-lab-mcp
+description: "Sports Innovation Lab Analytics MCP Server - Provides tools and resources for sports team analytics and presentation generation"
+
+# Server configuration
+server:
+  command: python3 mcp_server_cloud.py
+  working_directory: .
+  env:
+    - SNOWFLAKE_ACCOUNT
+    - SNOWFLAKE_USER
+    - SNOWFLAKE_PASSWORD
+    - SNOWFLAKE_WAREHOUSE
+    - SNOWFLAKE_DATABASE
+    - SNOWFLAKE_SCHEMA
+    - DATABASE_URL
+    - OPENAI_API_KEY
+    - FLASK_ENV
+
+# Dependencies
+dependencies:
+  - fastmcp>=0.1.0
+  - python-dotenv>=0.19.0
+  - pyyaml>=6.0
+  - pandas>=1.5.0
+  - numpy>=1.21.0
+  - psycopg2-binary>=2.9.0
+  - snowflake-connector-python>=3.0.0
+  - openai>=1.0.0
+  - Pillow>=9.0.0
+  - matplotlib>=3.5.0
+
+# Files to include
+include:
+  - mcp_server_cloud.py
+  - utils/
+  - data_processors/
+  - config/
+  - assets/
+  - requirements.txt
+  - .env
+
+# Exclude unnecessary files
+exclude:
+  - __pycache__/
+  - *.pyc
+  - .git/
+  - .venv/
+  - output/
+  - logs/
+  - cache/
+  - temp_*.png
+  - backend/
+  - frontend/
+  - templates/
+  - report_builder/
+  - slide_generators/
+  - visualizations/
+  - main.py
+  - quick_start.py
+  - render.yaml
+
+# Health check
+health_check:
+  endpoint: /health
+  timeout: 30s
+
+# Scaling
+scaling:
+  min_instances: 1
+  max_instances: 5
+  target_cpu_utilization: 70
+
+# Monitoring
+monitoring:
+  logs: true
+  metrics: true
+  alerts:
+    - type: error_rate
+      threshold: 5%
+    - type: response_time
+      threshold: 10s
