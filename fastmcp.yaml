@@ -16,28 +16,18 @@ server:
     - OPENAI_API_KEY
     - FLASK_ENV
 
-# Dependencies
+# Dependencies - use cloud-specific requirements
 dependencies:
-  - fastmcp>=0.1.0
-  - python-dotenv>=0.19.0
-  - pyyaml>=6.0
-  - pandas>=1.5.0
-  - numpy>=1.21.0
-  - psycopg2-binary>=2.9.0
-  - snowflake-connector-python>=3.0.0
-  - openai>=1.0.0
-  - Pillow>=9.0.0
-  - matplotlib>=3.5.0
+  - mcp_requirements_cloud.txt
 
 # Files to include
 include:
   - mcp_server_cloud.py
+  - mcp_requirements_cloud.txt
   - utils/
   - data_processors/
   - config/
   - assets/
-  - requirements.txt
-  - .env
 
 # Exclude unnecessary files
 exclude:
@@ -58,6 +48,8 @@ exclude:
   - main.py
   - quick_start.py
   - render.yaml
+  - requirements.txt
+  - mcp_requirements.txt
 
 # Health check
 health_check:

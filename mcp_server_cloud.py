@@ -34,18 +34,42 @@ except ImportError:
 # Import project modules
 try:
     from utils.team_config_manager import TeamConfigManager
-    from data_processors.demographic_processor import DemographicsProcessor
-    from data_processors.category_analyzer import CategoryAnalyzer
-    from data_processors.snowflake_connector import query_to_dataframe
-    from utils.cache_manager import CacheManager
-    from utils.logo_manager import LogoManager
+    logger.info("TeamConfigManager imported successfully")
 except ImportError as e:
-    logger.error(f"Failed to import project modules: {e}")
-    logger.error("Make sure you're running this from the project root directory")
-    sys.exit(1)
+    logger.error(f"Failed to import TeamConfigManager: {e}")
+    config_manager = None
 
-# Create the MCP server instance
-mcp = FastMCP(name="Sports Innovation Lab Analytics Server")
+try:
+    from data_processors.demographic_processor import DemographicsProcessor
+    logger.info("DemographicsProcessor imported successfully")
+except ImportError as e:
+    logger.warning(f"DemographicsProcessor not available: {e}")
+
+try:
+    from data_processors.category_analyzer import CategoryAnalyzer
+    logger.info("CategoryAnalyzer imported successfully")
+except ImportError as e:
+    logger.warning(f"CategoryAnalyzer not available: {e}")
+
+try:
+    from data_processors.snowflake_connector import query_to_dataframe
+    logger.info("Snowflake connector imported successfully")
+except ImportError as e:
+    logger.warning(f"Snowflake connector not available: {e}")
+
+try:
+    from utils.cache_manager import CacheManager
+    logger.info("CacheManager imported successfully")
+except ImportError as e:
+    logger.warning(f"CacheManager not available: {e}")
+
+try:
+    from utils.logo_manager import LogoManager
+    logo_manager = LogoManager()
+    logger.info("LogoManager initialized successfully")
+except ImportError as e:
+    logger.warning(f"LogoManager not available: {e}")
+    logo_manager = None
 
 # Initialize managers
 config_manager = None
@@ -66,11 +90,18 @@ try:
         except Exception as e:
             logger.warning(f"CacheManager not available: {e}")
     
-    logo_manager = LogoManager()
-    logger.info("LogoManager initialized successfully")
+    if logo_manager is None:
+        try:
+            logo_manager = LogoManager()
+            logger.info("LogoManager initialized successfully")
+        except Exception as e:
+            logger.warning(f"LogoManager not available: {e}")
     
 except Exception as e:
     logger.error(f"Failed to initialize managers: {e}")
+
+# Create the MCP server instance
+mcp = FastMCP(name="Sports Innovation Lab Analytics Server")
 
 # ===== TOOLS =====
 
