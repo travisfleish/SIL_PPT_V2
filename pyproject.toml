@@ -1,10 +1,10 @@
 [project]
 name = "sports-innovation-lab-mcp"
 version = "1.0.0"
-description = "Sports Innovation Lab Analytics MCP Server"
+description = "Sports Innovation Lab Analytics MCP Server - FastMCP Cloud Ready"
 requires-python = ">=3.8"
 dependencies = [
-    "fastmcp>=0.1.0",
+    "fastmcp>=2.0.0",
     "python-dotenv>=0.19.0",
     "pyyaml>=6.0",
     "pandas>=1.5.0",
@@ -17,3 +17,14 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["utils", "data_processors", "config"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml"]
+
+# FastMCP specific configuration
+[tool.fastmcp]
+server_file = "mcp_server_cloud.py"
+server_object = "mcp"
