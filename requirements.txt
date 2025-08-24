@@ -1,3 +1,17 @@
--r requirements.base.txt
+cryptography==45.0.5
+Flask==3.1.1
+flask_cors==6.0.1
+matplotlib==3.10.3
+numpy==2.3.1
+openai==1.97.0
+pandas==2.3.1
+Pillow==11.3.0
+python-dotenv==1.1.1
+python_pptx==1.0.2
+PyYAML==6.0.2
+snowflake-connector-python[pandas]==3.15.0
+gunicorn==21.2.0
+fastmcp>=2.0.0
+psycopg2==2.9.9
 
 
