@@ -1,0 +1,61 @@
+# Exclude large directories and files
+output/
+logs/
+cache/
+temp_*.png
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Exclude development and production files
+backend/
+frontend/
+templates/
+report_builder/
+slide_generators/
+visualizations/
+main.py
+quick_start.py
+render.yaml
+
+# Exclude git and environment files
+.git/
+.gitignore
+.env
+.venv/
+venv/
+env/
+
+# Exclude test files
+tests/
+*_test.py
+test_*.py
+simple_test.py
+
+# Exclude documentation
+*.md
+docs/
+
+# Exclude requirements files (use pyproject.toml instead)
+requirements.txt
+mcp_requirements.txt
+mcp_requirements_cloud.txt
+
+# Exclude FastMCP config (not needed in container)
+fastmcp.yaml
+
+# Exclude large assets that aren't needed
+assets/logos/merchants/
+assets/logos/fans/
+assets/logos/teams/
+assets/logos/general/
+
+# Keep only essential files for MCP server
+!mcp_server_cloud.py
+!pyproject.toml
+!utils/
+!data_processors/
+!config/
