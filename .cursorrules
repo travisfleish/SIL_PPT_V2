@@ -1,0 +1,9 @@
+# Sports Innovation Lab MCP Server Configuration
+# This enables Cursor to connect to your local MCP server
+
+MCP_SERVER_CONFIG:
+  - name: "Sports Innovation Lab Analytics"
+    command: "python3"
+    args: ["mcp_server.py"]
+    cwd: "/Users/travisfleisher/SIL_PPT_V2"
+    description: "Sports team analytics and presentation generation tools"

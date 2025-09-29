@@ -86,3 +86,29 @@ teams:
       thresholds:
         min_audience_pct: 0.15     # Lower than major league 0.20
         min_merchant_audience_pct: 0.05  # Lower than major league 0.10
+
+  miami_marlins:
+    team_name: "Miami Marlins"
+    team_name_short: "Marlins"
+    league: "MLB"
+    view_prefix: "V_MIAMI_MARLINS_SIL"
+    colors:
+      primary: "#00A3E0"      # Miami Blue (official)
+      secondary: "#000000"    # Midnight Black (official)
+      accent: "#EF3340"       # Caliente Red (official)
+    audience_name: "Miami Marlins Fans"
+    comparison_population: "Local Gen Pop (Excl. Miami Marlins Fans)"
+    category_mode: "standard"
+
+  detroit_tigers:
+    team_name: "Detroit Tigers"
+    team_name_short: "Tigers"
+    league: "MLB"
+    view_prefix: "V_DETROIT_TIGERS_SIL"
+    colors:
+      primary: "#0C2340"      # Tigers Navy (official)
+      secondary: "#FA4616"    # Tigers Orange (official)
+      accent: "#C4CED4"       # Tigers Gray (official)
+    audience_name: "Detroit Tigers Fans"
+    comparison_population: "Local Gen Pop (Excl. Detroit Tigers Fans)"
+    category_mode: "standard"

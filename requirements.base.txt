@@ -11,4 +11,3 @@ python_pptx==1.0.2
 PyYAML==6.0.2
 snowflake-connector-python[pandas]==3.15.0
 gunicorn==21.2.0
-fastmcp>=2.0.0

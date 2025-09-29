@@ -113,14 +113,14 @@ class DemographicCharts:
     def _format_community_label(self, community: str) -> str:
         """Format community label using team configuration"""
 
-        # If we have team config and this is the team's fans, use short name
-        if self.team_config and self.audience_name and self.team_name_short:
-            if self.audience_name in community or self.audience_name.lower() in community.lower():
-                return f"{self.team_name_short} Fans"
-
-        # Handle Local Gen Pop
+        # Handle Local Gen Pop FIRST to avoid substring matches with audience_name
         if "Local Gen Pop" in community:
             return "Local Gen Pop"
+
+        # If we have team config and this is EXACTLY the team's fans, use short name
+        if self.team_config and self.audience_name and self.team_name_short:
+            if community.strip().lower() == self.audience_name.strip().lower():
+                return f"{self.team_name_short} Fans"
 
         # Handle league fans
         if "NBA Fans" in community:

@@ -150,13 +150,40 @@ class DemographicsProcessor:
         if missing:
             raise ValueError(f"Missing required columns: {missing}")
 
-        # Check for expected communities
+        # Check for expected communities with intelligent matching
         actual_communities = set(self.data['COMMUNITY'].unique())
+        updated_communities = []
+        
+        for expected_community in self.communities:
+            if expected_community in actual_communities:
+                # Exact match found
+                updated_communities.append(expected_community)
+            else:
+                # Try to find a community that starts with the expected name
+                # This handles cases like "MLB Fans (Excl. Detroit Tigers Fans)" vs "MLB Fans"
+                if expected_community.endswith(' Fans'):
+                    league = expected_community.replace(' Fans', '')
+                    matching_communities = [c for c in actual_communities if c.startswith(f'{league} Fans')]
+                    if matching_communities:
+                        # Use the first match (prefer exact match if multiple exist)
+                        exact_match = f'{league} Fans'
+                        if exact_match in matching_communities:
+                            updated_communities.append(exact_match)
+                        else:
+                            updated_communities.append(matching_communities[0])
+                        logger.info(f"Matched '{expected_community}' to '{updated_communities[-1]}'")
+                    else:
+                        logger.warning(f"No matching community found for '{expected_community}'")
+                else:
+                    logger.warning(f"No matching community found for '{expected_community}'")
+        
+        # Update communities to what we actually found
+        self.communities = updated_communities
+        
+        # Log any communities we couldn't match
         missing_communities = set(self.communities) - actual_communities
         if missing_communities:
-            logger.warning(f"Missing communities in data: {missing_communities}")
-            # Update communities to what's actually in the data
-            self.communities = [c for c in self.communities if c in actual_communities]
+            logger.warning(f"Still missing communities after intelligent matching: {missing_communities}")
 
         # Log data summary
         total_rows = len(self.data)
