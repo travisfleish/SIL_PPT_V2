@@ -104,7 +104,8 @@ class DemographicsSlide:
         self._add_charts(slide, chart_dir)
 
         # Add centered legend without KEY label
-        self._add_legend_box(slide, team_name, team_short, demographic_data.get('league', 'League'))
+        self._add_legend_box(slide, team_name, team_short, demographic_data.get('league', 'League'), 
+                            communities=demographic_data.get('communities'))
 
         logger.info(f"Generated demographics slide for {team_name}")
         return self.presentation
@@ -252,7 +253,7 @@ class DemographicsSlide:
         text_box.text_frame.text = f"{chart_name.replace('_', ' ').title()} Not Found"
         text_box.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
 
-    def _add_legend_box(self, slide, team_name: str, team_short: str, league: str):
+    def _add_legend_box(self, slide, team_name: str, team_short: str, league: str, communities=None):
         """Add legend with colored squares in a single horizontal row, centered at bottom"""
         # NO KEY LABEL - just the legend items centered at bottom
 
@@ -269,33 +270,75 @@ class DemographicsSlide:
             'accent': '#8B8B8B'
         }
 
-        # Legend items
-        legend_items = [
-            (f"{team_name} Fans", colors.get('primary', '#002244')),
-            (f"Local Gen Pop (Excluding {team_short} Fans)", colors.get('secondary', '#FFB612')),
-            (f"{league} Fans (Excluding {team_short} Fans)", colors.get('accent', '#8B8B8B'))
-        ]
+        # Get communities list for legend
+        if communities:
+            # Abbreviate community names for cleaner display
+            def abbreviate_community(name):
+                name_lower = name.lower()
+                if 'family' in name_lower:
+                    return "Family Travelers"
+                elif 'golf' in name_lower:
+                    return "Golfing Travelers"
+                elif 'outdoor' in name_lower:
+                    return "Outdoor Enthusiasts"
+                else:
+                    # Remove "Genius_SCT_" prefix and underscores
+                    return name.replace('Genius_SCT_', '').replace('_', ' ')
+            
+            # Create legend items with proper colors
+            legend_items = []
+            for i, community in enumerate(communities):
+                community_lower = community.lower()
+                # Map to color based on position or content
+                if 'family' in community_lower:
+                    legend_items.append((abbreviate_community(community), colors.get('primary', '#002244')))
+                elif 'golf' in community_lower:
+                    legend_items.append((abbreviate_community(community), colors.get('secondary', '#CE1126')))
+                elif 'outdoor' in community_lower:
+                    legend_items.append((abbreviate_community(community), colors.get('accent', '#FFD700')))
+                elif i == 0:
+                    # First community gets primary color
+                    legend_items.append((community, colors.get('primary', '#002244')))
+                elif i == 1:
+                    # Second community gets secondary color
+                    legend_items.append((community, colors.get('secondary', '#FFB612')))
+                elif i == 2:
+                    # Third community gets accent color
+                    legend_items.append((community, colors.get('accent', '#8B8B8B')))
+                else:
+                    # Default color
+                    legend_items.append((community, colors.get('primary', '#002244')))
+        else:
+            # Fallback to default legend items
+            legend_items = [
+                (f"{team_name} Fans", colors.get('primary', '#002244')),
+                (f"Local Gen Pop (Excluding {team_short} Fans)", colors.get('secondary', '#FFB612')),
+                (f"{league} Fans (Excluding {team_short} Fans)", colors.get('accent', '#8B8B8B'))
+            ]
 
-        # Center the middle item (Local Gen Pop) on the slide
+        # Handle flexible number of legend items
         slide_width = 13.333  # Standard slide width
-        middle_text = legend_items[1][0]
-
-        # Calculate position for middle item to be centered
-        # For middle item: square + text should be centered
-        middle_item_width = 3.5  # Approximate width of middle text
-        middle_square_left = (slide_width - (square_size.inches + text_offset.inches + middle_item_width)) / 2
-
-        # Calculate positions for all three items based on fixed spacing from center
-        positions = [
-            middle_square_left - item_spacing.inches - square_size.inches - text_offset.inches - 2.5,
-            # Left item (2.5" text width)
-            middle_square_left,  # Center item
-            middle_square_left + square_size.inches + text_offset.inches + middle_item_width + item_spacing.inches
-            # Right item
-        ]
-
-        # Text widths for each item
-        text_widths = [2.5, 3.5, 3.5]
+        n_items = len(legend_items)
+        
+        if n_items == 2:
+            # For 2 items, center both items
+            item_width = 4.0  # Approximate width per item
+            total_width = (square_size.inches + text_offset.inches + item_width) * n_items
+            start_left = (slide_width - total_width) / 2
+            positions = [start_left, start_left + square_size.inches + text_offset.inches + item_width]
+            text_widths = [item_width, item_width]
+        else:
+            # For 3 items, center the middle item
+            middle_text = legend_items[1][0]
+            middle_item_width = 3.5
+            middle_square_left = (slide_width - (square_size.inches + text_offset.inches + middle_item_width)) / 2
+            
+            positions = [
+                middle_square_left - item_spacing.inches - square_size.inches - text_offset.inches - 2.5,
+                middle_square_left,
+                middle_square_left + square_size.inches + text_offset.inches + middle_item_width + item_spacing.inches
+            ]
+            text_widths = [2.5, 3.5, 3.5]
 
         # Draw each legend item
         for i, ((label, color_hex), square_left, text_width) in enumerate(zip(legend_items, positions, text_widths)):
@@ -308,8 +351,15 @@ class DemographicsSlide:
                 square_size, square_size
             )
             square.fill.solid()
-            square.fill.fore_color.rgb = self._hex_to_rgb(color_hex)
-            square.line.fill.background()  # No border on square
+            # Avoid invisible white squares on white background
+            rgb = self._hex_to_rgb(color_hex)
+            if rgb == RGBColor(255, 255, 255):
+                square.fill.fore_color.rgb = RGBColor(224, 224, 224)  # light gray for visibility
+                square.line.color.rgb = RGBColor(150, 150, 150)
+                square.line.width = Pt(0.75)
+            else:
+                square.fill.fore_color.rgb = rgb
+                square.line.fill.background()  # No border on square
 
             # Add text label - ensure vertical alignment
             text_left = square_left + square_size.inches + text_offset.inches

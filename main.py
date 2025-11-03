@@ -90,6 +90,12 @@ def generate_single_slide(team_key: str,
     config_manager = TeamConfigManager()
     team_config = config_manager.get_team_config(team_key)
 
+    # Set Snowflake schema from team config if specified
+    if 'snowflake_schema' in team_config:
+        from data_processors.snowflake_connector import set_schema
+        set_schema(team_config['snowflake_schema'])
+        print(f"📊 Using schema: {team_config['snowflake_schema']}")
+
     print(f"\nTeam: {team_config['team_name']}")
     print(f"Slide Type: {slide_type}")
 
@@ -130,12 +136,19 @@ def generate_single_slide(team_key: str,
 
         print("\n📈 Processing demographics data...")
 
-        # Get demographics view name using TeamConfigManager
-        demographics_view = config_manager.get_view_name(team_key, 'demographics')
-        query = f"SELECT * FROM {demographics_view}"
-        print(f"   • Querying view: {demographics_view}")
-
-        df = query_to_dataframe(query)
+        # Get demographics view name using TeamConfigManager with fallback to DEMOGRAPHIC_DIST
+        try:
+            # Try default
+            demographics_view = config_manager.get_view_name(team_key, 'demographics')
+            query = f"SELECT * FROM {demographics_view}"
+            print(f"   • Querying view: {demographics_view}")
+            df = query_to_dataframe(query)
+        except Exception:
+            # Fallback to singular naming
+            demographics_view_alt = demographics_view.replace('DEMOGRAPHICS_DIST', 'DEMOGRAPHIC_DIST')
+            print(f"   • Retrying view: {demographics_view_alt}")
+            df = query_to_dataframe(f"SELECT * FROM {demographics_view_alt}")
+            demographics_view = demographics_view_alt
         print(f"   • Fetched {len(df):,} records")
 
         # Process with DemographicsProcessor
@@ -143,7 +156,8 @@ def generate_single_slide(team_key: str,
             data_source=df,
             team_name=team_config['team_name'],
             league=team_config['league'],
-            comparison_population=team_config.get('comparison_population')
+            comparison_population=team_config.get('comparison_population'),
+            communities_override=team_config.get('demographics_communities')
         )
         data = processor.process_all_demographics()
 
@@ -172,7 +186,10 @@ def generate_single_slide(team_key: str,
         print("\n🎯 Processing behaviors data...")
         ranker = MerchantRanker(
             team_view_prefix=team_config['view_prefix'],
-            comparison_population=team_config.get('comparison_population')
+            comparison_population=team_config.get('comparison_population'),
+            indexing_period=team_config.get('indexing_period', 'ALL_TIME'),
+            audience_name=team_config.get('audience_name'),
+            use_approved_communities=team_config.get('use_approved_communities', False)
         )
 
         generator = BehaviorsSlide(pres)
@@ -194,8 +211,12 @@ def generate_single_slide(team_key: str,
             audience_name=team_config.get('audience_name')
         )
         
-        # Fetch the required data for the category
-        view_prefix = team_config['view_prefix']
+        # Get view names using TeamConfigManager to support custom patterns
+        category_view = config_manager.get_view_name(team_key, 'category_all_time')
+        subcategory_view = config_manager.get_view_name(team_key, 'subcategory_all_time')
+        merchant_view = config_manager.get_view_name(team_key, 'merchant_all_time')
+        subcategory_last_year_view = config_manager.get_view_name(team_key, 'subcategory_last_full_year')
+        merchant_last_year_view = config_manager.get_view_name(team_key, 'merchant_last_full_year')
         
         # Get category configuration to find the category names in data
         category_config = analyzer.categories.get(category_name.lower(), {})
@@ -205,36 +226,52 @@ def generate_single_slide(team_key: str,
             raise ValueError(f"No configuration found for category: {category_name}")
         
         # Build WHERE clause
-        category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat.strip()}'" for cat in cat_names])
+        # Use LIKE for category matching to handle subcategory-style categories (e.g., "Restaurants - Casual")
+        category_where = " OR ".join([
+            f"(TRIM(CATEGORY) = '{cat.strip()}' OR TRIM(CATEGORY) LIKE '{cat.strip()} - %')" 
+            for cat in cat_names
+        ])
         
-        # Load data
+        # Escape apostrophes in audience name for SQL queries
+        escaped_audience = analyzer.audience_name.replace("'", "''") if analyzer.audience_name else None
+        escaped_comparison = analyzer.comparison_pop.replace("'", "''") if analyzer.comparison_pop else None
+        
+        # Load data using proper view names
         category_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_CATEGORY_INDEXING_ALL_TIME 
+            SELECT * FROM {category_view} 
             WHERE {category_where}
+              AND AUDIENCE = '{escaped_audience}'
+              AND COMPARISON_POPULATION = '{escaped_comparison}'
         """)
         
         subcategory_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
+            SELECT * FROM {subcategory_view} 
             WHERE {category_where}
+              AND AUDIENCE = '{escaped_audience}'
+              AND COMPARISON_POPULATION = '{escaped_comparison}'
         """)
         
         merchant_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
+            SELECT * FROM {merchant_view} 
             WHERE {category_where}
-            AND AUDIENCE = '{analyzer.audience_name}'
+              AND AUDIENCE = '{escaped_audience}'
+              AND COMPARISON_POPULATION = '{escaped_comparison}'
             ORDER BY PERC_AUDIENCE DESC
         """)
         
         # Load LAST_FULL_YEAR data for specific insights
         subcategory_last_year_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
+            SELECT * FROM {subcategory_last_year_view} 
             WHERE {category_where}
+              AND AUDIENCE = '{escaped_audience}'
+              AND COMPARISON_POPULATION = '{escaped_comparison}'
         """)
         
         merchant_last_year_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
+            SELECT * FROM {merchant_last_year_view} 
             WHERE {category_where}
-            AND AUDIENCE = '{analyzer.audience_name}'
+              AND AUDIENCE = '{escaped_audience}'
+              AND COMPARISON_POPULATION = '{escaped_comparison}'
             ORDER BY PERC_AUDIENCE DESC
         """)
         
@@ -254,6 +291,9 @@ def generate_single_slide(team_key: str,
 
         generator = CategorySlide(pres)
         pres = generator.generate(analysis, team_config, 0)
+        
+        # Also generate the brand slide with specific merchants
+        pres = generator.generate_brand_slide(analysis, team_config, 0)
 
     else:
         raise ValueError(f"Unknown slide type: {slide_type}")
@@ -295,6 +335,12 @@ def generate_report(team_key: str,
     # Get team info
     config_manager = TeamConfigManager()
     team_config = config_manager.get_team_config(team_key)
+
+    # Set Snowflake schema from team config if specified
+    if 'snowflake_schema' in team_config:
+        from data_processors.snowflake_connector import set_schema
+        set_schema(team_config['snowflake_schema'])
+        print(f"📊 Using schema: {team_config['snowflake_schema']}")
 
     # Override category mode if specified via command line
     if category_mode:

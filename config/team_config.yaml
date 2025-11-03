@@ -112,3 +112,169 @@ teams:
     audience_name: "Detroit Tigers Fans"
     comparison_population: "Local Gen Pop (Excl. Detroit Tigers Fans)"
     category_mode: "standard"
+
+  seattle_reign:
+    team_name: "Seattle Reign"
+    team_name_short: "Reign"
+    league: "NWSL"
+    view_prefix: "V_SEATTLE_REIGN_SIL"
+    colors:
+      primary: "#0053A0"      # Reign Blue (brand blue)
+      secondary: "#000000"    # Black
+      accent: "#FFFFFF"       # White
+    audience_name: "Seattle Reign Fans"
+    comparison_population: "Local Gen Pop (Excl. Seattle Reign Fans)"
+    category_mode: "standard"
+
+  serie_a:
+    team_name: "Serie A"
+    team_name_short: "Serie A"
+    league: "International Soccer"
+    view_prefix: "V_INTERNATIONAL_SOCCER_GS"
+    colors:
+      primary: "#000000"
+      secondary: "#FFFFFF"
+      accent: "#BFC0BF"
+    audience_name: "International Soccer Fans"
+    comparison_population: "General Population"
+    demographics_communities:
+      - "International Soccer Fans"
+      - "General Population"
+      - "General Sports Fans"
+    category_mode: "standard"
+    indexing_period: "SNAPSHOT"  # Use last-12-months snapshot views
+    # Lower threshold so more communities qualify for Serie A schema
+    min_behavior_audience_pct: 0.10
+
+  south_carolina_tourism:
+    team_name: "South Carolina Tourism"
+    team_name_short: "SC Tourism"
+    league: "Tourism"
+    view_prefix: "SOUTH_CAROLINA_TOURISM"
+    colors:
+      primary: "#003366"      # South Carolina Blue
+      secondary: "#CE1126"    # South Carolina Red
+      accent: "#FFD700"       # Gold
+    audience_name: "Genius_SCT_Family_Travelers"
+    comparison_population: "Genius_SCT_Golfing_Travelers"
+    demographics_communities:
+      - "Genius_SCT_Family_Travelers"
+      - "Genius_SCT_Golfing_Travelers"
+      - "Genius_SCT_Outdoor_Enthusiasts_Travlers"
+    category_mode: "standard"
+
+  icahn_stadium_visitors:
+    team_name: "Icahn Stadium Visitors"
+    team_name_short: "Icahn Stadium"
+    league: "Park Alliance"
+    view_prefix: "SIL"  # All RIPA data uses SIL_ prefix
+    snowflake_schema: "RIPA_GS"
+    view_patterns:
+      community_all_time: "{prefix}_COMMUNITY_INDEXING_ALL"
+      community_last_full_year: "{prefix}_COMMUNITY_INDEXING_SNAPSHOT"
+      category_all_time: "{prefix}_CATEGORY_INDEXING_ALL"
+      category_last_full_year: "{prefix}_CATEGORY_INDEXING_SNAPSHOT"
+      subcategory_all_time: "{prefix}_SUBCATEGORY_INDEXING_ALL"
+      subcategory_last_full_year: "{prefix}_SUBCATEGORY_INDEXING_SNAPSHOT"
+      merchant_all_time: "{prefix}_MERCHANT_INDEXING_ALL"
+      merchant_last_full_year: "{prefix}_MERCHANT_INDEXING_ALL"
+      community_merchant_all_time: "{prefix}_COMMUNITY_MERCHANT_INDEXING_ALL"
+      community_merchant_last_full_year: "{prefix}_COMMUNITY_MERCHANT_INDEXING_SNAPSHOT"
+      demographics: "GS_DEMOGRAPHICS_DIST"  # RIPA uses fixed table name
+    colors:
+      primary: "#2B6E41"      # Park Green
+      secondary: "#1A4A2A"    # Dark Green
+      accent: "#4A9E65"       # Light Green
+    audience_name: "Icahn Stadium Visitors"
+    comparison_population: "Regional Gen Pop"
+    demographics_communities:
+      - "Icahn Stadium Visitors"
+      - "Regional General Population"
+    category_mode: "standard"
+
+  ripa_donors:
+    team_name: "RIPA Donors"
+    team_name_short: "RIPA Donors"
+    league: "Park Alliance"
+    view_prefix: "SIL"  # All RIPA data uses SIL_ prefix
+    snowflake_schema: "RIPA_GS"
+    view_patterns:
+      community_all_time: "{prefix}_COMMUNITY_INDEXING_ALL"
+      community_last_full_year: "{prefix}_COMMUNITY_INDEXING_SNAPSHOT"
+      category_all_time: "{prefix}_CATEGORY_INDEXING_ALL"
+      category_last_full_year: "{prefix}_CATEGORY_INDEXING_SNAPSHOT"
+      subcategory_all_time: "{prefix}_SUBCATEGORY_INDEXING_ALL"
+      subcategory_last_full_year: "{prefix}_SUBCATEGORY_INDEXING_SNAPSHOT"
+      merchant_all_time: "{prefix}_MERCHANT_INDEXING_ALL"
+      merchant_last_full_year: "{prefix}_MERCHANT_INDEXING_ALL"
+      community_merchant_all_time: "{prefix}_COMMUNITY_MERCHANT_INDEXING_ALL"
+      community_merchant_last_full_year: "{prefix}_COMMUNITY_MERCHANT_INDEXING_SNAPSHOT"
+      demographics: "GS_DEMOGRAPHICS_DIST"  # RIPA uses fixed table name
+    colors:
+      primary: "#2B6E41"      # Park Green
+      secondary: "#1A4A2A"    # Dark Green
+      accent: "#4A9E65"       # Light Green
+    audience_name: "RIPA Donors"
+    comparison_population: "Regional Gen Pop"
+    demographics_communities:
+      - "RIPA Donors"
+      - "Regional General Population"
+    category_mode: "standard"
+
+  regional_randalls_island_visitors:
+    team_name: "Regional Randall's Island Visitors"
+    team_name_short: "Regional Visitors"
+    league: "Park Alliance"
+    view_prefix: "SIL"  # All RIPA data uses SIL_ prefix
+    snowflake_schema: "RIPA_GS"
+    view_patterns:
+      community_all_time: "{prefix}_COMMUNITY_INDEXING_ALL"
+      community_last_full_year: "{prefix}_COMMUNITY_INDEXING_SNAPSHOT"
+      category_all_time: "{prefix}_CATEGORY_INDEXING_ALL"
+      category_last_full_year: "{prefix}_CATEGORY_INDEXING_SNAPSHOT"
+      subcategory_all_time: "{prefix}_SUBCATEGORY_INDEXING_ALL"
+      subcategory_last_full_year: "{prefix}_SUBCATEGORY_INDEXING_SNAPSHOT"
+      merchant_all_time: "{prefix}_MERCHANT_INDEXING_ALL"
+      merchant_last_full_year: "{prefix}_MERCHANT_INDEXING_ALL"
+      community_merchant_all_time: "{prefix}_COMMUNITY_MERCHANT_INDEXING_ALL"
+      community_merchant_last_full_year: "{prefix}_COMMUNITY_MERCHANT_INDEXING_SNAPSHOT"
+      demographics: "GS_DEMOGRAPHICS_DIST"  # RIPA uses fixed table name
+    colors:
+      primary: "#2B6E41"      # Park Green
+      secondary: "#1A4A2A"    # Dark Green
+      accent: "#4A9E65"       # Light Green
+    audience_name: "Regional Randall's Island Visitors"
+    comparison_population: "Regional Gen Pop"
+    demographics_communities:
+      - "Regional Randall's Island Visitors"
+      - "Regional General Population"
+    category_mode: "standard"
+
+  randall_island_visitors:
+    team_name: "Randall Island's Visitors"
+    team_name_short: "Randall Island"
+    league: "Park Alliance"
+    view_prefix: "SIL"  # All RIPA data uses SIL_ prefix
+    snowflake_schema: "RIPA_GS"
+    view_patterns:
+      community_all_time: "{prefix}_COMMUNITY_INDEXING_ALL"
+      community_last_full_year: "{prefix}_COMMUNITY_INDEXING_SNAPSHOT"
+      category_all_time: "{prefix}_CATEGORY_INDEXING_ALL"
+      category_last_full_year: "{prefix}_CATEGORY_INDEXING_SNAPSHOT"
+      subcategory_all_time: "{prefix}_SUBCATEGORY_INDEXING_ALL"
+      subcategory_last_full_year: "{prefix}_SUBCATEGORY_INDEXING_SNAPSHOT"
+      merchant_all_time: "{prefix}_MERCHANT_INDEXING_ALL"
+      merchant_last_full_year: "{prefix}_MERCHANT_INDEXING_ALL"
+      community_merchant_all_time: "{prefix}_COMMUNITY_MERCHANT_INDEXING_ALL"
+      community_merchant_last_full_year: "{prefix}_COMMUNITY_MERCHANT_INDEXING_SNAPSHOT"
+      demographics: "GS_DEMOGRAPHICS_DIST"  # RIPA uses fixed table name
+    colors:
+      primary: "#2B6E41"      # Park Green
+      secondary: "#1A4A2A"    # Dark Green
+      accent: "#4A9E65"       # Light Green
+    audience_name: "Randall's Island Visitors"  # Exact match to database
+    comparison_population: "Regional Gen Pop"
+    demographics_communities:
+      - "Randall's Island Visitors"  # Fixed: singular "Island" (not "Islands")
+      - "Regional General Population"
+    category_mode: "standard"

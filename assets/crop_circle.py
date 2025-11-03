@@ -6,7 +6,7 @@ Processes all images in assets/logos/fans/ and saves circular versions
 """
 
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageOps, ImageChops
 import sys
 import shutil
 from datetime import datetime
@@ -51,18 +51,18 @@ def crop_image_circular(image_path, output_path=None, size=None, backup=True):
 
         # Resize if requested
         if size:
-            # Calculate the aspect ratio preserving resize
-            aspect = min(size[0] / img.width, size[1] / img.height)
-            new_size = (int(img.width * aspect), int(img.height * aspect))
+            # COVER behavior: scale up so the smaller dimension fills the target,
+            # then center-crop to exact requested size (no letterboxing)
+            scale = max(size[0] / img.width, size[1] / img.height)
+            new_size = (int(img.width * scale), int(img.height * scale))
             img = img.resize(new_size, Image.Resampling.LANCZOS)
 
-            # Create a new image with the exact requested size
-            final_img = Image.new('RGBA', size, (0, 0, 0, 0))
-            # Paste the resized image in the center
-            x = (size[0] - new_size[0]) // 2
-            y = (size[1] - new_size[1]) // 2
-            final_img.paste(img, (x, y))
-            img = final_img
+            # Center-crop to requested size
+            left = max((img.width - size[0]) // 2, 0)
+            top = max((img.height - size[1]) // 2, 0)
+            right = left + size[0]
+            bottom = top + size[1]
+            img = img.crop((left, top, right, bottom))
 
         # Get the size for the mask
         mask_size = img.size
@@ -85,12 +85,15 @@ def crop_image_circular(image_path, output_path=None, size=None, backup=True):
         # Create circular mask
         mask = create_circular_mask(mask_size)
 
-        # Create output image with transparent background
+        # Create output image with transparent background and paste the image (preserves existing alpha)
         output = Image.new('RGBA', mask_size, (0, 0, 0, 0))
         output.paste(img, (0, 0))
 
-        # Apply the circular mask
-        output.putalpha(mask)
+        # Combine original alpha with circular mask to avoid filling letterboxed areas
+        # This keeps transparent padding inside the circle transparent instead of turning black
+        orig_alpha = output.getchannel('A')
+        combined_alpha = ImageChops.multiply(orig_alpha, mask)
+        output.putalpha(combined_alpha)
 
         # Determine output path
         if output_path is None:

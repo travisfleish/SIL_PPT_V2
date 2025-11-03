@@ -78,20 +78,35 @@ class BehaviorsSlide(BaseSlide):
 
         # Create visualizations
         logger.info("Generating fan wheel visualization with logo support...")
-        fan_wheel_path = self._create_fan_wheel(merchant_ranker, team_config)
+        # Determine minimum audience percentage (team override supported)
+        min_pct = self._get_min_behavior_audience_pct(team_config)
+        # Dynamically lower threshold until we can include 10 communities (or hit floor)
+        resolved_min = self._resolve_threshold_for_target_communities(
+            merchant_ranker, initial_min=min_pct, target_count=10
+        )
+
+        fan_wheel_path = self._create_fan_wheel(merchant_ranker, team_config, resolved_min)
 
         logger.info("Generating community index chart...")
-        chart_path = self._create_community_chart(merchant_ranker, colors)
+        chart_path = self._create_community_chart(merchant_ranker, team_config, resolved_min)
 
         # Use the content layout (SIL white layout #12)
         slide = self.add_content_slide()
         logger.info("Added behaviors slide using SIL white layout")
 
         # Add header
-        self._add_header(slide, team_name)
+        # Replace header to use European Soccer Fans label for Serie A-like reports
+        display_name = "European Soccer Fans" if team_config.get('team_name') == 'Serie A' else f"{team_name} Fans"
+        self._add_header(slide, display_name)
 
         # Generate insight text
-        insight = self._generate_insight_text(merchant_ranker, team_short)
+        insight = self._generate_insight_text(merchant_ranker, team_short, resolved_min)
+        if team_config.get('team_name') == 'Serie A':
+            # Force label substitution for AI/template output
+            insight = (insight
+                       .replace(f"{team_short} fans", "European Soccer fans")
+                       .replace("International Soccer Fans", "European Soccer fans")
+                       .replace("International Soccer fans", "European Soccer fans"))
 
         # Add elements with 6.5" chart coordinated positioning
         self._add_insight_text(slide, insight)  # TOP left - large text
@@ -104,11 +119,11 @@ class BehaviorsSlide(BaseSlide):
         return self.presentation
 
     def _create_fan_wheel(self, merchant_ranker: MerchantRanker,
-                          team_config: Dict[str, Any]) -> Path:
+                          team_config: Dict[str, Any], min_pct: float) -> Path:
         """Create fan wheel visualization with logo support"""
         # Get data
         wheel_data = merchant_ranker.get_fan_wheel_data(
-            min_audience_pct=0.20,
+            min_audience_pct=min_pct,
             top_n_communities=10
         )
 
@@ -132,11 +147,11 @@ class BehaviorsSlide(BaseSlide):
         return output_path
 
     def _create_community_chart(self, merchant_ranker: MerchantRanker,
-                                team_colors: Dict[str, str]) -> Path:
+                                team_config: Dict[str, Any], min_pct: float) -> Path:
         """Create community index chart"""
         # Get data with COMPOSITE_INDEX
         communities_df = merchant_ranker.get_top_communities(
-            min_audience_pct=0.20,
+            min_audience_pct=min_pct,
             top_n=10
         )
 
@@ -148,11 +163,40 @@ class BehaviorsSlide(BaseSlide):
         })
 
         # Create chart
-        chart = CommunityIndexChart(team_colors)
+        chart = CommunityIndexChart(team_config.get('colors', {}))
         output_path = Path('temp_community_chart.png')
         chart.create(data, output_path)
 
         return output_path
+
+    def _get_min_behavior_audience_pct(self, team_config: Dict[str, Any]) -> float:
+        """Resolve min audience pct for behaviors with safe defaults."""
+        default_min = 0.20
+        try:
+            cfg_min = team_config.get('min_behavior_audience_pct')
+            if isinstance(cfg_min, (int, float)) and 0 < float(cfg_min) < 1:
+                return float(cfg_min)
+        except Exception:
+            pass
+        return default_min
+
+    def _resolve_threshold_for_target_communities(self,
+                                                  merchant_ranker: MerchantRanker,
+                                                  initial_min: float,
+                                                  target_count: int = 10) -> float:
+        """Gradually reduce threshold until at least target_count communities available."""
+        import logging as _logging
+        thr = max(min(initial_min, 0.99), 0.01)
+        floor = 0.02
+        step = 0.02
+        while thr >= floor:
+            df = merchant_ranker.get_top_communities(min_audience_pct=thr, top_n=100)
+            count = len(df)
+            _logging.info(f"Behaviors threshold check: {thr*100:.1f}% -> {count} communities")
+            if count >= target_count:
+                return thr
+            thr -= step
+        return max(thr, floor)
 
     def _add_header(self, slide, team_name: str):
         """Add header with team name and slide title"""
@@ -183,7 +227,13 @@ class BehaviorsSlide(BaseSlide):
             Inches(6.5), Inches(0.1),  # Adjusted for 16:9
             Inches(6.633), Inches(0.3)  # Adjusted width
         )
-        slide_text.text_frame.text = f"Fan Behaviors: How Are {team_name} Fans Unique"
+        # Avoid duplicate 'Fans' if label already contains it
+        label = team_name
+        if label.strip().lower().endswith('fans'):
+            title_text_value = f"Fan Behaviors: How Are {label} Unique"
+        else:
+            title_text_value = f"Fan Behaviors: How Are {label} Fans Unique"
+        slide_text.text_frame.text = title_text_value
         p = slide_text.text_frame.paragraphs[0]
         p.font.name = self.default_font  # Red Hat Display
         p.alignment = PP_ALIGN.RIGHT
@@ -288,12 +338,12 @@ class BehaviorsSlide(BaseSlide):
         p.line_spacing = 1.2
 
     def _generate_insight_text(self, merchant_ranker: MerchantRanker,
-                               team_short: str) -> str:
+                               team_short: str, min_pct: float) -> str:
         """Generate insight text based on top communities using AI or fallback"""
         try:
             # Get top communities with their data
             communities = merchant_ranker.get_top_communities(
-                min_audience_pct=0.20,
+                min_audience_pct=min_pct,
                 top_n=10  # Get more for better AI context
             )
 
@@ -416,20 +466,20 @@ Good examples:
         if len(insights) >= 2:
             # Add movie reference for entertainment seekers
             if "entertainment" in insights[0]:
-                return f"{team_short} fans are {insights[0]} who are {insights[1]} and a good movie!"
+                return f"European Soccer fans are {insights[0]} who are {insights[1]} and a good movie!"
             else:
-                return f"{team_short} fans are {insights[0]} who are {insights[1]}!"
+                return f"European Soccer fans are {insights[0]} who are {insights[1]}!"
         elif len(insights) == 1:
             if "entertainment" in insights[0]:
-                return f"{team_short} fans are {insights[0]} who love a good movie!"
+                return f"European Soccer fans are {insights[0]} who love a good movie!"
             else:
-                return f"{team_short} fans are {insights[0]}!"
+                return f"European Soccer fans are {insights[0]}!"
 
         return self._generate_fallback_insight(team_short)
 
     def _generate_fallback_insight(self, team_short: str) -> str:
         """Ultimate fallback insight"""
-        return f"{team_short} fans have unique behaviors that set them apart from the general population!"
+        return "European Soccer fans have unique behaviors that set them apart from the general population!"
 
 
 # Convenience function

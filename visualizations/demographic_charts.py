@@ -83,8 +83,23 @@ class DemographicCharts:
         """Map community names to appropriate colors based on content, not position"""
         community_name_lower = str(community_name).lower()
 
+        # SPECIAL HANDLING for South Carolina Tourism communities
+        if 'sct' in community_name_lower or 'sc tourism' in community_name_lower:
+            if 'golf' in community_name_lower:
+                # Golfing Travelers - secondary color (red)
+                return self.community_color_map['secondary']
+            elif 'outdoor' in community_name_lower:
+                # Outdoor Enthusiasts - accent color (gold)
+                return self.community_color_map['accent']
+            elif 'family' in community_name_lower:
+                # Family Travelers - primary color (blue)
+                return self.community_color_map['primary']
+            else:
+                # Default for SC Tourism
+                return self.community_color_map['primary']
+
         # FIRST: Check for Local Gen Pop (must be first!)
-        if 'local gen pop' in community_name_lower:
+        if 'local gen pop' in community_name_lower or 'general population' in community_name_lower:
             return self.community_color_map['secondary']
 
         # SECOND: Check if it's ONLY the team's fans (exact match)
@@ -93,6 +108,21 @@ class DemographicCharts:
 
         # THIRD: Everything else (league fans, etc.) gets accent color
         return self.community_color_map['accent']
+
+    def _adjust_for_visibility(self, color_hex: str) -> str:
+        """Avoid white-on-white by substituting a light gray for near-white colors."""
+        try:
+            hx = color_hex.strip().lstrip('#')
+            if len(hx) == 3:
+                hx = ''.join([c * 2 for c in hx])
+            r = int(hx[0:2], 16)
+            g = int(hx[2:4], 16)
+            b = int(hx[4:6], 16)
+            if r >= 245 and g >= 245 and b >= 245:
+                return '#E0E0E0'  # light gray fallback
+        except Exception:
+            pass
+        return color_hex
 
     def _get_gender_colors(self, communities: List[str]) -> Tuple[str, str]:
         """
@@ -112,6 +142,18 @@ class DemographicCharts:
 
     def _format_community_label(self, community: str) -> str:
         """Format community label using team configuration"""
+        
+        # SPECIAL HANDLING for South Carolina Tourism communities - abbreviate labels
+        community_lower = community.lower()
+        if 'sct' in community_lower or 'sc tourism' in community_lower:
+            if 'family' in community_lower:
+                return "Tourism"
+            elif 'golf' in community_lower:
+                return "Golfing"
+            elif 'outdoor' in community_lower:
+                return "Outdoor"
+            else:
+                return "Tourism"
 
         # Handle Local Gen Pop FIRST to avoid substring matches with audience_name
         if "Local Gen Pop" in community:
@@ -309,13 +351,15 @@ class DemographicCharts:
 
         # FIXED: Create bars with community-based color mapping
         bar_groups = []
+        edge_props = dict(linewidth=0.6, edgecolor='#666666')
         for i, community in enumerate(data.columns):
             # Get color based on community name, not position
-            color = self._get_community_color(community)
+            base_color = self._get_community_color(community)
+            color = self._adjust_for_visibility(base_color)
 
             positions = indices + (i - n_bars / 2 + 0.5) * bar_width
             bars = ax.bar(positions, data[community], bar_width,
-                          label=community, color=color, alpha=0.8)
+                          label=community, color=color, alpha=0.9, **edge_props)
             bar_groups.append((bars, data[community].values))
 
         # Add value labels only for the highest bar in each group
@@ -448,12 +492,31 @@ class DemographicCharts:
             male_pct = values.get('Male', 0)
             female_pct = values.get('Female', 0)
 
-            # Draw stacked horizontal bar with FIXED colors
-            # Male portion (blue)
+            # Get community-specific color
+            community_color = self._get_community_color(community)
+            
+            # Create lighter and darker shades of the community color for male/female
+            base_color = community_color
+            # Make male darker and female lighter, or vice versa
+            from matplotlib.colors import rgb2hex
+            import matplotlib
+            
+            # Convert hex to RGB
+            hex_color = base_color.lstrip('#')
+            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            
+            # Darken for male (or use darker shade)
+            male_rgb = tuple(max(0, int(c * 0.6)) for c in rgb)
+            male_color = '#%02x%02x%02x' % male_rgb
+            
+            # Lighten for female
+            female_rgb = tuple(min(255, int(c + (255-c) * 0.3)) for c in rgb)
+            female_color = '#%02x%02x%02x' % female_rgb
+
+            # Draw stacked horizontal bar with community-specific colors
             ax.barh(y_positions[idx], male_pct, bar_height,
                     left=0, color=male_color, alpha=0.8, **edge_props)
 
-            # Female portion (green if NBA fans present, yellow otherwise)
             ax.barh(y_positions[idx], female_pct, bar_height,
                     left=male_pct, color=female_color, alpha=0.8, **edge_props)
 

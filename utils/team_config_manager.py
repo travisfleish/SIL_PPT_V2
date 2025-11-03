@@ -35,14 +35,17 @@ class TeamConfigManager:
         team_config = self.get_team_config(team_key)
         prefix = team_config['view_prefix']
 
-        if view_type not in self.view_patterns:
+        # Check if team has custom view patterns
+        if 'view_patterns' in team_config:
+            patterns = team_config['view_patterns']
+        else:
+            patterns = self.view_patterns
+
+        if view_type not in patterns:
             raise ValueError(f"View type '{view_type}' not found in patterns")
 
-        pattern = self.view_patterns[view_type]
+        pattern = patterns[view_type]
         view_name = pattern.format(prefix=prefix)
-
-        # Special case handling removed - Utah Jazz now uses standard pattern
-        # This will resolve to: V_UTAH_JAZZ_SIL_DEMOGRAPHICS_DIST
 
         return view_name
 
@@ -51,13 +54,15 @@ class TeamConfigManager:
         team_config = self.get_team_config(team_key)
         prefix = team_config['view_prefix']
 
+        # Check if team has custom view patterns
+        if 'view_patterns' in team_config:
+            patterns = team_config['view_patterns']
+        else:
+            patterns = self.view_patterns
+
         views = {}
-        for view_type, pattern in self.view_patterns.items():
+        for view_type, pattern in patterns.items():
             view_name = pattern.format(prefix=prefix)
-
-            # Special case handling removed - Utah Jazz now uses standard pattern
-            # This will resolve to: V_UTAH_JAZZ_SIL_DEMOGRAPHICS_DIST
-
             views[view_type] = view_name
 
         return views

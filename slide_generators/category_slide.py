@@ -305,10 +305,12 @@ class CategorySlide(BaseSlide):
         logger.info(f"Added brand slide for {analysis_results['display_name']} using SIL white layout")
 
         # UPDATED brand slide title format based on category
+        # Use International Soccer Fans phrasing for Serie A reports
+        audience_label = "European Soccer fans" if team_config.get('team_name') == 'Serie A' else f"{team_name} fans"
         if category_name.upper() == "QSR":
-            brand_title = f"Top QSR Brands for {team_name} Fans"
+            brand_title = f"Top QSR Brands for {audience_label}"
         else:
-            brand_title = f"Top {category_name} Brands for {team_name} Fans"
+            brand_title = f"Top {category_name} Brands for {audience_label}"
 
         # Add header - brand slide uses updated title format
         header_title = f"Sponsor Spending Analysis: {category_name} Brands"
@@ -980,7 +982,8 @@ class CategorySlide(BaseSlide):
                     percent = merchant_df.iloc[0]['Percent of Fans Who Spend']
                     # UPDATED: Use format_percent_of_fans here too
                     formatted_percent = format_percent_of_fans(percent)
-                    run2.text = f"{formatted_percent} of {team_short} fans spend at {top_brand}"
+                    label = "European Soccer fans" if team_config.get('team_name') == 'Serie A' else f"{team_short} fans"
+                    run2.text = f"{formatted_percent} of {label} spend at {top_brand}"
                 else:
                     # Fallback to formatting the existing insight
                     formatted_insight = process_insight_text(insight)
@@ -1003,8 +1006,8 @@ class CategorySlide(BaseSlide):
                 if 'purchases per year' in insight.lower():
                     formatted_insight = self._format_insight_two(insight, team_short, category_name)
                     # Remove the team name from start if it's there
-                    if formatted_insight.startswith(f"{team_short} fans"):
-                        formatted_insight = formatted_insight.replace(f"{team_short} fans", f"{team_short} fans", 1)
+                    if team_config.get('team_name') == 'Serie A':
+                        formatted_insight = formatted_insight.replace(f"{team_short} fans", "European Soccer fans")
                     run2.text = formatted_insight
                 else:
                     formatted_insight = process_insight_text(insight)
@@ -1028,8 +1031,11 @@ class CategorySlide(BaseSlide):
                 # Extract just the relevant part after the bullet
                 insight_text = formatted_insight.replace("• ", "")
                 # Add [Team] notation if team name is mentioned
-                if team_name in insight_text:
-                    insight_text = insight_text.replace(f"{team_name} fans", f"{team_short} fans")
+                if team_config.get('team_name') == 'Serie A':
+                    insight_text = insight_text.replace(f"{team_name} fans", "European Soccer fans")
+                else:
+                    if team_name in insight_text:
+                        insight_text = insight_text.replace(f"{team_name} fans", f"{team_short} fans")
                 run2.text = insight_text
                 run2.font.name = self.default_font
                 run2.font.size = Pt(12)

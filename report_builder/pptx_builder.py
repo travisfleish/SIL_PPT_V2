@@ -92,6 +92,12 @@ class PowerPointBuilder:
         self.config_manager = TeamConfigManager()
         self.team_config = self.config_manager.get_team_config(team_key)
 
+        # Set Snowflake schema from team config if specified
+        if 'snowflake_schema' in self.team_config:
+            from data_processors.snowflake_connector import set_schema
+            set_schema(self.team_config['snowflake_schema'])
+            logger.info(f"Using schema: {self.team_config['snowflake_schema']}")
+
         # Extract key values
         self.team_name = self.team_config['team_name']
         self.team_short = self.team_config['team_name_short']
@@ -102,7 +108,10 @@ class PowerPointBuilder:
         self.merchant_ranker = MerchantRanker(
             team_view_prefix=self.view_prefix,
             comparison_population=self.team_config['comparison_population'],
-            cache_manager = self.cache_manager
+            cache_manager = self.cache_manager,
+            indexing_period=self.team_config.get('indexing_period', 'ALL_TIME'),
+            audience_name=self.team_config.get('audience_name'),
+            use_approved_communities=self.team_config.get('use_approved_communities', False)
         )
 
         self.category_analyzer = CategoryAnalyzer(
@@ -416,7 +425,7 @@ class PowerPointBuilder:
         """
         try:
             # Load demographics data
-            demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
+            demographics_view = self._resolve_demographics_view()
             query = f"SELECT * FROM {demographics_view}"
             df = query_to_dataframe(query)
 
@@ -432,7 +441,8 @@ class PowerPointBuilder:
                 team_name=self.team_name,
                 league=self.league,
                 use_ai_insights=True,  # Enable AI insights
-                comparison_population=comparison_population  # ADD THIS LINE
+                comparison_population=comparison_population,  # ADD THIS LINE
+                communities_override=self.team_config.get('demographics_communities')
             )
 
             demographic_data = processor.process_all_demographics()
@@ -575,7 +585,7 @@ class PowerPointBuilder:
         try:
             # Load demographics data
             update_progress(39, "Querying demographic data...")
-            demographics_view = self.config_manager.get_view_name(self.team_key, 'demographics')
+            demographics_view = self._resolve_demographics_view()
             query = f"SELECT * FROM {demographics_view}"
             df = query_to_dataframe(query)
 
@@ -592,7 +602,8 @@ class PowerPointBuilder:
                 data_source=df,
                 team_name=self.team_name,
                 league=self.league,
-                comparison_population=comparison_population  # ADD THIS LINE
+                comparison_population=comparison_population,  # ADD THIS LINE
+                communities_override=self.team_config.get('demographics_communities')
             )
 
             demographic_data = processor.process_all_demographics()
@@ -625,6 +636,34 @@ class PowerPointBuilder:
         except Exception as e:
             logger.error(f"Error creating demographics slide: {str(e)}")
             self._add_placeholder_slide("Demographics slide - error loading data")
+
+    def _resolve_demographics_view(self) -> str:
+        """Resolve the correct demographics view name (plural vs singular)."""
+        base = self.config_manager.get_view_name(self.team_key, 'demographics')
+        # Try configured name first
+        if self._view_exists(base):
+            return base
+        # Fallback: DEMOGRAPHIC_DIST (singular)
+        alt = base.replace('DEMOGRAPHICS_DIST', 'DEMOGRAPHIC_DIST')
+        if alt != base and self._view_exists(alt):
+            logger.info(f"Resolved demographics view fallback: {alt}")
+            return alt
+        # As last resort, return base (will error and show placeholder)
+        return base
+
+    def _view_exists(self, view_name: str) -> bool:
+        try:
+            check = query_to_dataframe(
+                f"""
+                SELECT 1 FROM information_schema.views
+                WHERE table_schema = CURRENT_SCHEMA()
+                  AND table_name = '{view_name.upper()}'
+                LIMIT 1
+                """
+            )
+            return not check.empty
+        except Exception:
+            return False
 
     def _create_behaviors_slide(self):
         """Create the fan behaviors slide"""
@@ -685,15 +724,21 @@ class PowerPointBuilder:
                                                                                                 len(fixed_categories) + custom_count) > 0 else 5
             base_progress = 50 + (len(fixed_categories) * progress_per_category)
 
+            # Use configured view patterns (team-specific overrides if present)
+            period = self.team_config.get('indexing_period', 'ALL_TIME').upper()
+            view_type_suffix = 'last_full_year' if period == 'SNAPSHOT' else 'all_time'
+
+            # Resolve views via TeamConfigManager to respect team overrides
+            category_view = self.config_manager.get_view_name(self.team_key, f'category_{view_type_suffix}')
+            merchant_view = self.config_manager.get_view_name(self.team_key, f'merchant_{view_type_suffix}')
+
             # Load category data
             update_progress(base_progress + 1, "Loading category data for custom analysis...")
-            category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
-            all_category_df = query_to_dataframe(category_query)
+            all_category_df = query_to_dataframe(f"SELECT * FROM {category_view}")
 
-            # NEW: Load merchant data for verification
+            # Load merchant data for verification
             update_progress(base_progress + 2, "Loading merchant data...")
-            merchant_query = f"SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME"
-            all_merchant_df = query_to_dataframe(merchant_query)
+            all_merchant_df = query_to_dataframe(f"SELECT * FROM {merchant_view}")
 
             # Get custom categories using the new tiered selection
             update_progress(base_progress + 3, "Analyzing custom categories...")
@@ -747,15 +792,21 @@ class PowerPointBuilder:
             progress_per_category = 35 // len(selected_categories) if len(selected_categories) > 0 else 5
             base_progress = 50  # Start at 50 since no fixed categories in custom mode
             
+            # Use configured view patterns (team-specific overrides if present)
+            period = self.team_config.get('indexing_period', 'ALL_TIME').upper()
+            view_type_suffix = 'last_full_year' if period == 'SNAPSHOT' else 'all_time'
+
+            # Resolve views via TeamConfigManager to respect team overrides
+            category_view = self.config_manager.get_view_name(self.team_key, f'category_{view_type_suffix}')
+            merchant_view = self.config_manager.get_view_name(self.team_key, f'merchant_{view_type_suffix}')
+
             # Load category data
             update_progress(base_progress + 1, "Loading category data for custom analysis...")
-            category_query = f"SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME"
-            all_category_df = query_to_dataframe(category_query)
+            all_category_df = query_to_dataframe(f"SELECT * FROM {category_view}")
             
             # Load merchant data
             update_progress(base_progress + 2, "Loading merchant data...")
-            merchant_query = f"SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME"
-            all_merchant_df = query_to_dataframe(merchant_query)
+            all_merchant_df = query_to_dataframe(f"SELECT * FROM {merchant_view}")
             
             # Create slides for each selected category
             for i, category_name in enumerate(selected_categories):
@@ -804,39 +855,69 @@ class PowerPointBuilder:
                 logger.warning(f"No configuration found for {category_key}")
                 return
 
-            # Build WHERE clause - also strip each cat name for safety
-            category_where = " OR ".join([f"TRIM(CATEGORY) = '{cat.strip()}'" for cat in cat_names])
+            # Build WHERE clause - support RIPA-style categories like "Restaurants - Casual"
+            category_where = " OR ".join([
+                f"(TRIM(CATEGORY) = '{cat.strip()}' OR TRIM(CATEGORY) LIKE '{cat.strip()} - %')"
+                for cat in cat_names
+            ])
 
-            # Load data
+            # Escape apostrophes in audience name and comparison population for SQL queries
+            escaped_audience = self.category_analyzer.audience_name.replace("'", "''") if self.category_analyzer.audience_name else None
+            escaped_comparison = self.category_analyzer.comparison_pop.replace("'", "''") if self.category_analyzer.comparison_pop else None
+
+            # Get view names using TeamConfigManager (supports custom patterns)
+            period = self.team_config.get('indexing_period', 'ALL_TIME').upper()
+            view_type_suffix = 'last_full_year' if period == 'SNAPSHOT' else 'all_time'
+            
+            category_view = self.config_manager.get_view_name(self.team_key, f'category_{view_type_suffix}')
+            subcategory_view = self.config_manager.get_view_name(self.team_key, f'subcategory_{view_type_suffix}')
+            merchant_view = self.config_manager.get_view_name(self.team_key, f'merchant_{view_type_suffix}')
+
+            # Load data with proper audience/comparison filters
             category_df = query_to_dataframe(f"""
-                SELECT * FROM {self.view_prefix}_CATEGORY_INDEXING_ALL_TIME 
+                SELECT * FROM {category_view} 
                 WHERE {category_where}
+                  AND AUDIENCE = '{escaped_audience}'
+                  AND COMPARISON_POPULATION = '{escaped_comparison}'
             """)
 
             subcategory_df = query_to_dataframe(f"""
-                SELECT * FROM {self.view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
+                SELECT * FROM {subcategory_view} 
                 WHERE {category_where}
+                  AND AUDIENCE = '{escaped_audience}'
+                  AND COMPARISON_POPULATION = '{escaped_comparison}'
             """)
 
             merchant_df = query_to_dataframe(f"""
-                SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_ALL_TIME 
+                SELECT * FROM {merchant_view} 
                 WHERE {category_where}
-                AND AUDIENCE = '{self.category_analyzer.audience_name}'
+                  AND AUDIENCE = '{escaped_audience}'
+                  AND COMPARISON_POPULATION = '{escaped_comparison}'
                 ORDER BY PERC_AUDIENCE DESC
             """)
 
-            # NEW: Load LAST_FULL_YEAR data for specific insights
-            subcategory_last_year_df = query_to_dataframe(f"""
-                SELECT * FROM {self.view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
-                WHERE {category_where}
-            """)
+            # LAST_FULL_YEAR data not available in SNAPSHOT mode
+            if period == 'ALL_TIME':
+                subcategory_last_year_view = self.config_manager.get_view_name(self.team_key, 'subcategory_last_full_year')
+                merchant_last_year_view = self.config_manager.get_view_name(self.team_key, 'merchant_last_full_year')
+                
+                subcategory_last_year_df = query_to_dataframe(f"""
+                    SELECT * FROM {subcategory_last_year_view} 
+                    WHERE {category_where}
+                      AND AUDIENCE = '{escaped_audience}'
+                      AND COMPARISON_POPULATION = '{escaped_comparison}'
+                """)
 
-            merchant_last_year_df = query_to_dataframe(f"""
-                SELECT * FROM {self.view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
-                WHERE {category_where}
-                AND AUDIENCE = '{self.category_analyzer.audience_name}'
-                ORDER BY PERC_AUDIENCE DESC
-            """)
+                merchant_last_year_df = query_to_dataframe(f"""
+                    SELECT * FROM {merchant_last_year_view} 
+                    WHERE {category_where}
+                      AND AUDIENCE = '{escaped_audience}'
+                      AND COMPARISON_POPULATION = '{escaped_comparison}'
+                    ORDER BY PERC_AUDIENCE DESC
+                """)
+            else:
+                subcategory_last_year_df = None
+                merchant_last_year_df = None
 
             # Add config for custom categories temporarily
             if is_custom:

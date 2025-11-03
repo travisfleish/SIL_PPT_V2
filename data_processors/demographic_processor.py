@@ -71,7 +71,8 @@ class DemographicsProcessor:
                  team_name: str,
                  league: str,
                  use_ai_insights: bool = True,
-                 comparison_population: str = None):
+                 comparison_population: str = None,
+                 communities_override: Optional[List[str]] = None):
         """
         Initialize the processor with data and team configuration
 
@@ -89,8 +90,16 @@ class DemographicsProcessor:
         if use_ai_insights and not os.getenv('OPENAI_API_KEY'):
             logger.warning("AI insights requested but no OpenAI API key found. Using template insights.")
 
-        # Update expected communities based on team
-        if comparison_population:
+        # Update expected communities based on team or explicit override
+        if communities_override and isinstance(communities_override, list) and len(communities_override) > 0:
+            # Use explicit override list as the authoritative order
+            self.communities = list(communities_override)
+            # Determine comparison population: use provided arg if present, otherwise second item
+            if comparison_population:
+                self.comparison_population = comparison_population
+            else:
+                self.comparison_population = self.communities[1] if len(self.communities) > 1 else None
+        elif comparison_population:
             self.communities = [
                 f'{team_name} Fans',
                 comparison_population,  # USE THE EXACT VALUE FROM CONFIG
@@ -569,8 +578,8 @@ class DemographicsProcessor:
     def _generate_generation_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for generation distribution"""
         insights = []
-        fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        fan_community = self.communities[0] if self.communities else f'{self.team_name} Fans'
+        gen_pop = self.communities[1] if len(self.communities) > 1 else self.comparison_population
 
         if fan_community in percentages and gen_pop in percentages:
             # Check if fans are younger
@@ -587,8 +596,8 @@ class DemographicsProcessor:
     def _generate_income_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for income distribution"""
         insights = []
-        fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        fan_community = self.communities[0] if self.communities else f'{self.team_name} Fans'
+        gen_pop = self.communities[1] if len(self.communities) > 1 else self.comparison_population
 
         if fan_community in percentages and gen_pop in percentages:
             # Check higher income brackets
@@ -605,8 +614,8 @@ class DemographicsProcessor:
     def _generate_occupation_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for occupation distribution"""
         insights = []
-        fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        fan_community = self.communities[0] if self.communities else f'{self.team_name} Fans'
+        gen_pop = self.communities[1] if len(self.communities) > 1 else self.comparison_population
 
         if fan_community in percentages and gen_pop in percentages:
             # Check professional categories
@@ -623,8 +632,8 @@ class DemographicsProcessor:
     def _generate_children_insights(self, percentages: Dict[str, Dict[str, float]]) -> List[str]:
         """Generate insights for children distribution"""
         insights = []
-        fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        fan_community = self.communities[0] if self.communities else f'{self.team_name} Fans'
+        gen_pop = self.communities[1] if len(self.communities) > 1 else self.comparison_population
 
         if fan_community in percentages and gen_pop in percentages:
             fan_with_children = percentages[fan_community].get('At least 1 Child in HH', 0)
@@ -680,10 +689,10 @@ class DemographicsProcessor:
             return self._generate_summary_insights()
 
         try:
-            # Collect data for all three communities
-            team_fans = f"{self.team_name} Fans"
-            gen_pop = self.communities[1]  # Use actual comparison population from config
-            league_fans = f"{self.league} Fans"
+            # Collect data for all three communities using actual resolved names
+            team_fans = self.communities[0] if self.communities else f"{self.team_name} Fans"
+            gen_pop = self.communities[1] if len(self.communities) > 1 else self.comparison_population
+            league_fans = self.communities[2] if len(self.communities) > 2 else (f"{self.league} Fans" if self.league else None)
 
             # Build comprehensive data summary
             data_summary = []
@@ -693,8 +702,8 @@ class DemographicsProcessor:
                     categories = demo_data.get('categories', [])
                     for category in categories:
                         team_val = demo_data['data'].get(team_fans, {}).get(category, 0)
-                        pop_val = demo_data['data'].get(gen_pop, {}).get(category, 0)
-                        league_val = demo_data['data'].get(league_fans, {}).get(category, 0)
+                        pop_val = demo_data['data'].get(gen_pop, {}).get(category, 0) if gen_pop else 0
+                        league_val = demo_data['data'].get(league_fans, {}).get(category, 0) if league_fans else 0
 
                         if team_val > 0:  # Only include non-zero data
                             data_summary.append(

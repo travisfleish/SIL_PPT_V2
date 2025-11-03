@@ -22,7 +22,7 @@ class MerchantRanker:
 
     EXCLUDED_MERCHANTS = ['LEVELUP']
 
-    def __init__(self, team_view_prefix: str, comparison_population: str = None, cache_manager: Optional[Any] = None):
+    def __init__(self, team_view_prefix: str, comparison_population: str = None, cache_manager: Optional[Any] = None, indexing_period: str = 'ALL_TIME', audience_name: Optional[str] = None, use_approved_communities: bool = False):
         """
         Initialize merchant ranker
 
@@ -35,14 +35,49 @@ class MerchantRanker:
             raise ValueError("team_view_prefix is required")
 
         self.team_view_prefix = team_view_prefix
-        self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_ALL_TIME"
-        self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
+        self.indexing_period = (indexing_period or 'ALL_TIME').upper()
+        suffix = 'SNAPSHOT' if self.indexing_period == 'SNAPSHOT' else 'ALL_TIME'
+
+        # Default views based on indexing period
+        self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_{suffix}"
+        self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_{suffix}"
+
+        # Control whether to restrict to approved communities
+        # Default False so behavior slides can consider all communities unless explicitly enabled
+        self.use_approved_communities = bool(use_approved_communities)
+
+        # Special-case override: Serie A should always use ALL_TIME for community views
+        try:
+            if str(team_view_prefix).upper() == 'V_INTERNATIONAL_SOCCER_GS':
+                self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_ALL_TIME"
+                self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_ALL_TIME"
+                logger.info("Overriding Serie A to use ALL_TIME for community and community_merchant views")
+        except Exception:
+            # Non-fatal: fall back to period-based views
+            pass
+
+        # Special-case override for RIPA (tables use ALL instead of ALL_TIME)
+        try:
+            if str(team_view_prefix).upper() == 'SIL':
+                if suffix == 'SNAPSHOT':
+                    ripa_suffix = 'SNAPSHOT'
+                else:
+                    ripa_suffix = 'ALL'  # RIPA uses ALL instead of ALL_TIME
+                self.community_view = f"{team_view_prefix}_COMMUNITY_INDEXING_{ripa_suffix}"
+                self.merchant_view = f"{team_view_prefix}_COMMUNITY_MERCHANT_INDEXING_{ripa_suffix}"
+                logger.info(f"Overriding RIPA to use {ripa_suffix} suffix for community and community_merchant views")
+        except Exception:
+            # Non-fatal: fall back to period-based views
+            pass
 
         # Store cache_manager
         self.cache_manager = cache_manager
 
         # Store comparison population - no default!
         self.comparison_population = comparison_population
+        # Store audience name (optional, but used to disambiguate rows in community/merchant views)
+        # Escape single quotes for safe SQL literal usage
+        self.audience_name = audience_name.replace("'", "''") if audience_name else None
         if not self.comparison_population:
             logger.warning("No comparison_population provided - will need to pass explicitly to methods")
 
@@ -159,26 +194,29 @@ class MerchantRanker:
         if not comparison_pop:
             raise ValueError("comparison_pop must be provided or set in instance")
 
-        # Build the IN clause for approved communities
-        if self.approved_communities:
+        # Build the community filter
+        if self.use_approved_communities and self.approved_communities:
             communities_list = "', '".join(self.approved_communities)
             community_filter = f"AND COMMUNITY IN ('{communities_list}')"  # FIXED: Changed from COMMUNITY_GROUP
         else:
-            # If no approved communities loaded, use old exclusion logic
-            logger.warning("No approved communities loaded, using exclusion logic")
-            community_filter = self._get_exclusion_filter()
+            # No restriction by approved communities
+            community_filter = ""
 
         query = f"""
         SELECT 
             COMMUNITY,  
             PERC_AUDIENCE,
             PERC_INDEX,
-            COMPOSITE_INDEX
+            (COALESCE(PERC_INDEX, 100) + 
+             COALESCE(SPC_INDEX, 100) + 
+             COALESCE(SPP_INDEX, 100) + 
+             COALESCE(PPC_INDEX, 100)) / 4.0 as COMPOSITE_INDEX
         FROM 
             {self.community_view}
         WHERE 
             COMPARISON_POPULATION = '{comparison_pop}'
             AND PERC_AUDIENCE >= {min_audience_pct}
+            {f"AND AUDIENCE = '{self.audience_name}'" if getattr(self, 'audience_name', None) else ''}
             {community_filter}
         ORDER BY COMPOSITE_INDEX DESC
         LIMIT {top_n}
@@ -266,14 +304,15 @@ class MerchantRanker:
                 SUBCATEGORY,
                 PERC_INDEX,
                 PERC_AUDIENCE,
-                AUDIENCE_TOTAL_SPEND,
-                AUDIENCE_COUNT,
+                /* SNAPSHOT views do not include AUDIENCE_TOTAL_SPEND consistently */
+                PPC,
+                SPC,
                 ROW_NUMBER() OVER (PARTITION BY COMMUNITY ORDER BY PERC_AUDIENCE DESC) as rank
             FROM {self.merchant_view}
             WHERE 
                 COMMUNITY IN ('{communities_list}')
                 AND COMPARISON_POPULATION = '{comparison_pop}'
-                AND AUDIENCE_COUNT >= {min_audience_count}
+                {f"AND AUDIENCE = '{self.audience_name}'" if getattr(self, 'audience_name', None) else ''}
                 {exclusion_clause}
                 {merchant_exclusion}
         )
@@ -284,8 +323,8 @@ class MerchantRanker:
             SUBCATEGORY,
             PERC_INDEX,
             PERC_AUDIENCE,
-            AUDIENCE_TOTAL_SPEND,
-            AUDIENCE_COUNT
+            PPC,
+            SPC
         FROM ranked_merchants 
         WHERE rank <= {top_n_per_community}
         ORDER BY PERC_AUDIENCE DESC
@@ -368,10 +407,11 @@ class MerchantRanker:
         for _, community_row in communities_sorted.iterrows():
             community = community_row['COMMUNITY']
 
-            # Get all merchants for this community, sorted by PERC_AUDIENCE
+            # Get all merchants for this community, prioritize by PERC_AUDIENCE then PERC_INDEX
+            # PERC_AUDIENCE represents what % of the audience actually shops there (more meaningful for local relevance)
             community_merchants = merchants_with_community_data[
                 merchants_with_community_data['COMMUNITY'] == community
-                ].sort_values('PERC_AUDIENCE', ascending=False)
+                ].sort_values(['PERC_AUDIENCE', 'PERC_INDEX'], ascending=False)
 
             # Find the first merchant not yet used
             for _, merchant_row in community_merchants.iterrows():
@@ -382,8 +422,21 @@ class MerchantRanker:
                     used_merchants.add(merchant)
                     break
             else:
-                # If all merchants are used, log warning and skip this community
+                # If all merchants are used, log warning and skip this community for now
                 logger.warning(f"No unique merchant found for community: {community}")
+
+        # Fallback: if we have fewer than requested communities due to uniqueness constraint,
+        # allow duplicates to fill remaining communities so the wheel shows up to top_n_communities
+        if len(selected_merchants) < len(communities):
+            remaining_communities = [c for c in communities_sorted['COMMUNITY'].tolist() if c not in selected_merchants]
+            for community in remaining_communities:
+                community_merchants = merchants_with_community_data[
+                    merchants_with_community_data['COMMUNITY'] == community
+                ].sort_values('PERC_AUDIENCE', ascending=False)
+                if not community_merchants.empty:
+                    # Take the top merchant even if duplicate
+                    merchant_row = community_merchants.iloc[0]
+                    selected_merchants[community] = merchant_row
 
         # Convert selected merchants to DataFrame
         if not selected_merchants:

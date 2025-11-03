@@ -57,6 +57,7 @@ class SnowflakeConnectionPool:
 
     def _create_connection_params(self):
         """Create connection parameters (only called once)"""
+        global _current_schema
         # Get credentials from environment
         account = os.getenv('SNOWFLAKE_ACCOUNT')
         user = os.getenv('SNOWFLAKE_USER')
@@ -67,13 +68,19 @@ class SnowflakeConnectionPool:
         if not account or not user:
             raise ValueError("Missing required Snowflake credentials in .env file")
 
+        # Determine schema - use current schema if set, otherwise env var
+        if _current_schema:
+            schema_name = _current_schema
+        else:
+            schema_name = os.getenv('SNOWFLAKE_SCHEMA', 'SC_TWINBRAINAI')
+
         # Base connection parameters
         conn_params = {
             'account': account,
             'user': user,
             'warehouse': os.getenv('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH'),
             'database': os.getenv('SNOWFLAKE_DATABASE', 'SIL__TB_OTT_TEST'),
-            'schema': os.getenv('SNOWFLAKE_SCHEMA', 'SC_TWINBRAINAI'),
+            'schema': schema_name,
             'role': os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
         }
 
@@ -317,6 +324,21 @@ class SnowflakeConnectionPool:
 
 # Create a global connection pool instance
 _connection_pool = None
+# Track current schema (defaults to env var)
+_current_schema = None
+
+
+def set_schema(schema: str = None):
+    """
+    Set the Snowflake schema for subsequent queries
+    
+    Args:
+        schema: Schema name to use. If None, uses default from env.
+    """
+    global _current_schema, _connection_pool
+    _current_schema = schema
+    # Reset the connection pool to use new schema
+    _connection_pool = None
 
 
 def _get_pool():

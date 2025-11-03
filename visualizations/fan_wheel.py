@@ -43,7 +43,14 @@ class FanWheel(BaseChart):
         colors = team_config.get('colors', {})
         self.primary_color = colors.get('primary', '#002244')
         self.secondary_color = colors.get('secondary', '#FFB612')
-        self.accent_color = colors.get('accent', '#4169E1')
+        accent = colors.get('accent', '#4169E1')
+        # Avoid white accent; fallback to primary then secondary
+        if str(accent).strip().lower() in ['#fff', '#ffffff', 'white']:
+            accent = self.primary_color if str(self.primary_color).strip().lower() not in ['#fff', '#ffffff', 'white'] else self.secondary_color
+        self.accent_color = accent
+
+        # Use white text on non-white wedges (as requested)
+        self.segment_text_color = '#FFFFFF'
 
         # Visualization parameters
         self.outer_radius = 5.0
@@ -63,6 +70,29 @@ class FanWheel(BaseChart):
         # Get font family from font manager
         self.font_family = font_manager.get_font_family('Red Hat Display')
         logger.info(f"Using font family: {self.font_family}")
+
+    def _hex_to_rgb(self, hex_color: str):
+        hex_color = hex_color.lstrip('#')
+        lv = len(hex_color)
+        return tuple(int(hex_color[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+
+    def _relative_luminance(self, rgb):
+        # sRGB to linear
+        def channel(c):
+            c = c / 255.0
+            return c / 12.92 if c <= 0.03928 * 255 else ((c + 0.055) / 1.055) ** 2.4
+        r, g, b = rgb
+        rL, gL, bL = channel(r), channel(g), channel(b)
+        return 0.2126 * rL + 0.7152 * gL + 0.0722 * bL
+
+    def _compute_contrast_color(self, hex_bg: str) -> str:
+        try:
+            rgb = self._hex_to_rgb(hex_bg)
+            lum = self._relative_luminance(rgb)
+            # Choose black text for light backgrounds, white for dark
+            return '#000000' if lum > 0.5 else '#FFFFFF'
+        except Exception:
+            return '#FFFFFF'
 
     def _load_arrow_logo(self) -> Optional[Image.Image]:
         """Load arrow logo during initialization"""
@@ -95,7 +125,8 @@ class FanWheel(BaseChart):
 
     def create(self, wheel_data: pd.DataFrame,
                output_path: Optional[Path] = None,
-               team_logo: Optional[Image.Image] = None) -> Path:
+               team_logo: Optional[Image.Image] = None,
+               transparent: bool = False) -> Path:
         """
         Create fan wheel visualization with minimal whitespace
 
@@ -114,6 +145,10 @@ class FanWheel(BaseChart):
         dpi = 150 if self.enable_logos else 100
         fig = plt.figure(figsize=(12, 12), facecolor='white', dpi=dpi)
         ax = fig.add_subplot(111, aspect='equal')
+        if transparent:
+            # Transparent background for figure and axis
+            fig.patch.set_alpha(0)
+            ax.set_facecolor('none')
 
         # FIXED: Reduce whitespace by setting limits closer to actual wheel size
         margin = 0.3  # Small margin around the wheel
@@ -128,8 +163,11 @@ class FanWheel(BaseChart):
 
         angle_step = 360 / num_items
 
-        # Draw wedges
-        self._draw_wedges(ax, num_items, angle_step)
+        # Extract or generate audience percentages for each category
+        audience_percentages = self._get_audience_percentages(wheel_data)
+
+        # Draw wedges with variable inner ring sizes
+        self._draw_wedges(ax, num_items, angle_step, audience_percentages)
 
         # Add dividing lines
         self._add_dividing_lines(ax, num_items, angle_step)
@@ -141,38 +179,105 @@ class FanWheel(BaseChart):
         self._draw_center_circle(ax, team_logo)
 
         # Add logos and text for each segment
-        self._add_segment_content(ax, wheel_data, angle_step)
+        self._add_segment_content(ax, wheel_data, angle_step, audience_percentages)
 
         # Save with improved bbox settings to minimize whitespace
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight',
-                    facecolor='white', edgecolor='none',
+                    facecolor='none' if transparent else 'white', edgecolor='none',
+                    transparent=True if transparent else False,
                     pad_inches=0.05)  # REDUCED padding from default
         plt.close()
 
         logger.info(f"Fan wheel saved to {output_path}")
         return output_path
 
-    def _draw_wedges(self, ax, num_items: int, angle_step: float):
-        """Draw the wedge segments"""
+    def _get_audience_percentages(self, wheel_data: pd.DataFrame) -> List[float]:
+        """Get or generate audience percentages for each category
+        
+        Args:
+            wheel_data: DataFrame with wheel data
+            
+        Returns:
+            List of percentages (0-100) for each category
+        """
+        # Check if wheel_data has an 'audience_pct' column
+        if 'audience_pct' in wheel_data.columns:
+            return wheel_data['audience_pct'].tolist()
+        
+        # Otherwise, generate mock percentages based on category/behavior patterns
+        # This is for demonstration purposes as requested
+        mock_percentages = []
+        
+        for _, row in wheel_data.iterrows():
+            behavior = row.get('behavior', '').lower()
+            
+            # Mock percentages based on common category participation patterns
+            # High participation categories (60-90%)
+            if any(keyword in behavior for keyword in ['qsr', 'restaurant', 'food', 'streaming', 'fitness']):
+                mock_pct = np.random.uniform(65, 90)
+            # Medium participation categories (40-65%)
+            elif any(keyword in behavior for keyword in ['shopping', 'retail', 'hotel', 'travel', 'beauty', 'outdoor']):
+                mock_pct = np.random.uniform(45, 65)
+            # Lower participation categories (20-45%)
+            elif any(keyword in behavior for keyword in ['betting', 'gambling', 'luxury', 'premium']):
+                mock_pct = np.random.uniform(25, 45)
+            # Default medium-low
+            else:
+                mock_pct = np.random.uniform(40, 60)
+            
+            mock_percentages.append(mock_pct)
+        
+        logger.info(f"Generated mock audience percentages: {mock_percentages}")
+        return mock_percentages
+
+    def _draw_wedges(self, ax, num_items: int, angle_step: float, audience_percentages: Optional[List[float]] = None):
+        """Draw the wedge segments with heatmap coloring based on audience percentage
+        
+        Args:
+            ax: Matplotlib axis
+            num_items: Number of wedge segments
+            angle_step: Angle in degrees for each wedge
+            audience_percentages: Optional list of percentages (0-100) for each category's audience size
+        """
         for i in range(num_items):
             start_angle = i * angle_step - 90
             end_angle = (i + 1) * angle_step - 90
 
-            # Full wedge (background)
-            full_wedge = Wedge((0, 0), self.outer_radius, start_angle, end_angle,
-                               width=self.outer_radius,
-                               facecolor=self.primary_color,
-                               edgecolor='none',
-                               zorder=1)
-            ax.add_patch(full_wedge)
+            # Calculate red shade based on audience percentage (heatmap approach)
+            if audience_percentages and i < len(audience_percentages):
+                pct = audience_percentages[i]
+                # Map percentage to red intensity with MORE DRAMATIC gradient
+                # Low % (20-30%) -> Very light pink/almost white (#FFE5E5)
+                # High % (80-90%) -> Very dark red (#8B0000)
+                # Use a power curve to make differences more pronounced
+                intensity = (pct / 100.0) ** 1.5  # Power curve for more dramatic effect
+                
+                # Create dramatic red gradient: very light pink to very dark red
+                # Light (0%): RGB(255, 240, 240) = #FFF0F0 (very pale pink)
+                # Dark (100%): RGB(139, 0, 0) = #8B0000 (dark red)
+                r = int(255 - (255 - 139) * intensity)
+                g = int(240 * (1 - intensity) ** 0.8)  # Faster fade on green
+                b = int(240 * (1 - intensity) ** 0.8)  # Faster fade on blue
+                inner_color = f'#{r:02x}{g:02x}{b:02x}'
+            else:
+                # Default to medium red if no percentage data
+                inner_color = '#DC143C'  # Crimson
 
-            # Outer ring (lighter color)
+            # Draw the fixed-size inner ring with heatmap color
+            inner_wedge = Wedge((0, 0), self.logo_radius, start_angle, end_angle,
+                               width=self.logo_radius - self.inner_radius,
+                               facecolor=inner_color,
+                               edgecolor='none',
+                               zorder=2)
+            ax.add_patch(inner_wedge)
+
+            # Outer ring (light blue) - fixed size
             outer_ring = Wedge((0, 0), self.outer_radius, start_angle, end_angle,
                                width=self.outer_radius - self.logo_radius,
                                facecolor=self.accent_color,
                                edgecolor='none',
-                               zorder=2)
+                               zorder=1)
             ax.add_patch(outer_ring)
 
     def _add_dividing_lines(self, ax, num_items: int, angle_step: float):
@@ -391,7 +496,7 @@ class FanWheel(BaseChart):
                 fontfamily=self.font_family,  # Use font from font manager
                 color='white', zorder=22)
 
-    def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float):
+    def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float, audience_percentages: Optional[List[float]] = None):
         """Add logos and behavior text to each segment"""
         from textwrap import wrap
 
@@ -401,7 +506,7 @@ class FanWheel(BaseChart):
             center_angle = i * angle_step + angle_step / 2 - 90
             angle_rad = np.deg2rad(center_angle)
 
-            # Logo position
+            # Logo position - FIXED at logo_radius regardless of inner ring size
             logo_x = self.logo_radius * np.cos(angle_rad)
             logo_y = self.logo_radius * np.sin(angle_rad)
 
@@ -453,7 +558,7 @@ class FanWheel(BaseChart):
                     fontsize=22,
                     fontweight='bold',
                     fontfamily=self.font_family,  # Use font from font manager
-                    color='white',
+                    color=self.segment_text_color,
                     rotation=0,
                     linespacing=0.9,
                     zorder=7)
@@ -472,26 +577,22 @@ class FanWheel(BaseChart):
             x, y: Position coordinates
 
         Returns:
-            True if logo was added (real or fallback), False if using old placeholder
+            True if logo was added, False if no logo found
         """
         # Try to load actual logo if logo manager is available
         if self.logo_manager:
             logo_img = self.logo_manager.get_logo(merchant, self.logo_size)
 
             if logo_img is not None:
-                # Add actual logo
+                # Add actual logo only if found in files
                 self._add_logo_to_plot(ax, logo_img, x, y)
                 return True
             else:
-                # Create and add enhanced fallback logo
-                fallback_logo = self.logo_manager.create_fallback_logo(
-                    merchant, self.logo_size, 'white', '#888888'
-                )
-                self._add_logo_to_plot(ax, fallback_logo, x, y)
-                return True
+                # Don't add any placeholder - only use logos found in files
+                logger.debug(f"No logo found for {merchant}, skipping")
+                return False
 
-        # Fallback to original placeholder method
-        self._add_placeholder_logo(ax, merchant, x, y)
+        # No logo manager available
         return False
 
     def _add_logo_to_plot(self, ax, logo_img: Image.Image, x: float, y: float):

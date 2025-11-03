@@ -243,6 +243,12 @@ def generate_pptx_worker(job_id: str, team_key: str, options: dict):
         config_manager = TeamConfigManager()
         team_config = config_manager.get_team_config(team_key)
 
+        # Set Snowflake schema from team config if specified
+        if 'snowflake_schema' in team_config:
+            from data_processors.snowflake_connector import set_schema
+            set_schema(team_config['snowflake_schema'])
+            logger.info(f"Using schema: {team_config['snowflake_schema']}")
+
         JobManager.update_job(job_id,
                               team_name=team_config['team_name'],
                               progress=8,
@@ -953,6 +959,13 @@ def preview_hot_brands(team_key):
             return jsonify({'error': f'Team {team_key} not found'}), 404
 
         team_config = config_manager.get_team_config(team_key)
+        
+        # Set Snowflake schema from team config if specified
+        if 'snowflake_schema' in team_config:
+            from data_processors.snowflake_connector import set_schema
+            set_schema(team_config['snowflake_schema'])
+            logger.info(f"Using schema: {team_config['snowflake_schema']}")
+        
         logger.info(f"Processing hot brands for {team_config['team_name']}")
 
         # Initialize cache manager (optional but recommended)

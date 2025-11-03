@@ -94,6 +94,13 @@ class CategoryAnalyzer:
             self.comparison_pop = f"Local Gen Pop (Excl. {team_short})"
         self.league_fans = f"{league} Fans"
 
+        # Helper: preferred copy label for narrative text
+        # For Serie A reports, use European Soccer fans label
+        if self.team_name == 'Serie A':
+            self._copy_label = 'European Soccer fans'
+        else:
+            self._copy_label = self.audience_name if self.audience_name else f"{self.team_short} fans"
+
         # Initialize merchant name standardizer
         try:
             from utils.merchant_name_standardizer import MerchantNameStandardizer
@@ -277,16 +284,23 @@ class CategoryAnalyzer:
             logger.debug(f"  Top 5 by audience: {top_5_by_audience}")
 
         # 2. Top merchant by composite index (for recommendation)
+        # Check if COMPOSITE_INDEX column exists (some schemas may not have it)
+        composite_index_col = 'COMPOSITE_INDEX' if 'COMPOSITE_INDEX' in merchant_df.columns else 'PERC_INDEX'
+        
         rec_data = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
             (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
-            (merchant_df['COMPOSITE_INDEX'] > 0) &
             (merchant_df['PERC_AUDIENCE'] >= 0.01)
             ]
+        
+        # Add composite index filter only if the column exists
+        if 'COMPOSITE_INDEX' in merchant_df.columns:
+            rec_data = rec_data[rec_data['COMPOSITE_INDEX'] > 0]
+        
         if not rec_data.empty:
-            top_composite = rec_data.nlargest(1, 'COMPOSITE_INDEX')['MERCHANT'].iloc[0]
+            top_composite = rec_data.nlargest(1, composite_index_col)['MERCHANT'].iloc[0]
             merchants_needed.add(top_composite)
-            logger.debug(f"  Top by composite index: {top_composite}")
+            logger.debug(f"  Top by {composite_index_col}: {top_composite}")
 
         # 3. Check LAST_FULL_YEAR data for highest PPC/SPC merchants
         if merchant_last_year_df is not None and not merchant_last_year_df.empty and top_5_by_audience:
@@ -626,13 +640,13 @@ class CategoryAnalyzer:
         insights = []
 
         insights.append(
-            f"{self.team_short} fans are {abs(metrics.percent_likely):.0f}% "
+            f"{self._copy_label} are {abs(metrics.percent_likely):.0f}% "
             f"{'MORE' if metrics.percent_likely > 0 else 'LESS'} likely to spend on "
             f"{category_config['display_name']} than the {self.comparison_pop}"
         )
 
         insights.append(
-            f"{self.team_short} fans make an average of {abs(metrics.percent_purchases):.0f}% "
+            f"{self._copy_label} make an average of {abs(metrics.percent_purchases):.0f}% "
             f"{'more' if metrics.percent_purchases > 0 else 'fewer'} purchases per fan on "
             f"{category_config['display_name']} than the {self.comparison_pop}"
         )
@@ -665,12 +679,12 @@ class CategoryAnalyzer:
                     multiplier = round(perc_index / 100, 1)
 
                     insights.append(
-                        f"{self.team_short} fans are more than {multiplier}X more likely "
+                        f"{self._copy_label} are more than {multiplier}X more likely "
                         f"to spend on {top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
                 else:
                     insights.append(
-                        f"{self.team_short} fans are {likelihood_text} likely to spend on "
+                        f"{self._copy_label} are {likelihood_text} likely to spend on "
                         f"{top_sub['Subcategory']} vs. the {self.comparison_pop}"
                     )
             except (ValueError, IndexError) as e:
@@ -703,7 +717,7 @@ class CategoryAnalyzer:
             formatted_spc = f"${spc_value:.2f}"
 
         insights.append(
-            f"{self.team_short} fans spend an average of {formatted_spc} "
+            f"{self._copy_label} spend an average of {formatted_spc} "
             f"per fan per year on {subcategory_name}"
         )
 
@@ -798,27 +812,27 @@ class CategoryAnalyzer:
 
         if best_index_name == 'PERC_INDEX':
             return (
-                f"{self.team_short} fans are {index_diff:.0f}% more likely "
+                f"{self._copy_label} are {index_diff:.0f}% more likely "
                 f"to spend on {subcategory_name} when compared to the NBA average"
             )
         elif best_index_name == 'SPC_INDEX':
             return (
-                f"{self.team_short} fans have {index_diff:.0f}% higher spending per customer "
+                f"{self._copy_label} have {index_diff:.0f}% higher spending per customer "
                 f"on {subcategory_name} when compared to the NBA average"
             )
         elif best_index_name == 'SPP_INDEX':
             return (
-                f"{self.team_short} fans spend {index_diff:.0f}% more per purchase "
+                f"{self._copy_label} spend {index_diff:.0f}% more per purchase "
                 f"on {subcategory_name} when compared to the NBA average"
             )
         elif best_index_name == 'PPC_INDEX':
             return (
-                f"{self.team_short} fans make {index_diff:.0f}% more purchases "
+                f"{self._copy_label} make {index_diff:.0f}% more purchases "
                 f"of {subcategory_name} when compared to the NBA average"
             )
         else:
             return (
-                f"{self.team_short} fans show {index_diff:.0f}% higher overall engagement "
+                f"{self._copy_label} show {index_diff:.0f}% higher overall engagement "
                 f"with {subcategory_name} when compared to the NBA average"
             )
 
@@ -857,7 +871,7 @@ class CategoryAnalyzer:
 
         top_merchant = merchant_table.iloc[0]
         insights.append(
-            f"{top_merchant['Percent of Fans Who Spend']} of {self.team_short} fans "
+            f"{top_merchant['Percent of Fans Who Spend']} of {self._copy_label} "
             f"spent at {top_merchant['Brand']}"
         )
 
@@ -872,7 +886,7 @@ class CategoryAnalyzer:
             )
 
             insights.append(
-                f"{self.team_name} fans make an average of {highest_ppc_merchant['ppc']:.0f} "
+                f"{self._copy_label} make an average of {highest_ppc_merchant['ppc']:.0f} "
                 f"purchases per year at {standardized_name}"
             )
 
@@ -893,7 +907,7 @@ class CategoryAnalyzer:
             )
 
             insights.append(
-                f"{self.team_name} fans spent an average of {formatted_spc} per fan "
+                f"{self._copy_label} spent an average of {formatted_spc} per fan "
                 f"on {standardized_name} per year"
             )
 
@@ -904,7 +918,7 @@ class CategoryAnalyzer:
             )
 
             insights.append(
-                f"{self.team_name} fans are {best_nba_merchant['index_diff']:.0f}% more likely "
+                f"{self._copy_label} are {best_nba_merchant['index_diff']:.0f}% more likely "
                 f"to spend on {standardized_name} than {self.league} fans"
             )
 
@@ -984,12 +998,18 @@ class CategoryAnalyzer:
         if merchant_df.empty:
             return {}
 
+        # Check if COMPOSITE_INDEX column exists
+        composite_index_col = 'COMPOSITE_INDEX' if 'COMPOSITE_INDEX' in merchant_df.columns else 'PERC_INDEX'
+        
         team_data = merchant_df[
             (merchant_df['AUDIENCE'] == self.audience_name) &
             (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
-            (merchant_df['COMPOSITE_INDEX'] > 0) &
             (merchant_df['PERC_AUDIENCE'] >= 0.01)
             ]
+        
+        # Add composite index filter only if the column exists
+        if 'COMPOSITE_INDEX' in merchant_df.columns:
+            team_data = team_data[team_data['COMPOSITE_INDEX'] > 0]
 
         if team_data.empty:
             logger.warning(f"No merchants found with >= 1% audience for {self.team_name}")
@@ -1004,9 +1024,9 @@ class CategoryAnalyzer:
                 }
             }
 
-        best_merchant = team_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
+        best_merchant = team_data.nlargest(1, composite_index_col).iloc[0]
         merchant_name = best_merchant['MERCHANT']
-        composite_index = float(best_merchant['COMPOSITE_INDEX'])
+        composite_index = float(best_merchant[composite_index_col])
         perc_audience = float(best_merchant['PERC_AUDIENCE'])
 
         main_recommendation = (

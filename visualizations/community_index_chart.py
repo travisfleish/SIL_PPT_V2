@@ -15,6 +15,7 @@ import matplotlib.font_manager as fm
 import os
 
 from utils.font_manager import font_manager  # Added font manager import
+from typing import Union
 
 
 class CommunityIndexChart:
@@ -208,6 +209,129 @@ def create_community_chart_from_ranker(merchant_ranker,
     return chart.create(data, output_path)
 
 
+# ------------------------------
+# Offline CSV utilities
+# ------------------------------
+def _normalize_min_audience_threshold(min_audience_pct: Optional[float]) -> Optional[float]:
+    """Return a threshold expressed as a 0-1 decimal or None.
+
+    Accepts values in either 0-1 or 0-100 scale and normalizes to 0-1.
+    """
+    if min_audience_pct is None:
+        return None
+    # If value looks like a whole percent (e.g. 20 for 20%), convert to decimal
+    return min_audience_pct / 100.0 if min_audience_pct > 1.0 else min_audience_pct
+
+
+def load_community_data_from_csv(
+    community_csv_path: Union[str, Path],
+    audience: str = 'Seattle Reign FC',
+    comparison_population: str = 'Local Gen Pop (Excl. Seattle Reign Fans)',
+    top_n: int = 10,
+    min_audience_pct: Optional[float] = None,
+) -> pd.DataFrame:
+    """
+    Load and prepare community data from a local CSV export (offline mode).
+
+    Args:
+        community_csv_path: Path to seattle_reign_community.csv
+        audience: Value to match in 'AUDIENCE' column
+        comparison_population: Value to match in 'COMPARISON_POPULATION' column
+        top_n: Number of communities to return (by highest COMPOSITE_INDEX)
+        min_audience_pct: Optional threshold for 'PERC_AUDIENCE' (accepts 0-1 or 0-100)
+
+    Returns:
+        DataFrame with columns: 'Community', 'Audience_Pct', 'Composite_Index'
+    """
+    community_csv_path = Path(community_csv_path)
+    if not community_csv_path.exists():
+        raise FileNotFoundError(f"Community CSV not found: {community_csv_path}")
+
+    df = pd.read_csv(community_csv_path)
+
+    # Basic column validation
+    required_cols = {'AUDIENCE', 'COMPARISON_POPULATION', 'COMMUNITY', 'PERC_AUDIENCE', 'COMPOSITE_INDEX'}
+    missing = required_cols.difference(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns in {community_csv_path}: {sorted(missing)}")
+
+    # Filter to the requested slice
+    filtered = df[
+        (df['AUDIENCE'] == audience) &
+        (df['COMPARISON_POPULATION'] == comparison_population)
+    ].copy()
+
+    if filtered.empty:
+        raise ValueError(
+            "No rows matched the provided filters. "
+            f"audience='{audience}', comparison='{comparison_population}'"
+        )
+
+    # Normalize threshold and filter on audience percentage if specified
+    threshold = _normalize_min_audience_threshold(min_audience_pct)
+    if threshold is not None:
+        filtered = filtered[filtered['PERC_AUDIENCE'] >= threshold]
+
+    # Clean and sort
+    filtered = filtered.dropna(subset=['COMMUNITY', 'PERC_AUDIENCE', 'COMPOSITE_INDEX'])
+    filtered = filtered.sort_values('COMPOSITE_INDEX', ascending=False)
+
+    # Take top N and rename to chart schema
+    top = filtered.head(top_n).copy()
+    top = top.rename(columns={
+        'COMMUNITY': 'Community',
+        'PERC_AUDIENCE': 'Audience_Pct',
+        'COMPOSITE_INDEX': 'Composite_Index',
+    })
+
+    # Ensure only expected columns are returned
+    return top[['Community', 'Audience_Pct', 'Composite_Index']]
+
+
+def create_community_chart_from_csvs(
+    community_csv_path: Union[str, Path] = None,
+    audience: str = 'Seattle Reign FC',
+    comparison_population: str = 'Local Gen Pop (Excl. Seattle Reign Fans)',
+    top_n: int = 10,
+    min_audience_pct: Optional[float] = None,
+    team_colors: Optional[Dict[str, str]] = None,
+    output_path: Optional[Path] = None,
+) -> Path:
+    """
+    Convenience function to create chart using local CSV exports (offline mode).
+
+    By default, reads 'seattle_reign_community.csv' in the repository root.
+
+    Args:
+        community_csv_path: CSV path; defaults to repo-root/seattle_reign_community.csv
+        audience: Audience filter (e.g., 'Seattle Reign FC')
+        comparison_population: Comparison population filter (e.g., 'Local Gen Pop (Excl. Seattle Reign Fans)')
+        top_n: Number of communities to display
+        min_audience_pct: Optional threshold for PERC_AUDIENCE (0-1 or 0-100)
+        team_colors: Optional color dict {'primary', 'secondary'}
+        output_path: Optional output path for the PNG
+
+    Returns:
+        Path to generated chart image
+    """
+    # Default to repository root CSV if not provided
+    if community_csv_path is None:
+        # visualizations/community_index_chart.py -> project root
+        repo_root = Path(__file__).resolve().parent.parent
+        community_csv_path = repo_root / 'seattle_reign_community.csv'
+
+    data = load_community_data_from_csv(
+        community_csv_path=community_csv_path,
+        audience=audience,
+        comparison_population=comparison_population,
+        top_n=top_n,
+        min_audience_pct=min_audience_pct,
+    )
+
+    chart = CommunityIndexChart(team_colors)
+    return chart.create(data, output_path)
+
+
 # Standalone test function
 def test_community_index_chart():
     """Test with mock data matching the reference image"""
@@ -304,11 +428,34 @@ if __name__ == "__main__":
     parser.add_argument('--mock', action='store_true', help='Use mock data')
     parser.add_argument('--team', type=str, default='utah_jazz',
                         choices=['utah_jazz', 'dallas_cowboys'],
-                        help='Team to generate chart for')
+                        help='Team to generate chart for (Snowflake mode)')
+    parser.add_argument('--offline', action='store_true', help='Use local CSVs (offline)')
+    parser.add_argument('--community-csv', type=str, default=None,
+                        help='Path to seattle_reign_community.csv (defaults to repo root)')
+    parser.add_argument('--audience', type=str, default='Seattle Reign FC',
+                        help="AUDIENCE value to filter (offline)")
+    parser.add_argument('--comparison', type=str, default='Local Gen Pop (Excl. Seattle Reign Fans)',
+                        help="COMPARISON_POPULATION value to filter (offline)")
+    parser.add_argument('--top-n', type=int, default=10, help='Number of communities (offline)')
+    parser.add_argument('--min-audience', type=float, default=None,
+                        help='Minimum PERC_AUDIENCE threshold (0-1 or 0-100, offline)')
+    parser.add_argument('--output', type=str, default='community_index_chart.png',
+                        help='Output image path')
 
     args = parser.parse_args()
 
     if args.mock:
         test_community_index_chart()
+    elif args.offline:
+        out = create_community_chart_from_csvs(
+            community_csv_path=args.community_csv,
+            audience=args.audience,
+            comparison_population=args.comparison,
+            top_n=args.top_n,
+            min_audience_pct=args.min_audience,
+            team_colors=None,
+            output_path=Path(args.output),
+        )
+        print(f"Chart saved to: {out}")
     else:
         test_with_real_data(args.team)
