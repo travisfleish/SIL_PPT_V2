@@ -1,0 +1,571 @@
+{
+  "College Basketball Fan": {
+    "categories": [
+      {
+        "display_name": "Fitness",
+        "clean_name": "Fitness",
+        "csv_subcategory": "Fitness",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Fitness - Home Fitness",
+          "Fitness - Workout Classes",
+          "Fitness - Gyms & Clubs"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 3
+      },
+      {
+        "display_name": "Beauty",
+        "clean_name": "Beauty",
+        "csv_subcategory": "Beauty",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Beauty - Salons & Spas",
+          "Beauty - Cosmetics & Skincare",
+          "Beauty - Fragrance"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 3
+      },
+      {
+        "display_name": "Flowers",
+        "clean_name": "Flowers",
+        "csv_subcategory": "Retailers - Flowers",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Specialty Retailers - Outdoor",
+        "match_status": "MATCHED",
+        "perc_index": 121.84
+      },
+      {
+        "display_name": "Tax & Legal Services",
+        "clean_name": "Tax & Legal",
+        "csv_subcategory": "Business Services - Tax & Legal Services",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Business Services - Tax & Legal Services",
+        "match_status": "MATCHED",
+        "perc_index": 122.91
+      },
+      {
+        "display_name": "Beverages - Coffee & Tea",
+        "clean_name": "Coffee & Tea",
+        "csv_subcategory": "Beverages - Coffee & Tea",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Beverages - Coffee & Tea",
+        "match_status": "MATCHED",
+        "perc_index": 102.22
+      },
+      {
+        "display_name": "Home Improvement",
+        "clean_name": "Home Improvement",
+        "csv_subcategory": "Home - Home Improvement & Hardware",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Home - Home Improvement & Hardware",
+        "match_status": "MATCHED",
+        "perc_index": 103.53
+      },
+      {
+        "display_name": "Beverages - Alcohol",
+        "clean_name": "Alcohol",
+        "csv_subcategory": "Beverages - Alcohol",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Beverages - Coffee & Tea",
+        "match_status": "MATCHED",
+        "perc_index": 102.22
+      },
+      {
+        "display_name": "Auto Services",
+        "clean_name": "Auto Services",
+        "csv_subcategory": "Auto - Auto Services",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Auto - Auto Service",
+        "match_status": "MATCHED",
+        "perc_index": 125.89
+      },
+      {
+        "display_name": "Sports Betting",
+        "clean_name": "Sports Betting",
+        "csv_subcategory": "Gambling - Online",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Gambling - Online",
+        "match_status": "MATCHED",
+        "perc_index": 115.29
+      },
+      {
+        "display_name": "Streaming",
+        "clean_name": "Streaming",
+        "csv_subcategory": "Streaming",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Streaming - Specialty OTT - Sports",
+          "Streaming - OTT",
+          "Streaming - Platforms",
+          "Streaming - Specialty OTT - Anime"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 4
+      },
+      {
+        "display_name": "Food Delivery",
+        "clean_name": "Food Delivery",
+        "csv_subcategory": "Restaurants - Online Delivery",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - Online Delivery",
+        "match_status": "MATCHED",
+        "perc_index": 97.91
+      },
+      {
+        "display_name": "QSR",
+        "clean_name": "QSR",
+        "csv_subcategory": "Restaurants - QSR & Fast Casual",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - QSR & Fast Casual",
+        "match_status": "MATCHED",
+        "perc_index": 94.94
+      },
+      {
+        "display_name": "Apparel - Sneakers",
+        "clean_name": "Sneakers",
+        "csv_subcategory": "Athleisure - Sneakers Plus",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Athleisure - Sneakers Plus",
+        "match_status": "MATCHED",
+        "perc_index": 108.33
+      }
+    ],
+    "total_categories": 13,
+    "matched_categories": 13,
+    "available_in_snowflake": 48
+  },
+  "MLB Fan": {
+    "categories": [
+      {
+        "display_name": "Fitness",
+        "clean_name": "Fitness",
+        "csv_subcategory": "Fitness",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Fitness - Workout Classes",
+          "Fitness - Home Fitness",
+          "Fitness - Gyms & Clubs"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 3
+      },
+      {
+        "display_name": "Sober Curious",
+        "clean_name": "Sober Curious",
+        "csv_subcategory": "Beverages - Non Alcoholic",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Beverages - Coffee & Tea",
+        "match_status": "MATCHED",
+        "perc_index": 142.26
+      },
+      {
+        "display_name": "Travel - Airlines",
+        "clean_name": "Airlines",
+        "csv_subcategory": "Travel - Airlines",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Travel - Airlines",
+        "match_status": "MATCHED",
+        "perc_index": 157.73
+      },
+      {
+        "display_name": "Youth Sports",
+        "clean_name": "Youth Sports",
+        "csv_subcategory": "Amateur Sports - Youth Sports",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Amateur Sports - Youth Sports",
+        "match_status": "MATCHED",
+        "perc_index": 357.4
+      },
+      {
+        "display_name": "Sports Betting",
+        "clean_name": "Sports Betting",
+        "csv_subcategory": "Gambling - Online",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Gambling - Online",
+        "match_status": "MATCHED",
+        "perc_index": 215.4
+      },
+      {
+        "display_name": "Streaming OTT",
+        "clean_name": "Streaming OTT",
+        "csv_subcategory": "Streaming - OTT",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Streaming - OTT",
+        "match_status": "MATCHED",
+        "perc_index": 139.35
+      },
+      {
+        "display_name": "Food Delivery",
+        "clean_name": "Food Delivery",
+        "csv_subcategory": "Restaurants - Online Delivery",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - Online Delivery",
+        "match_status": "MATCHED",
+        "perc_index": 149.22
+      },
+      {
+        "display_name": "QSR",
+        "clean_name": "QSR",
+        "csv_subcategory": "Restaurants - QSR & Fast Casual",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - QSR & Fast Casual",
+        "match_status": "MATCHED",
+        "perc_index": 109.43
+      },
+      {
+        "display_name": "Pets - Retail",
+        "clean_name": "Pets",
+        "csv_subcategory": "Pets - Retail",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Pets - Retail",
+        "match_status": "MATCHED",
+        "perc_index": 157.56
+      },
+      {
+        "display_name": "Outdoor Retailers",
+        "clean_name": "Outdoor Retailers",
+        "csv_subcategory": "Specialty Retailers - Outdoor",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Specialty Retailers - Outdoor",
+        "match_status": "MATCHED",
+        "perc_index": 179.25
+      },
+      {
+        "display_name": "Beverages Coffee & Tea",
+        "clean_name": "Coffee & Tea",
+        "csv_subcategory": "Beverages - Coffee & Tea",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Beverages - Coffee & Tea",
+        "match_status": "MATCHED",
+        "perc_index": 142.26
+      },
+      {
+        "display_name": "Gaming - Publisher",
+        "clean_name": "Gaming",
+        "csv_subcategory": "Gaming - Publisher",
+        "mapping_type": "SUBCATEGORY",
+        "match_status": "NOT_FOUND"
+      }
+    ],
+    "total_categories": 12,
+    "matched_categories": 11,
+    "available_in_snowflake": 48
+  },
+  "Super Bowl Fan": {
+    "categories": [
+      {
+        "display_name": "Health & Fitness",
+        "clean_name": "Health & Fitness",
+        "csv_subcategory": "Fitness",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Fitness - Home Fitness",
+          "Fitness - Workout Classes",
+          "Fitness - Gyms & Clubs"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 3
+      },
+      {
+        "display_name": "Travel - airlines",
+        "clean_name": "Airlines",
+        "csv_subcategory": "Travel - Airlines",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Travel - Airlines",
+        "match_status": "MATCHED",
+        "perc_index": 101.7
+      },
+      {
+        "display_name": "Travel - Lodging & Accommodation",
+        "clean_name": "Travel",
+        "csv_subcategory": "Lodging & Accommodation",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Lodging & Accommodation - Alternative Accommodations",
+          "Lodging & Accommodation - Hotels"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 2
+      },
+      {
+        "display_name": "Sports Betting",
+        "clean_name": "Sports Betting",
+        "csv_subcategory": "Gambling - Online",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Gambling - Online",
+        "match_status": "MATCHED",
+        "perc_index": 104.53
+      },
+      {
+        "display_name": "Streaming OTT",
+        "clean_name": "Streaming OTT",
+        "csv_subcategory": "Streaming - OTT",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Streaming - OTT",
+        "match_status": "MATCHED",
+        "perc_index": 101.32
+      },
+      {
+        "display_name": "Food Delivery",
+        "clean_name": "Food Delivery",
+        "csv_subcategory": "Restaurants - Online Delivery",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - Online Delivery",
+        "match_status": "MATCHED",
+        "perc_index": 93.6
+      },
+      {
+        "display_name": "Auto",
+        "clean_name": "Auto",
+        "csv_subcategory": "Auto",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Auto - Auto Service",
+          "Auto - EV Charging",
+          "Auto - Tire Service",
+          "Auto - Car Dealers",
+          "Auto - Oil Change",
+          "Auto - Motorcycle Dealers",
+          "Auto - Car Washes",
+          "Auto - Auto Parts"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 8
+      },
+      {
+        "display_name": "QSR",
+        "clean_name": "QSR",
+        "csv_subcategory": "Restaurants - QSR & Fast Casual",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - QSR & Fast Casual",
+        "match_status": "MATCHED",
+        "perc_index": 94.66
+      },
+      {
+        "display_name": "Entertainment & Music",
+        "clean_name": "Entertainment & Music",
+        "csv_subcategory": "Entertainment & News - Musicians",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Entertainment & News - Musicians",
+        "match_status": "MATCHED",
+        "perc_index": 118.66
+      }
+    ],
+    "total_categories": 9,
+    "matched_categories": 9,
+    "available_in_snowflake": 48
+  },
+  "NWSL Fan": {
+    "categories": [
+      {
+        "display_name": "Boutique Fitness",
+        "clean_name": "Boutique Fitness",
+        "csv_subcategory": "Fitness",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Fitness - Workout Classes",
+          "Fitness - Home Fitness",
+          "Fitness - Gyms & Clubs"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 3
+      },
+      {
+        "display_name": "Athleisure",
+        "clean_name": "Athleisure",
+        "csv_subcategory": "Athleisure",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Athleisure - Activewear",
+          "Athleisure - Sneakers Plus"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 2
+      },
+      {
+        "display_name": "Travel",
+        "clean_name": "Travel",
+        "csv_subcategory": "Travel",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Travel - Retail",
+          "Travel - Train",
+          "Travel - Airports",
+          "Travel - Rental Cars",
+          "Travel - Airlines",
+          "Travel - Travel Agencies",
+          "Travel - Cruises"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 7
+      },
+      {
+        "display_name": "Streaming OTT",
+        "clean_name": "Streaming OTT",
+        "csv_subcategory": "Streaming - OTT",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Streaming - OTT",
+        "match_status": "MATCHED",
+        "perc_index": 188.21
+      },
+      {
+        "display_name": "Food Delivery",
+        "clean_name": "Food Delivery",
+        "csv_subcategory": "Restaurants - Online Delivery",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - Online Delivery",
+        "match_status": "MATCHED",
+        "perc_index": 236.81
+      },
+      {
+        "display_name": "QSR",
+        "clean_name": "QSR",
+        "csv_subcategory": "Restaurants - QSR & Fast Casual",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - QSR & Fast Casual",
+        "match_status": "MATCHED",
+        "perc_index": 128.49
+      },
+      {
+        "display_name": "Beauty - cosmetics & skincare",
+        "clean_name": "Beauty",
+        "csv_subcategory": "Beauty - Cosmetics & Skincare",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Beauty - Cosmetics & Skincare",
+        "match_status": "MATCHED",
+        "perc_index": 212.04
+      },
+      {
+        "display_name": "Home Decor",
+        "clean_name": "Home Decor",
+        "csv_subcategory": "Home Furnishings & Goods - Retail",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Home Furnishings & Goods - Retail",
+        "match_status": "MATCHED",
+        "perc_index": 214.47
+      },
+      {
+        "display_name": "Pets",
+        "clean_name": "Pets",
+        "csv_subcategory": "Pets",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Pets - Pet Services",
+          "Pets - Pet Healthcare",
+          "Pets - Pet Food",
+          "Pets - Subscriptions",
+          "Pets - Retail",
+          "Pets - Pet Supplies"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 6
+      },
+      {
+        "display_name": "E-tailers",
+        "clean_name": "E-tailers",
+        "csv_subcategory": "Retailers - Online E-Tail",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Retailers - Online E-Tail",
+        "match_status": "MATCHED",
+        "perc_index": 125.33
+      }
+    ],
+    "total_categories": 10,
+    "matched_categories": 10,
+    "available_in_snowflake": 48
+  },
+  "MLS Fan": {
+    "categories": [
+      {
+        "display_name": "Health & Fitness",
+        "clean_name": "Health & Fitness",
+        "csv_subcategory": "Fitness",
+        "mapping_type": "CATEGORY",
+        "snowflake_subcategories": [
+          "Fitness - Workout Classes",
+          "Fitness - Home Fitness",
+          "Fitness - Gyms & Clubs"
+        ],
+        "match_status": "MATCHED",
+        "subcategory_count": 3
+      },
+      {
+        "display_name": "Sports Betting",
+        "clean_name": "Sports Betting",
+        "csv_subcategory": "Gambling - Online",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Gambling - Online",
+        "match_status": "MATCHED",
+        "perc_index": 323.13
+      },
+      {
+        "display_name": "Streaming OTT",
+        "clean_name": "Streaming OTT",
+        "csv_subcategory": "Streaming - OTT",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Streaming - OTT",
+        "match_status": "MATCHED",
+        "perc_index": 168.71
+      },
+      {
+        "display_name": "Food Delivery",
+        "clean_name": "Food Delivery",
+        "csv_subcategory": "Restaurants - Online Delivery",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - Online Delivery",
+        "match_status": "MATCHED",
+        "perc_index": 200.58
+      },
+      {
+        "display_name": "QSR",
+        "clean_name": "QSR",
+        "csv_subcategory": "Restaurants - QSR & Fast Casual",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Restaurants - QSR & Fast Casual",
+        "match_status": "MATCHED",
+        "perc_index": 120.06
+      },
+      {
+        "display_name": "Travel - Airlines",
+        "clean_name": "Travel - Airlines",
+        "csv_subcategory": "Travel - Airlines",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Travel - Airlines",
+        "match_status": "MATCHED",
+        "perc_index": 203.9
+      },
+      {
+        "display_name": "Dollar Stores",
+        "clean_name": "Dollar Stores",
+        "csv_subcategory": "Retailers - Dollar & Discount Stores",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Entertainment & News - Musicians",
+        "match_status": "MATCHED",
+        "perc_index": 537.15
+      },
+      {
+        "display_name": "Theme Parks",
+        "clean_name": "Theme Parks",
+        "csv_subcategory": "Attractions - Theme Parks",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Attractions - Theme Parks",
+        "match_status": "MATCHED",
+        "perc_index": 272.83
+      },
+      {
+        "display_name": "Movie theaters",
+        "clean_name": "Movie theaters",
+        "csv_subcategory": "Entertainment & News - Movies",
+        "mapping_type": "SUBCATEGORY",
+        "snowflake_subcategory": "Entertainment & News - Movies",
+        "match_status": "MATCHED",
+        "perc_index": 239.89
+      }
+    ],
+    "total_categories": 9,
+    "matched_categories": 9,
+    "available_in_snowflake": 48
+  }
+}

@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import Wedge, Circle, Polygon
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import matplotlib.patheffects as path_effects
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
@@ -52,14 +53,17 @@ class FanWheel(BaseChart):
         # Use white text on non-white wedges (as requested)
         self.segment_text_color = '#FFFFFF'
 
-        # Visualization parameters
+        # Visualization parameters - reorganized layout
         self.outer_radius = 5.0
-        self.logo_radius = 2.8
-        self.inner_radius = 1.6
+        self.text_radius = 4.5  # Category names moved slightly inward
+        self.logo_radius = 3.7  # Logos moved slightly inward
+        self.inner_radius = 1.6  # Keep original center circle size
+        self.bar_start_radius = 1.6  # Bars start AT edge of black circle (no gap)
+        self.bar_end_radius = 3.2   # Bars end flush against light blue area
 
         # Logo settings
         self.enable_logos = enable_logos
-        self.logo_size = (120, 120)  # Size for logos in pixels
+        self.logo_size = (110, 110)  # Logo size
 
         # Initialize logo manager if enabled
         self.logo_manager = LogoManager(logo_dir) if enable_logos else None
@@ -67,8 +71,8 @@ class FanWheel(BaseChart):
         # Load arrow logo during initialization
         self.arrow_logo = self._load_arrow_logo()
 
-        # Get font family from font manager
-        self.font_family = font_manager.get_font_family('Red Hat Display')
+        # Use simple, readable sans-serif font
+        self.font_family = 'sans-serif'
         logger.info(f"Using font family: {self.font_family}")
 
     def _hex_to_rgb(self, hex_color: str):
@@ -132,6 +136,7 @@ class FanWheel(BaseChart):
 
         Args:
             wheel_data: DataFrame with columns: COMMUNITY, MERCHANT, behavior, PERC_INDEX
+                       Optional: category_group, group_color for category grouping
             output_path: Where to save the visualization
             team_logo: Optional PIL Image of team logo
 
@@ -152,7 +157,7 @@ class FanWheel(BaseChart):
 
         # FIXED: Reduce whitespace by setting limits closer to actual wheel size
         margin = 0.3  # Small margin around the wheel
-        limit = self.outer_radius + margin  # 5.0 + 0.3 = 5.3
+        limit = self.outer_radius + margin + 0.5  # Extra space for text labels
         ax.set_xlim(-limit, limit)
         ax.set_ylim(-limit, limit)
         ax.axis('off')
@@ -166,8 +171,11 @@ class FanWheel(BaseChart):
         # Extract or generate audience percentages for each category
         audience_percentages = self._get_audience_percentages(wheel_data)
 
-        # Draw wedges with variable inner ring sizes
-        self._draw_wedges(ax, num_items, angle_step, audience_percentages)
+        # Draw variable bars and flush light blue wedges together
+        self._draw_bars_and_wedges(ax, num_items, angle_step, audience_percentages)
+        
+        # Add category names on outer edge
+        self._draw_category_labels(ax, wheel_data, angle_step)
 
         # Add dividing lines
         self._add_dividing_lines(ax, num_items, angle_step)
@@ -231,8 +239,8 @@ class FanWheel(BaseChart):
         logger.info(f"Generated mock audience percentages: {mock_percentages}")
         return mock_percentages
 
-    def _draw_wedges(self, ax, num_items: int, angle_step: float, audience_percentages: Optional[List[float]] = None):
-        """Draw the wedge segments with heatmap coloring based on audience percentage
+    def _draw_bars_and_wedges(self, ax, num_items: int, angle_step: float, audience_percentages: Optional[List[float]] = None):
+        """Draw variable bars with flush light blue wedges (no white space)
         
         Args:
             ax: Matplotlib axis
@@ -240,45 +248,92 @@ class FanWheel(BaseChart):
             angle_step: Angle in degrees for each wedge
             audience_percentages: Optional list of percentages (0-100) for each category's audience size
         """
+        # Define the range for variable bars
+        min_bar_radius = self.bar_start_radius  # Minimum bar extent
+        max_bar_radius = self.bar_end_radius    # Maximum bar extent
+        
         for i in range(num_items):
             start_angle = i * angle_step - 90
             end_angle = (i + 1) * angle_step - 90
 
-            # Calculate red shade based on audience percentage (heatmap approach)
+            # Calculate variable bar radius based on audience percentage
             if audience_percentages and i < len(audience_percentages):
                 pct = audience_percentages[i]
-                # Map percentage to red intensity with MORE DRAMATIC gradient
-                # Low % (20-30%) -> Very light pink/almost white (#FFE5E5)
-                # High % (80-90%) -> Very dark red (#8B0000)
-                # Use a power curve to make differences more pronounced
-                intensity = (pct / 100.0) ** 1.5  # Power curve for more dramatic effect
-                
-                # Create dramatic red gradient: very light pink to very dark red
-                # Light (0%): RGB(255, 240, 240) = #FFF0F0 (very pale pink)
-                # Dark (100%): RGB(139, 0, 0) = #8B0000 (dark red)
-                r = int(255 - (255 - 139) * intensity)
-                g = int(240 * (1 - intensity) ** 0.8)  # Faster fade on green
-                b = int(240 * (1 - intensity) ** 0.8)  # Faster fade on blue
-                inner_color = f'#{r:02x}{g:02x}{b:02x}'
+                # Map percentage (0-100) to bar radius
+                bar_radius = min_bar_radius + (max_bar_radius - min_bar_radius) * (pct / 100.0)
             else:
-                # Default to medium red if no percentage data
-                inner_color = '#DC143C'  # Crimson
+                # Default to 50% if no percentage data
+                bar_radius = min_bar_radius + (max_bar_radius - min_bar_radius) * 0.5
 
-            # Draw the fixed-size inner ring with heatmap color
-            inner_wedge = Wedge((0, 0), self.logo_radius, start_angle, end_angle,
-                               width=self.logo_radius - self.inner_radius,
-                               facecolor=inner_color,
-                               edgecolor='none',
-                               zorder=2)
-            ax.add_patch(inner_wedge)
-
-            # Outer ring (light blue) - fixed size
-            outer_ring = Wedge((0, 0), self.outer_radius, start_angle, end_angle,
-                               width=self.outer_radius - self.logo_radius,
-                               facecolor=self.accent_color,
+            # Draw the variable-length bar (dark blue)
+            bar_wedge = Wedge((0, 0), bar_radius, start_angle, end_angle,
+                             width=bar_radius - min_bar_radius,
+                             facecolor=self.primary_color,  # Dark blue bars
+                             edgecolor='none',
+                             zorder=2)
+            ax.add_patch(bar_wedge)
+            
+            # Draw light blue wedge that starts exactly where this bar ends (flush, no gap)
+            outer_wedge = Wedge((0, 0), self.outer_radius, start_angle, end_angle,
+                               width=self.outer_radius - bar_radius,  # Start where bar ends
+                               facecolor=self.accent_color,  # Light blue
                                edgecolor='none',
                                zorder=1)
-            ax.add_patch(outer_ring)
+            ax.add_patch(outer_wedge)
+
+    def _draw_category_labels(self, ax, wheel_data: pd.DataFrame, angle_step: float):
+        """Add category names inside the wheel with radial orientation (reading outward)
+        
+        Args:
+            ax: Matplotlib axis
+            wheel_data: DataFrame with behavior column
+            angle_step: Angle in degrees for each wedge
+        """
+        for i, (_, row) in enumerate(wheel_data.iterrows()):
+            start_angle = i * angle_step - 90
+            end_angle = (i + 1) * angle_step - 90
+            center_angle = (start_angle + end_angle) / 2
+            
+            # Position text inside the wheel, near outer edge but still within
+            text_radius = self.text_radius  # Use the configured text radius
+            angle_rad = np.deg2rad(center_angle)
+            text_x = text_radius * np.cos(angle_rad)
+            text_y = text_radius * np.sin(angle_rad)
+            
+            # Get behavior text for label
+            behavior_text = row.get('behavior', '')
+            
+            # Rose chart orientation: automatic based on position
+            # Dividing line is the HORIZONTAL axis (not vertical)
+            # Top half (0° to 180°): flip 180° - so text reads left-to-right from outside
+            # Bottom half (180° to 360°): normal orientation - no flip
+            # Like month labels on a circular calendar
+            
+            # Normalize angle to 0-360 range
+            normalized_angle = center_angle % 360
+            
+            # Base rotation perpendicular to radius
+            rotation_angle = center_angle + 90
+            
+            # Top half of circle: flip 180° so text reads left-to-right
+            if normalized_angle < 180:
+                rotation_angle += 180
+            
+            # Create text with shadow effect for better legibility
+            text_obj = ax.text(text_x, text_y, behavior_text,
+                   ha='center', va='center',
+                   fontsize=16,  # Increased from 12 to 16
+                   fontweight='bold',
+                   fontfamily=self.font_family,
+                   color='white',  # Changed from black to white
+                   rotation=rotation_angle,
+                   zorder=8)
+            
+            # Add subtle shadow effect
+            text_obj.set_path_effects([
+                path_effects.Stroke(linewidth=3, foreground='black', alpha=0.5),
+                path_effects.Normal()
+            ])
 
     def _add_dividing_lines(self, ax, num_items: int, angle_step: float):
         """Add white dividing lines between segments"""
@@ -497,16 +552,14 @@ class FanWheel(BaseChart):
                 color='white', zorder=22)
 
     def _add_segment_content(self, ax, wheel_data: pd.DataFrame, angle_step: float, audience_percentages: Optional[List[float]] = None):
-        """Add logos and behavior text to each segment"""
-        from textwrap import wrap
-
+        """Add logos to each segment (text moved to outer rings)"""
         missing_logos = []
 
         for i, (_, row) in enumerate(wheel_data.iterrows()):
             center_angle = i * angle_step + angle_step / 2 - 90
             angle_rad = np.deg2rad(center_angle)
 
-            # Logo position - FIXED at logo_radius regardless of inner ring size
+            # Logo position - at logo_radius (moved outward)
             logo_x = self.logo_radius * np.cos(angle_rad)
             logo_y = self.logo_radius * np.sin(angle_rad)
 
@@ -516,52 +569,6 @@ class FanWheel(BaseChart):
 
             if not logo_added:
                 missing_logos.append(merchant_name)
-
-            # Add behavior text with proper word wrapping
-            text_radius = self.outer_radius - 0.9
-            text_x = text_radius * np.cos(angle_rad)
-            text_y = text_radius * np.sin(angle_rad)
-
-            # Wrap the behavior text to fit in the wedge
-            behavior_text = row['behavior']
-
-            # IMPROVED WRAPPING LOGIC
-            # Count words instead of characters for better wrapping decisions
-            word_count = len(behavior_text.split())
-
-            if word_count >= 4 or len(behavior_text) > 20:
-                # 4+ words or long text should wrap to 3 lines
-                # Use width=10 to force more aggressive wrapping
-                wrapped_text = '\n'.join(wrap(behavior_text,
-                                              width=10,
-                                              break_long_words=False))
-            elif word_count == 3 or len(behavior_text) > 12:
-                # 3 words or medium text should wrap to 2-3 lines
-                # Use width=11 for moderate wrapping
-                wrapped_text = '\n'.join(wrap(behavior_text,
-                                              width=11,
-                                              break_long_words=False))
-            else:
-                # 1-2 words or very short text can stay on one line
-                wrapped_text = behavior_text
-
-            # Additional check: if we still only got 2 lines but text is long,
-            # try again with tighter width
-            lines = wrapped_text.split('\n')
-            if len(lines) == 2 and len(behavior_text) > 18:
-                wrapped_text = '\n'.join(wrap(behavior_text,
-                                              width=9,
-                                              break_long_words=False))
-
-            ax.text(text_x, text_y, wrapped_text,
-                    ha='center', va='center',
-                    fontsize=22,
-                    fontweight='bold',
-                    fontfamily=self.font_family,  # Use font from font manager
-                    color=self.segment_text_color,
-                    rotation=0,
-                    linespacing=0.9,
-                    zorder=7)
 
         # Log missing logos for debugging
         if missing_logos and self.enable_logos:
@@ -588,11 +595,13 @@ class FanWheel(BaseChart):
                 self._add_logo_to_plot(ax, logo_img, x, y)
                 return True
             else:
-                # Don't add any placeholder - only use logos found in files
-                logger.debug(f"No logo found for {merchant}, skipping")
+                # Add placeholder when logo not found
+                logger.debug(f"No logo found for {merchant}, adding placeholder")
+                self._add_placeholder_logo(ax, merchant, x, y)
                 return False
 
-        # No logo manager available
+        # No logo manager available - add placeholder
+        self._add_placeholder_logo(ax, merchant, x, y)
         return False
 
     def _add_logo_to_plot(self, ax, logo_img: Image.Image, x: float, y: float):
@@ -608,7 +617,7 @@ class FanWheel(BaseChart):
         logo_array = np.array(logo_img)
 
         # Create OffsetImage
-        imagebox = OffsetImage(logo_array, zoom=0.7)  # INCREASED: zoom from 0.5 to 0.7
+        imagebox = OffsetImage(logo_array, zoom=0.625)  # Zoom factor for logo display
 
         # Create AnnotationBbox
         ab = AnnotationBbox(imagebox, (x, y),
