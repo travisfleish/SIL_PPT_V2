@@ -7,7 +7,7 @@ Demonstrates the bar graph concept where inner ring size varies by category audi
 import pandas as pd
 from pathlib import Path
 import sys
-from visualizations.fan_wheel import FanWheel
+from visualizations.fan_wheel_standalone import FanWheel
 
 def create_mockup_cfb_wheel():
     """Create a mockup CFB fan wheel with grouped categories and color coding"""

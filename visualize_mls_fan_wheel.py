@@ -4,7 +4,7 @@ Generate visual fan wheel for MLS Fan
 """
 
 import pandas as pd
-from visualizations.fan_wheel import FanWheel
+from visualizations.fan_wheel_standalone import FanWheel
 from pathlib import Path
 
 # MLS Fan colors (matching the CFB mockup style)

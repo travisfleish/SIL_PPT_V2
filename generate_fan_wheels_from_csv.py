@@ -4,7 +4,7 @@ Generate fan wheels for all audiences using the CSV data (no Snowflake needed)
 """
 
 import pandas as pd
-from visualizations.fan_wheel import FanWheel
+from visualizations.fan_wheel_standalone import FanWheel
 from pathlib import Path
 import logging
 
