@@ -1,53 +1,53 @@
-audience,display_name,clean_name,mapping_type,csv_subcategory,snowflake_subcategories,subcategory_count,category_perc_audience,category_perc_index,top_merchant,merchant_perc_index,merchant_perc_audience
-College Basketball Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,0.730102,94.94,MCDONALD'S,96.43,0.557117
-College Basketball Fan,Home Improvement,Home Improvement,SUBCATEGORY,Home - Home Improvement & Hardware,Home - Home Improvement & Hardware,1,0.439593,103.53,THE HOME DEPOT,105.14,0.267629
-College Basketball Fan,Beverages - Coffee & Tea,Coffee & Tea,SUBCATEGORY,Beverages - Coffee & Tea,Beverages - Coffee & Tea,1,0.422896,102.22,DUNKIN' DONUTS,112.11,0.274039
-College Basketball Fan,Beverages - Alcohol,Alcohol,SUBCATEGORY,Beverages - Alcohol,Beverages - Coffee & Tea,1,0.422896,102.22,DUNKIN' DONUTS,112.11,0.274039
-College Basketball Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,0.231114,97.91,DOORDASH,97.7,0.158179
-College Basketball Fan,Flowers,Flowers,SUBCATEGORY,Retailers - Flowers,Specialty Retailers - Outdoor,1,0.167502,121.84,BASS PRO SHOPS,111.0,0.042547
-College Basketball Fan,Apparel - Sneakers,Sneakers,SUBCATEGORY,Athleisure - Sneakers Plus,Athleisure - Sneakers Plus,1,0.132462,108.33,NIKE,106.75,0.076754
-College Basketball Fan,Tax & Legal Services,Tax & Legal,SUBCATEGORY,Business Services - Tax & Legal Services,Business Services - Tax & Legal Services,1,0.106915,122.91,TURBOTAX,142.85,0.047615
-College Basketball Fan,Auto Services,Auto Services,SUBCATEGORY,Auto - Auto Services,Auto - Auto Service,1,0.106915,125.89,AMERICAN AUTOMOBILE ASSOCIATION,127.27,0.057107
-College Basketball Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,0.052039,115.29,FANDUEL.COM,117.74,0.01959
-College Basketball Fan,Fitness,Fitness,CATEGORY,Fitness,"Fitness - Home Fitness, Fitness - Workout Classes, Fitness - Gyms & Clubs",3,,,PLANET FITNESS,88.23,0.021292
-College Basketball Fan,Beauty,Beauty,CATEGORY,Beauty,"Beauty - Salons & Spas, Beauty - Cosmetics & Skincare, Beauty - Fragrance",3,,,ULTA BEAUTY,111.85,0.172872
-College Basketball Fan,Streaming,Streaming,CATEGORY,Streaming,"Streaming - Specialty OTT - Sports, Streaming - OTT, Streaming - Platforms, Streaming - Specialty OTT - Anime",4,,,NETFLIX,104.64,0.167653
-MLB Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,0.841518,109.43,MCDONALD'S,121.72,0.703268
-MLB Fan,Sober Curious,Sober Curious,SUBCATEGORY,Beverages - Non Alcoholic,Beverages - Coffee & Tea,1,0.588523,142.26,STARBUCKS,152.87,0.41738
-MLB Fan,Beverages Coffee & Tea,Coffee & Tea,SUBCATEGORY,Beverages - Coffee & Tea,Beverages - Coffee & Tea,1,0.588523,142.26,STARBUCKS,152.87,0.41738
-MLB Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,0.423567,139.35,NETFLIX,138.0,0.221098
-MLB Fan,Pets - Retail,Pets,SUBCATEGORY,Pets - Retail,Pets - Retail,1,0.360603,157.56,PETSMART,169.52,0.254788
-MLB Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,0.352219,149.22,DOORDASH,146.82,0.2377
-MLB Fan,Travel - Airlines,Airlines,SUBCATEGORY,Travel - Airlines,Travel - Airlines,1,0.264069,157.73,AMERICAN AIRLINES,170.91,0.094168
-MLB Fan,Outdoor Retailers,Outdoor Retailers,SUBCATEGORY,Specialty Retailers - Outdoor,Specialty Retailers - Outdoor,1,0.246424,179.25,BASS PRO SHOPS,177.35,0.067977
-MLB Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,0.097229,215.4,FANDUEL.COM,212.65,0.03538
-MLB Fan,Youth Sports,Youth Sports,SUBCATEGORY,Amateur Sports - Youth Sports,Amateur Sports - Youth Sports,1,0.02782,357.4,D-Bat,459.54,0.007132
-MLB Fan,Fitness,Fitness,CATEGORY,Fitness,"Fitness - Workout Classes, Fitness - Home Fitness, Fitness - Gyms & Clubs",3,,,PLANET FITNESS,138.17,0.033343
-MLS Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,0.923239,120.06,MCDONALD'S,141.53,0.8177
-MLS Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,0.512813,168.71,NETFLIX,164.59,0.263696
-MLS Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,0.473461,200.58,DOORDASH,192.59,0.311789
-MLS Fan,Movie theaters,Movie theaters,SUBCATEGORY,Entertainment & News - Movies,Entertainment & News - Movies,1,0.405652,239.89,AMC THEATRES,308.35,0.208487
-MLS Fan,Travel - Airlines,Travel - Airlines,SUBCATEGORY,Travel - Airlines,Travel - Airlines,1,0.341373,203.9,AMERICAN AIRLINES,237.38,0.13079
-MLS Fan,Theme Parks,Theme Parks,SUBCATEGORY,Attractions - Theme Parks,Attractions - Theme Parks,1,0.335323,272.83,DISNEYLAND RESORT,388.43,0.107541
-MLS Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,0.145855,323.13,FANDUEL.COM,359.08,0.059744
-MLS Fan,Dollar Stores,Dollar Stores,SUBCATEGORY,Retailers - Dollar & Discount Stores,Entertainment & News - Musicians,1,0.105475,537.15,Taylor Swift,533.42,0.021598
-MLS Fan,Health & Fitness,Health & Fitness,CATEGORY,Fitness,"Fitness - Workout Classes, Fitness - Home Fitness, Fitness - Gyms & Clubs",3,,,PLANET FITNESS,186.45,0.044994
-NWSL Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,0.988093,128.49,MCDONALD'S,157.83,0.911901
-NWSL Fan,Beauty - cosmetics & skincare,Beauty,SUBCATEGORY,Beauty - Cosmetics & Skincare,Beauty - Cosmetics & Skincare,1,0.615264,212.04,ULTA BEAUTY,279.71,0.432328
-NWSL Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,0.572095,188.21,NETFLIX,188.87,0.302599
-NWSL Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,0.558982,236.81,DOORDASH,217.75,0.352534
-NWSL Fan,E-tailers,E-tailers,SUBCATEGORY,Retailers - Online E-Tail,Retailers - Online E-Tail,1,0.539325,125.33,AMAZON.COM,107.78,0.360503
-NWSL Fan,Home Decor,Home Decor,SUBCATEGORY,Home Furnishings & Goods - Retail,Home Furnishings & Goods - Retail,1,0.523144,214.47,IKEA,441.68,0.281077
-NWSL Fan,Boutique Fitness,Boutique Fitness,CATEGORY,Fitness,"Fitness - Workout Classes, Fitness - Home Fitness, Fitness - Gyms & Clubs",3,,,LA FITNESS INC,526.9,0.049044
-NWSL Fan,Athleisure,Athleisure,CATEGORY,Athleisure,"Athleisure - Activewear, Athleisure - Sneakers Plus",2,,,NIKE,344.23,0.247506
-NWSL Fan,Travel,Travel,CATEGORY,Travel,"Travel - Retail, Travel - Train, Travel - Airports, Travel - Rental Cars, Travel - Airlines, Travel - Travel Agencies, Travel - Cruises",7,,,HUDSON,562.22,0.238566
-NWSL Fan,Pets,Pets,CATEGORY,Pets,"Pets - Pet Services, Pets - Pet Healthcare, Pets - Pet Food, Pets - Subscriptions, Pets - Retail, Pets - Pet Supplies",6,,,PETSMART,237.06,0.356316
-Super Bowl Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,0.727969,94.66,MCDONALD'S,96.0,0.554657
-Super Bowl Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,0.307996,101.32,NETFLIX,103.19,0.165334
-Super Bowl Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,0.22094,93.6,DOORDASH,92.36,0.14952
-Super Bowl Fan,Travel - airlines,Airlines,SUBCATEGORY,Travel - Airlines,Travel - Airlines,1,0.170264,101.7,AMERICAN AIRLINES,105.11,0.057915
-Super Bowl Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,0.047181,104.53,FANDUEL.COM,104.97,0.017465
-Super Bowl Fan,Entertainment & Music,Entertainment & Music,SUBCATEGORY,Entertainment & News - Musicians,Entertainment & News - Musicians,1,0.023301,118.66,Taylor Swift,127.86,0.005177
-Super Bowl Fan,Health & Fitness,Health & Fitness,CATEGORY,Fitness,"Fitness - Home Fitness, Fitness - Workout Classes, Fitness - Gyms & Clubs",3,,,PLANET FITNESS,84.74,0.020449
-Super Bowl Fan,Travel - Lodging & Accommodation,Travel,CATEGORY,Lodging & Accommodation,"Lodging & Accommodation - Alternative Accommodations, Lodging & Accommodation - Hotels",2,,,AIRBNB,100.64,0.042115
-Super Bowl Fan,Auto,Auto,CATEGORY,Auto,"Auto - Auto Service, Auto - EV Charging, Auto - Tire Service, Auto - Car Dealers, Auto - Oil Change, Auto - Motorcycle Dealers, Auto - Car Washes, Auto - Auto Parts",8,,,AUTOZONE,91.51,0.125421
+audience,display_name,clean_name,mapping_type,csv_subcategory,snowflake_subcategories,,subcategory_count,category_perc_audience,category_perc_index,top_merchant,merchant_perc_index,merchant_perc_audience
+College Basketball Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,1,0.730102,94.94,MCDONALD'S,96.43,0.557117
+College Basketball Fan,Home Improvement,Home Improvement,SUBCATEGORY,Home - Home Improvement & Hardware,Home - Home Improvement & Hardware,1,1,0.439593,103.53,THE HOME DEPOT,105.14,0.267629
+College Basketball Fan,Beverages - Coffee & Tea,Coffee & Tea,SUBCATEGORY,Beverages - Coffee & Tea,Beverages - Coffee & Tea,1,1,0.422896,102.22,DUNKIN' DONUTS,112.11,0.274039
+College Basketball Fan,Beverages - Alcohol,Alcohol,SUBCATEGORY,Beverages - Alcohol,Beverages - Coffee & Tea,0,1,0.422896,102.22,DUNKIN' DONUTS,112.11,0.274039
+College Basketball Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,1,0.231114,97.91,DOORDASH,97.7,0.158179
+College Basketball Fan,Flowers,Flowers,SUBCATEGORY,Retailers - Flowers,Specialty Retailers - Outdoor,0,1,0.167502,121.84,BASS PRO SHOPS,111,0.042547
+College Basketball Fan,Apparel - Sneakers,Sneakers,SUBCATEGORY,Athleisure - Sneakers Plus,Athleisure - Sneakers Plus,1,1,0.132462,108.33,NIKE,106.75,0.076754
+College Basketball Fan,Tax & Legal Services,Tax & Legal,SUBCATEGORY,Business Services - Tax & Legal Services,Business Services - Tax & Legal Services,1,1,0.106915,122.91,TURBOTAX,142.85,0.047615
+College Basketball Fan,Auto Services,Auto Services,SUBCATEGORY,Auto - Auto Services,Auto - Auto Service,0,1,0.106915,125.89,AMERICAN AUTOMOBILE ASSOCIATION,127.27,0.057107
+College Basketball Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,1,0.052039,115.29,FANDUEL.COM,117.74,0.01959
+College Basketball Fan,Fitness,Fitness,CATEGORY,Fitness,"Fitness - Home Fitness, Fitness - Workout Classes, Fitness - Gyms & Clubs",1,3,,,PLANET FITNESS,88.23,0.021292
+College Basketball Fan,Beauty,Beauty,CATEGORY,Beauty,"Beauty - Salons & Spas, Beauty - Cosmetics & Skincare, Beauty - Fragrance",1,3,,,ULTA BEAUTY,111.85,0.172872
+College Basketball Fan,Streaming,Streaming,CATEGORY,Streaming,"Streaming - Specialty OTT - Sports, Streaming - OTT, Streaming - Platforms, Streaming - Specialty OTT - Anime",1,4,,,NETFLIX,104.64,0.167653
+MLB Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,1,0.841518,109.43,MCDONALD'S,121.72,0.703268
+MLB Fan,Sober Curious,Sober Curious,SUBCATEGORY,Beverages - Non Alcoholic,Beverages - Coffee & Tea,0,1,0.588523,142.26,STARBUCKS,152.87,0.41738
+MLB Fan,Beverages Coffee & Tea,Coffee & Tea,SUBCATEGORY,Beverages - Coffee & Tea,Beverages - Coffee & Tea,1,1,0.588523,142.26,STARBUCKS,152.87,0.41738
+MLB Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,1,0.423567,139.35,NETFLIX,138,0.221098
+MLB Fan,Pets - Retail,Pets,SUBCATEGORY,Pets - Retail,Pets - Retail,1,1,0.360603,157.56,PETSMART,169.52,0.254788
+MLB Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,1,0.352219,149.22,DOORDASH,146.82,0.2377
+MLB Fan,Travel - Airlines,Airlines,SUBCATEGORY,Travel - Airlines,Travel - Airlines,1,1,0.264069,157.73,AMERICAN AIRLINES,170.91,0.094168
+MLB Fan,Outdoor Retailers,Outdoor Retailers,SUBCATEGORY,Specialty Retailers - Outdoor,Specialty Retailers - Outdoor,1,1,0.246424,179.25,BASS PRO SHOPS,177.35,0.067977
+MLB Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,1,0.097229,215.4,FANDUEL.COM,212.65,0.03538
+MLB Fan,Youth Sports,Youth Sports,SUBCATEGORY,Amateur Sports - Youth Sports,Amateur Sports - Youth Sports,1,1,0.02782,357.4,D-Bat,459.54,0.007132
+MLB Fan,Fitness,Fitness,CATEGORY,Fitness,"Fitness - Workout Classes, Fitness - Home Fitness, Fitness - Gyms & Clubs",1,3,,,PLANET FITNESS,138.17,0.033343
+MLS Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,1,0.923239,120.06,MCDONALD'S,141.53,0.8177
+MLS Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,1,0.512813,168.71,NETFLIX,164.59,0.263696
+MLS Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,1,0.473461,200.58,DOORDASH,192.59,0.311789
+MLS Fan,Movie theaters,Movie theaters,SUBCATEGORY,Entertainment & News - Movies,Entertainment & News - Movies,1,1,0.405652,239.89,AMC THEATRES,308.35,0.208487
+MLS Fan,Travel - Airlines,Travel - Airlines,SUBCATEGORY,Travel - Airlines,Travel - Airlines,1,1,0.341373,203.9,AMERICAN AIRLINES,237.38,0.13079
+MLS Fan,Theme Parks,Theme Parks,SUBCATEGORY,Attractions - Theme Parks,Attractions - Theme Parks,1,1,0.335323,272.83,DISNEYLAND RESORT,388.43,0.107541
+MLS Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,1,0.145855,323.13,FANDUEL.COM,359.08,0.059744
+MLS Fan,Dollar Stores,Dollar Stores,SUBCATEGORY,Retailers - Dollar & Discount Stores,Entertainment & News - Musicians,0,1,0.105475,537.15,Taylor Swift,533.42,0.021598
+MLS Fan,Health & Fitness,Health & Fitness,CATEGORY,Fitness,"Fitness - Workout Classes, Fitness - Home Fitness, Fitness - Gyms & Clubs",1,3,,,PLANET FITNESS,186.45,0.044994
+NWSL Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,1,0.988093,128.49,MCDONALD'S,157.83,0.911901
+NWSL Fan,Beauty - cosmetics & skincare,Beauty,SUBCATEGORY,Beauty - Cosmetics & Skincare,Beauty - Cosmetics & Skincare,1,1,0.615264,212.04,ULTA BEAUTY,279.71,0.432328
+NWSL Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,1,0.572095,188.21,NETFLIX,188.87,0.302599
+NWSL Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,1,0.558982,236.81,DOORDASH,217.75,0.352534
+NWSL Fan,E-tailers,E-tailers,SUBCATEGORY,Retailers - Online E-Tail,Retailers - Online E-Tail,1,1,0.539325,125.33,AMAZON.COM,107.78,0.360503
+NWSL Fan,Home Decor,Home Decor,SUBCATEGORY,Home Furnishings & Goods - Retail,Home Furnishings & Goods - Retail,1,1,0.523144,214.47,IKEA,441.68,0.281077
+NWSL Fan,Boutique Fitness,Boutique Fitness,CATEGORY,Fitness,"Fitness - Workout Classes, Fitness - Home Fitness, Fitness - Gyms & Clubs",1,3,,,LA FITNESS INC,526.9,0.049044
+NWSL Fan,Athleisure,Athleisure,CATEGORY,Athleisure,"Athleisure - Activewear, Athleisure - Sneakers Plus",1,2,,,NIKE,344.23,0.247506
+NWSL Fan,Travel,Travel,CATEGORY,Travel,"Travel - Retail, Travel - Train, Travel - Airports, Travel - Rental Cars, Travel - Airlines, Travel - Travel Agencies, Travel - Cruises",1,7,,,HUDSON,562.22,0.238566
+NWSL Fan,Pets,Pets,CATEGORY,Pets,"Pets - Pet Services, Pets - Pet Healthcare, Pets - Pet Food, Pets - Subscriptions, Pets - Retail, Pets - Pet Supplies",1,6,,,PETSMART,237.06,0.356316
+Super Bowl Fan,QSR,QSR,SUBCATEGORY,Restaurants - QSR & Fast Casual,Restaurants - QSR & Fast Casual,1,1,0.727969,94.66,MCDONALD'S,96,0.554657
+Super Bowl Fan,Streaming OTT,Streaming OTT,SUBCATEGORY,Streaming - OTT,Streaming - OTT,1,1,0.307996,101.32,NETFLIX,103.19,0.165334
+Super Bowl Fan,Food Delivery,Food Delivery,SUBCATEGORY,Restaurants - Online Delivery,Restaurants - Online Delivery,1,1,0.22094,93.6,DOORDASH,92.36,0.14952
+Super Bowl Fan,Travel - airlines,Airlines,SUBCATEGORY,Travel - Airlines,Travel - Airlines,1,1,0.170264,101.7,AMERICAN AIRLINES,105.11,0.057915
+Super Bowl Fan,Sports Betting,Sports Betting,SUBCATEGORY,Gambling - Online,Gambling - Online,1,1,0.047181,104.53,FANDUEL.COM,104.97,0.017465
+Super Bowl Fan,Entertainment & Music,Entertainment & Music,SUBCATEGORY,Entertainment & News - Musicians,Entertainment & News - Musicians,1,1,0.023301,118.66,Taylor Swift,127.86,0.005177
+Super Bowl Fan,Health & Fitness,Health & Fitness,CATEGORY,Fitness,"Fitness - Home Fitness, Fitness - Workout Classes, Fitness - Gyms & Clubs",1,3,,,PLANET FITNESS,84.74,0.020449
+Super Bowl Fan,Travel - Lodging & Accommodation,Travel,CATEGORY,Lodging & Accommodation,"Lodging & Accommodation - Alternative Accommodations, Lodging & Accommodation - Hotels",1,2,,,AIRBNB,100.64,0.042115
+Super Bowl Fan,Auto,Auto,CATEGORY,Auto,"Auto - Auto Service, Auto - EV Charging, Auto - Tire Service, Auto - Car Dealers, Auto - Oil Change, Auto - Motorcycle Dealers, Auto - Car Washes, Auto - Auto Parts",1,8,,,AUTOZONE,91.51,0.125421
