@@ -1144,13 +1144,17 @@ class CategorySlide(BaseSlide):
         p.font.bold = True
 
         # Add brand logo next to "Hot Brand Target:" text
-        merchant_name = recommendation.get('merchant', 'Brand')
+        merchant_name = recommendation.get('merchant') or 'Brand'
+        if not merchant_name:
+            merchant_name = 'Brand'
         logo_size = Inches(0.5)  # Small logo size
         logo_x = Inches(2.4)  # Shifted right to avoid text overlap
         logo_y = Inches(4.925)  # Vertically centered with text
 
-        # Try to get logo from LogoManager
-        logo_image = self.logo_manager.get_logo(merchant_name, size=(60, 60))
+        # Try to get logo from LogoManager (only if merchant_name is valid)
+        logo_image = None
+        if merchant_name and merchant_name != 'Brand':
+            logo_image = self.logo_manager.get_logo(merchant_name, size=(60, 60))
 
         if logo_image:
             # Check if logo has colored background

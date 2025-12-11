@@ -33,6 +33,7 @@ class DemographicCharts:
         self.team_config = team_config
         self.team_name_short = team_config.get('team_name_short', '') if team_config else ''
         self.audience_name = team_config.get('audience_name', '') if team_config else ''
+        self.comparison_population = team_config.get('comparison_population', '') if team_config else ''
 
         # CRITICAL: Community-based color mapping - fixed order
         self.community_color_map = {
@@ -83,15 +84,19 @@ class DemographicCharts:
         """Map community names to appropriate colors based on content, not position"""
         community_name_lower = str(community_name).lower()
 
-        # FIRST: Check for Local Gen Pop (must be first!)
-        if 'local gen pop' in community_name_lower:
-            return self.community_color_map['secondary']
-
-        # SECOND: Check if it's ONLY the team's fans (exact match)
+        # FIRST: Check if it's the team's fans (exact match with audience_name)
         if self.audience_name and community_name_lower == self.audience_name.lower():
             return self.community_color_map['primary']
 
-        # THIRD: Everything else (league fans, etc.) gets accent color
+        # SECOND: Check if it's the comparison population (exact match)
+        if self.comparison_population and community_name_lower == self.comparison_population.lower():
+            return self.community_color_map['secondary']
+
+        # THIRD: Check for Local Gen Pop (fallback pattern match)
+        if 'local gen pop' in community_name_lower:
+            return self.community_color_map['secondary']
+
+        # FOURTH: Everything else (league fans, etc.) gets accent color
         return self.community_color_map['accent']
 
     def _get_gender_colors(self, communities: List[str]) -> Tuple[str, str]:
@@ -615,6 +620,8 @@ class DemographicCharts:
                         fig = self.create_occupation_chart(df)
                     elif demo_type == 'children':
                         fig = self.create_children_chart(df)
+                    elif demo_type == 'num_children':
+                        fig = self.create_grouped_bar_chart(df, chart_type='num_children', title=None)  # No title - header on page
                     elif demo_type == 'ethnicity':
                         fig = self.create_ethnicity_chart(df)
                     else:

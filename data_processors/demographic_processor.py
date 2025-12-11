@@ -90,9 +90,12 @@ class DemographicsProcessor:
             logger.warning("AI insights requested but no OpenAI API key found. Using template insights.")
 
         # Update expected communities based on team
+        # Avoid adding "Fans" if team_name already ends with "Fans"
+        team_fans_name = team_name if team_name.endswith('Fans') else f'{team_name} Fans'
+        
         if comparison_population:
             self.communities = [
-                f'{team_name} Fans',
+                team_fans_name,
                 comparison_population,  # USE THE EXACT VALUE FROM CONFIG
                 f'{league} Fans'
             ]
@@ -100,7 +103,7 @@ class DemographicsProcessor:
         else:
             # Fallback to the old logic if not provided
             self.communities = [
-                f'{team_name} Fans',
+                team_fans_name,
                 f'Local Gen Pop (Excl. {team_name.split()[-1]})',  # Gets last word (Jazz, Cowboys, etc)
                 f'{league} Fans'
             ]
@@ -189,6 +192,17 @@ class DemographicsProcessor:
         total_rows = len(self.data)
         total_customers = self.data['CUSTOMER_COUNT'].sum()
         logger.info(f"Loaded {total_rows:,} rows representing {total_customers:,} customers")
+
+    def _get_comparison_population(self) -> Optional[str]:
+        """Safely get the comparison population name"""
+        if len(self.communities) > 1:
+            return self.communities[1]
+        elif self.comparison_population:
+            # Try to find it in the actual data
+            actual_communities = set(self.data['COMMUNITY'].unique())
+            if self.comparison_population in actual_communities:
+                return self.comparison_population
+        return None
 
     @lru_cache(maxsize=1)
     def _get_community_totals(self) -> pd.Series:
@@ -383,6 +397,63 @@ class DemographicsProcessor:
             'insights': self._generate_children_insights(percentages)
         }
 
+    def process_num_children(self) -> Dict[str, Any]:
+        """Process number of children in household (ignoring nulls - nulls mean no kids)"""
+        # Filter out nulls (they represent no kids, so we exclude them from this chart)
+        data_with_children = self.data[self.data['NUM_CHILDREN_HH'].notna()].copy()
+        
+        if data_with_children.empty:
+            logger.warning("No NUM_CHILDREN_HH data available (all nulls)")
+            return None
+        
+        # Group by community and number of children
+        grouped = data_with_children.groupby(['COMMUNITY', 'NUM_CHILDREN_HH'])['CUSTOMER_COUNT'].sum()
+        
+        # Get totals for each community (only counting rows with NUM_CHILDREN_HH not null)
+        community_totals = data_with_children.groupby('COMMUNITY')['CUSTOMER_COUNT'].sum()
+        
+        # Find the range of children counts
+        max_children = int(data_with_children['NUM_CHILDREN_HH'].max())
+        min_children = int(data_with_children['NUM_CHILDREN_HH'].min())
+        
+        # Create categories: 1, 2, 3, 4+ children (cap at 4+)
+        categories = []
+        for i in range(min_children, min(max_children + 1, 5)):  # Up to 4
+            categories.append(str(i))
+        if max_children > 4:
+            categories.append('4+')
+        
+        # Calculate percentages
+        percentages = {}
+        for community in self.communities:
+            if community not in community_totals.index:
+                continue
+            
+            total = community_totals[community]
+            if total == 0:
+                continue
+            
+            community_percentages = {}
+            for cat in categories:
+                if cat == '4+':
+                    # Sum all 4 and above
+                    count = sum(grouped.get((community, i), 0) for i in range(4, max_children + 1))
+                else:
+                    count = grouped.get((community, int(cat)), 0)
+                
+                community_percentages[cat] = round(count / total * 100, 1)
+            
+            percentages[community] = community_percentages
+        
+        return {
+            'chart_type': 'grouped_bar',
+            'title': 'Number of Children in Household',
+            'categories': categories,
+            'communities': self.communities,
+            'data': percentages,
+            'insights': []  # Can add insights later if needed
+        }
+
     def process_ethnicity(self) -> Dict[str, Any]:
         """Process ethnicity distribution using ETHNIC_GROUP column - EXCLUDES LOCAL GEN POP DUE TO NULL VALUES"""
 
@@ -511,11 +582,11 @@ class DemographicsProcessor:
             'children': self.process_children()
         }
 
-        # Add ethnicity if available
-        ethnicity_result = self.process_ethnicity()
-        if ethnicity_result:
-            demographic_results['ethnicity'] = ethnicity_result
-            logger.info("Processed ethnicity demographics")
+        # Add num_children (replaces ethnicity)
+        num_children_result = self.process_num_children()
+        if num_children_result:
+            demographic_results['num_children'] = num_children_result
+            logger.info("Processed number of children demographics")
 
         # Generate insights
         if self.use_ai_insights:
@@ -570,7 +641,11 @@ class DemographicsProcessor:
         """Generate insights for generation distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        
+        # Safely get comparison population
+        gen_pop = self._get_comparison_population()
+        if not gen_pop:
+            return insights
 
         if fan_community in percentages and gen_pop in percentages:
             # Check if fans are younger
@@ -588,9 +663,9 @@ class DemographicsProcessor:
         """Generate insights for income distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        gen_pop = self._get_comparison_population()
 
-        if fan_community in percentages and gen_pop in percentages:
+        if gen_pop and fan_community in percentages and gen_pop in percentages:
             # Check higher income brackets
             high_income = ['$100,000 to $149,999', '$150,000 to $199,999', '$200,000 or more']
             fan_high = sum(percentages[fan_community].get(bracket, 0) for bracket in high_income)
@@ -606,9 +681,9 @@ class DemographicsProcessor:
         """Generate insights for occupation distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        gen_pop = self._get_comparison_population()
 
-        if fan_community in percentages and gen_pop in percentages:
+        if gen_pop and fan_community in percentages and gen_pop in percentages:
             # Check professional categories
             professional_cats = ['Professional', 'Upper Management']
             fan_prof = sum(percentages[fan_community].get(cat, 0) for cat in professional_cats)
@@ -624,9 +699,9 @@ class DemographicsProcessor:
         """Generate insights for children distribution"""
         insights = []
         fan_community = f'{self.team_name} Fans'
-        gen_pop = self.communities[1]  # Use actual comparison population from config
+        gen_pop = self._get_comparison_population()
 
-        if fan_community in percentages and gen_pop in percentages:
+        if gen_pop and fan_community in percentages and gen_pop in percentages:
             fan_with_children = percentages[fan_community].get('At least 1 Child in HH', 0)
             pop_with_children = percentages[gen_pop].get('At least 1 Child in HH', 0)
 
@@ -640,10 +715,10 @@ class DemographicsProcessor:
         """Generate insights about ethnicity distribution"""
         insights = []
 
-        team_fans = self.communities[0]
-        gen_pop = self.communities[1]
+        team_fans = self.communities[0] if len(self.communities) > 0 else f'{self.team_name} Fans'
+        gen_pop = self._get_comparison_population()
 
-        if team_fans in percentages and gen_pop in percentages:
+        if gen_pop and team_fans in percentages and gen_pop in percentages:
             team_data = percentages[team_fans]
             pop_data = percentages[gen_pop]
 
@@ -682,8 +757,12 @@ class DemographicsProcessor:
         try:
             # Collect data for all three communities
             team_fans = f"{self.team_name} Fans"
-            gen_pop = self.communities[1]  # Use actual comparison population from config
+            gen_pop = self._get_comparison_population()  # Use actual comparison population from config
             league_fans = f"{self.league} Fans"
+            
+            if not gen_pop:
+                # Fallback if no comparison population found
+                return f"{self.team_name} fans have unique demographic characteristics."
 
             # Build comprehensive data summary
             data_summary = []

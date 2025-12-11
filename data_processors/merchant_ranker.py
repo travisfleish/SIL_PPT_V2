@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 class MerchantRanker:
     """Analyze and rank merchants by community with merchant name standardization"""
 
-    EXCLUDED_MERCHANTS = ['LEVELUP']
+    EXCLUDED_MERCHANTS = ['LEVELUP', 'Circuit of The Americas', 'Circuit of the Americas']
+    EXCLUDED_COMMUNITIES = ['Big Sporting Events']  # Exclude recursive F1-related communities
 
     def __init__(self, team_view_prefix: str, comparison_population: str = None, cache_manager: Optional[Any] = None):
         """
@@ -161,12 +162,19 @@ class MerchantRanker:
 
         # Build the IN clause for approved communities
         if self.approved_communities:
-            communities_list = "', '".join(self.approved_communities)
+            # Filter out excluded communities from approved list
+            filtered_communities = self.approved_communities - set(self.EXCLUDED_COMMUNITIES)
+            communities_list = "', '".join(filtered_communities)
             community_filter = f"AND COMMUNITY IN ('{communities_list}')"  # FIXED: Changed from COMMUNITY_GROUP
         else:
             # If no approved communities loaded, use old exclusion logic
             logger.warning("No approved communities loaded, using exclusion logic")
             community_filter = self._get_exclusion_filter()
+        
+        # Add exclusion for specific communities
+        if self.EXCLUDED_COMMUNITIES:
+            excluded_communities_list = "', '".join(self.EXCLUDED_COMMUNITIES)
+            community_filter += f" AND COMMUNITY NOT IN ('{excluded_communities_list}')"
 
         query = f"""
         SELECT 
@@ -187,6 +195,8 @@ class MerchantRanker:
         logger.info(f"Fetching top {top_n} communities from {self.community_view}")
         logger.info(f"Filter: PERC_AUDIENCE >= {min_audience_pct * 100}%")
         logger.info(f"Comparison population: {comparison_pop}")
+        if self.EXCLUDED_COMMUNITIES:
+            logger.info(f"Excluding communities: {self.EXCLUDED_COMMUNITIES}")
 
         # Import here to avoid circular imports
         from data_processors.snowflake_connector import query_to_dataframe
@@ -257,8 +267,33 @@ class MerchantRanker:
             merchant_exclusion = f"AND UPPER(MERCHANT) NOT IN ('{excluded_list}')"
 
         # UPDATE THE QUERY to include merchant exclusion
-        query = f"""
-        WITH ranked_merchants AS (
+        # Handle schemas that may not have AUDIENCE_COUNT and AUDIENCE_TOTAL_SPEND (e.g., F1)
+        # Check current schema to determine if we should include these columns
+        import os
+        current_schema = os.getenv('SNOWFLAKE_SCHEMA', '').upper()
+        is_f1_schema = 'F1' in current_schema
+        
+        if is_f1_schema:
+            # F1 schema doesn't have AUDIENCE_COUNT or AUDIENCE_TOTAL_SPEND
+            query = f"""
+            WITH ranked_merchants AS (
+                SELECT 
+                    COMMUNITY,
+                    MERCHANT,
+                    CATEGORY,
+                    SUBCATEGORY,
+                    PERC_INDEX,
+                    PERC_AUDIENCE,
+                    NULL as AUDIENCE_TOTAL_SPEND,
+                    NULL as AUDIENCE_COUNT,
+                    ROW_NUMBER() OVER (PARTITION BY COMMUNITY ORDER BY PERC_AUDIENCE DESC) as rank
+                FROM {self.merchant_view}
+                WHERE 
+                    COMMUNITY IN ('{communities_list}')
+                    AND COMPARISON_POPULATION = '{comparison_pop}'
+                    {exclusion_clause}
+                    {merchant_exclusion}
+            )
             SELECT 
                 COMMUNITY,
                 MERCHANT,
@@ -267,29 +302,46 @@ class MerchantRanker:
                 PERC_INDEX,
                 PERC_AUDIENCE,
                 AUDIENCE_TOTAL_SPEND,
-                AUDIENCE_COUNT,
-                ROW_NUMBER() OVER (PARTITION BY COMMUNITY ORDER BY PERC_AUDIENCE DESC) as rank
-            FROM {self.merchant_view}
-            WHERE 
-                COMMUNITY IN ('{communities_list}')
-                AND COMPARISON_POPULATION = '{comparison_pop}'
-                AND AUDIENCE_COUNT >= {min_audience_count}
-                {exclusion_clause}
-                {merchant_exclusion}
-        )
-        SELECT 
-            COMMUNITY,
-            MERCHANT,
-            CATEGORY,
-            SUBCATEGORY,
-            PERC_INDEX,
-            PERC_AUDIENCE,
-            AUDIENCE_TOTAL_SPEND,
-            AUDIENCE_COUNT
-        FROM ranked_merchants 
-        WHERE rank <= {top_n_per_community}
-        ORDER BY PERC_AUDIENCE DESC
-        """
+                AUDIENCE_COUNT
+            FROM ranked_merchants 
+            WHERE rank <= {top_n_per_community}
+            ORDER BY PERC_AUDIENCE DESC
+            """
+        else:
+            # Standard schema with AUDIENCE_COUNT and AUDIENCE_TOTAL_SPEND
+            query = f"""
+            WITH ranked_merchants AS (
+                SELECT 
+                    COMMUNITY,
+                    MERCHANT,
+                    CATEGORY,
+                    SUBCATEGORY,
+                    PERC_INDEX,
+                    PERC_AUDIENCE,
+                    AUDIENCE_TOTAL_SPEND,
+                    AUDIENCE_COUNT,
+                    ROW_NUMBER() OVER (PARTITION BY COMMUNITY ORDER BY PERC_AUDIENCE DESC) as rank
+                FROM {self.merchant_view}
+                WHERE 
+                    COMMUNITY IN ('{communities_list}')
+                    AND COMPARISON_POPULATION = '{comparison_pop}'
+                    AND AUDIENCE_COUNT >= {min_audience_count}
+                    {exclusion_clause}
+                    {merchant_exclusion}
+            )
+            SELECT 
+                COMMUNITY,
+                MERCHANT,
+                CATEGORY,
+                SUBCATEGORY,
+                PERC_INDEX,
+                PERC_AUDIENCE,
+                AUDIENCE_TOTAL_SPEND,
+                AUDIENCE_COUNT
+            FROM ranked_merchants 
+            WHERE rank <= {top_n_per_community}
+            ORDER BY PERC_AUDIENCE DESC
+            """
 
         logger.info(f"Fetching top merchants for {len(communities)} communities")
         logger.info(f"Comparison population: {comparison_pop}")

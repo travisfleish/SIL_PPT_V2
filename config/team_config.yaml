@@ -112,3 +112,19 @@ teams:
     audience_name: "Detroit Tigers Fans"
     comparison_population: "Local Gen Pop (Excl. Detroit Tigers Fans)"
     category_mode: "standard"
+
+  f1_racing_fans:
+    team_name: "F1 Racing Fans"
+    team_name_short: "F1"
+    league: "F1"
+    view_prefix: "V_F1_RACING_GENIUS_SPORTS"
+    colors:
+      primary: "#E10600"      # F1 Red (official)
+      secondary: "#1E1E1E"    # F1 Black (official)
+      accent: "#666666"       # Dark gray (replaces white for better text visibility)
+    audience_name: "F1 Racing Fans"
+    comparison_population: "General Sports Fans (Excl. F1 Racing Fans)"  # F1 demographics view uses this exact name
+    category_mode: "standard"
+    # Custom view patterns - demographics uses different suffix
+    custom_view_patterns:
+      demographics: "{prefix}_DEMOGRAPHIC_DISTRIBUTION"  # Note: DEMOGRAPHIC_DISTRIBUTION (not DEMOGRAPHICS_DIST)

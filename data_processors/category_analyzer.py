@@ -276,13 +276,18 @@ class CategoryAnalyzer:
             merchants_needed.update(top_5_by_audience)
             logger.debug(f"  Top 5 by audience: {top_5_by_audience}")
 
-        # 2. Top merchant by composite index (for recommendation)
-        rec_data = merchant_df[
-            (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
-            (merchant_df['COMPOSITE_INDEX'] > 0) &
-            (merchant_df['PERC_AUDIENCE'] >= 0.01)
-            ]
+        # 2. Top merchant by composite index (for recommendation) - use progressive thresholds
+        thresholds = [0.01, 0.005, 0.001]  # 1%, 0.5%, 0.1%
+        rec_data = None
+        for threshold in thresholds:
+            rec_data = merchant_df[
+                (merchant_df['AUDIENCE'] == self.audience_name) &
+                (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
+                (merchant_df['COMPOSITE_INDEX'] > 0) &
+                (merchant_df['PERC_AUDIENCE'] >= threshold)
+                ]
+            if not rec_data.empty:
+                break
         if not rec_data.empty:
             top_composite = rec_data.nlargest(1, 'COMPOSITE_INDEX')['MERCHANT'].iloc[0]
             merchants_needed.add(top_composite)
@@ -984,35 +989,55 @@ class CategoryAnalyzer:
         if merchant_df.empty:
             return {}
 
-        team_data = merchant_df[
-            (merchant_df['AUDIENCE'] == self.audience_name) &
-            (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
-            (merchant_df['COMPOSITE_INDEX'] > 0) &
-            (merchant_df['PERC_AUDIENCE'] >= 0.01)
-            ]
+        # Try progressively lower thresholds if 1% doesn't yield results
+        thresholds = [0.01, 0.005, 0.001]  # 1%, 0.5%, 0.1%
+        team_data = None
+        used_threshold = None
+        
+        for threshold in thresholds:
+            team_data = merchant_df[
+                (merchant_df['AUDIENCE'] == self.audience_name) &
+                (merchant_df['COMPARISON_POPULATION'] == self.comparison_pop) &
+                (merchant_df['COMPOSITE_INDEX'] > 0) &
+                (merchant_df['PERC_AUDIENCE'] >= threshold)
+                ]
+            
+            if not team_data.empty:
+                used_threshold = threshold
+                break
 
-        if team_data.empty:
-            logger.warning(f"No merchants found with >= 1% audience for {self.team_name}")
+        if team_data.empty or team_data is None:
+            logger.warning(f"No merchants found with >= 0.1% audience and positive composite index for {self.team_name}")
             return {
                 'merchant': None,
                 'composite_index': 0,
-                'explanation': f"No brands met the minimum 1% audience threshold for {self.team_short} fans",
+                'explanation': f"No brands met the minimum 0.1% audience threshold for {self.team_short} fans",
                 'sub_explanation': "Consider lowering audience requirements or expanding to adjacent categories",
                 'full_recommendation': {
-                    'main': f"No brands met the minimum 1% audience threshold for {self.team_short} fans",
+                    'main': f"No brands met the minimum 0.1% audience threshold for {self.team_short} fans",
                     'sub_bullet': "Consider lowering audience requirements or expanding to adjacent categories"
                 }
             }
+        
+        if used_threshold < 0.01:
+            logger.info(f"Using lower threshold ({used_threshold*100:.1f}%) for recommendation - no merchants met 1% threshold")
 
         best_merchant = team_data.nlargest(1, 'COMPOSITE_INDEX').iloc[0]
         merchant_name = best_merchant['MERCHANT']
         composite_index = float(best_merchant['COMPOSITE_INDEX'])
         perc_audience = float(best_merchant['PERC_AUDIENCE'])
+        
+        # Adjust message based on threshold used
+        threshold_pct = used_threshold * 100
+        if used_threshold < 0.01:
+            threshold_text = f"at least {threshold_pct:.1f}%"
+        else:
+            threshold_text = "at least 1%"
 
         main_recommendation = (
             f"The {self.team_short} should target {merchant_name} for a sponsorship "
             f"based on having the highest composite index of {composite_index:.0f} "
-            f"among brands reaching at least 1% of fans ({perc_audience * 100:.1f}% audience)"
+            f"among brands reaching {threshold_text} of fans ({perc_audience * 100:.1f}% audience)"
         )
 
         sub_explanation = (

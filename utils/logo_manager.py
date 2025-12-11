@@ -239,26 +239,24 @@ class LogoManager:
     def create_fallback_logo(self, merchant_name: str, size: Tuple[int, int] = (120, 120),
                              bg_color: str = 'white', text_color: str = '#888888') -> Image.Image:
         """
-        Create a fallback logo with merchant initials
+        Create a fallback logo with merchant initials, cropped to a circle with transparent background
 
         Args:
             merchant_name: Merchant name
-            size: Logo size
+            size: Logo size (should be square for circular crop)
             bg_color: Background color
             text_color: Text color
 
         Returns:
-            Generated fallback logo
+            Generated fallback logo (circular with transparent background)
         """
-        # Create background
-        logo = Image.new('RGBA', size, bg_color)
+        # Ensure square size for circular crop
+        logo_size = min(size)
+        square_size = (logo_size, logo_size)
+        
+        # Create background with white color
+        logo = Image.new('RGBA', square_size, bg_color)
         draw = ImageDraw.Draw(logo)
-
-        # Add border
-        border_width = 2
-        draw.ellipse([border_width, border_width,
-                      size[0] - border_width, size[1] - border_width],
-                     outline='#E0E0E0', width=border_width)
 
         # Generate initials - handle special characters
         clean_name = re.sub(r"[^a-zA-Z0-9\s]", '', merchant_name)
@@ -269,7 +267,7 @@ class LogoManager:
             initials = merchant_name[:2].upper()
 
         # Calculate font size to fit
-        font_size = min(size) // 3
+        font_size = logo_size // 3
         try:
             # Try to use a nice font
             font = ImageFont.truetype("arial.ttf", font_size)
@@ -282,10 +280,18 @@ class LogoManager:
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
 
-        x = (size[0] - text_width) // 2
-        y = (size[1] - text_height) // 2
+        x = (logo_size - text_width) // 2
+        y = (logo_size - text_height) // 2
 
         draw.text((x, y), initials, fill=text_color, font=font)
+
+        # Create circular mask to crop to circle
+        mask = Image.new('L', square_size, 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, logo_size, logo_size), fill=255)
+
+        # Apply circular mask to create transparent background outside circle
+        logo.putalpha(mask)
 
         return logo
 

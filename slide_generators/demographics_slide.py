@@ -103,6 +103,9 @@ class DemographicsSlide:
         # Add demographic charts with optimized spacing
         self._add_charts(slide, chart_dir)
 
+        # Store comparison population for legend logic
+        self.comparison_population = team_config.get('comparison_population')
+        
         # Add centered legend without KEY label
         self._add_legend_box(slide, team_name, team_short, demographic_data.get('league', 'League'))
 
@@ -141,7 +144,11 @@ class DemographicsSlide:
             Inches(6.5), Inches(0.1),
             Inches(6.633), Inches(0.3)
         )
-        title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
+        # Avoid redundant "Fans" - remove "Fans" from title if team_name already includes it
+        if team_name.endswith('Fans'):
+            title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Unique"
+        else:
+            title_text.text_frame.text = f"Fan Demographics: How Are {team_name} Fans Unique"
         title_p = title_text.text_frame.paragraphs[0]
         title_p.font.name = self.default_font
         title_p.font.size = Pt(14)
@@ -157,7 +164,7 @@ class DemographicsSlide:
             ("OCCUPATION CATEGORY", 7.2, 0.85, 5.6),  # Original position
 
             # Bottom row headers - original positions
-            ("ETHNICITY", 0.5, 3.95, 4.5),
+            ("NUMBER OF CHILDREN", 0.5, 3.95, 4.5),
             ("GENERATION", 5.2, 3.95, 4.5),
             ("CHILDREN IN HOUSEHOLD", 9.8, 3.95, 3.0)
         ]
@@ -205,8 +212,8 @@ class DemographicsSlide:
             ('income_chart', 2.2, 1.1, 4.8, 2.5),  # Original position
             ('occupation_chart', 7.2, 1.1, 5.6, 2.5),  # Original position
 
-            # Bottom row - Ethnicity chart is 2.8" tall but placed as if 2.5" to maintain alignment
-            ('ethnicity_chart', 0.5, 4.2, 4.5, 2.5),  # Will bleed 0.3" below its space
+            # Bottom row - Number of children chart replaces ethnicity
+            ('num_children_chart', 0.5, 4.2, 4.5, 2.5),
             ('generation_chart', 5.2, 4.2, 4.5, 2.5),  # Original height
             ('children_chart', 9.8, 4.2, 3.0, 2.5)  # Original height
         ]
@@ -260,7 +267,7 @@ class DemographicsSlide:
         legend_top = Inches(6.9)  # Bottom of slide
         square_size = Inches(0.15)  # Small square size
         text_offset = Inches(0.1)  # Reduced space between square and text
-        item_spacing = Inches(0.5)  # Much tighter spacing between items
+        item_spacing = Inches(1.0)  # Spacing between items
 
         # Get colors from team config
         colors = self.team_colors or {
@@ -269,33 +276,80 @@ class DemographicsSlide:
             'accent': '#8B8B8B'
         }
 
-        # Legend items
-        legend_items = [
-            (f"{team_name} Fans", colors.get('primary', '#002244')),
-            (f"Local Gen Pop (Excluding {team_short} Fans)", colors.get('secondary', '#FFB612')),
-            (f"{league} Fans (Excluding {team_short} Fans)", colors.get('accent', '#8B8B8B'))
-        ]
+        # Check if we need 2 or 3 legend items based on team config
+        # For F1, we only have 2 populations
+        # Check if team_name already includes "Fans" to avoid redundancy
+        audience_label = team_name if team_name.endswith('Fans') else f"{team_name} Fans"
+        
+        # Determine if this is a 2-population setup (like F1)
+        # Check if comparison population contains "Excl" or "Excluding" - indicates 2-population setup
+        comparison_pop = getattr(self, 'comparison_population', None)
+        is_two_population = comparison_pop and ('Excl' in comparison_pop or 'Excluding' in comparison_pop)
+        
+        if is_two_population:
+            # 2-population setup: Team Fans and Comparison Population
+            # Shorten labels for F1
+            if 'F1' in team_name or 'F1' in league:
+                # For F1: "F1 Racing Fans" and "Sports Fans (Excluding F1 Fans)"
+                comp_label = "Sports Fans (Excluding F1 Fans)"
+            else:
+                # For other teams, use comparison population name but shorten if needed
+                comp_label = comparison_pop.replace('General Sports Fans (Excl. ', 'Sports Fans (Excluding ').replace(')', ' Fans)')
+            
+            legend_items = [
+                (audience_label, colors.get('primary', '#002244')),
+                (comp_label, colors.get('secondary', '#FFB612'))
+            ]
+            
+            # Center two items
+            slide_width = 13.333
+            total_width = 0
+            text_widths = []
+            for label, _ in legend_items:
+                # Estimate text width (roughly 0.1" per character)
+                est_width = len(label) * 0.1 + 0.2  # Add padding
+                text_widths.append(est_width)
+                total_width += square_size.inches + text_offset.inches + est_width
+            
+            # Add spacing between items
+            total_width += item_spacing.inches
+            
+            # Start position to center everything
+            start_left = (slide_width - total_width) / 2
+            
+            positions = []
+            current_left = start_left
+            for i, text_width in enumerate(text_widths):
+                positions.append(current_left)
+                current_left += square_size.inches + text_offset.inches + text_width + item_spacing.inches
+        else:
+            # 3-population setup: Team Fans, Local Gen Pop, League Fans
+            legend_items = [
+                (audience_label, colors.get('primary', '#002244')),
+                (f"Local Gen Pop (Excluding {team_short} Fans)", colors.get('secondary', '#FFB612')),
+                (f"{league} Fans (Excluding {team_short} Fans)", colors.get('accent', '#8B8B8B'))
+            ]
 
-        # Center the middle item (Local Gen Pop) on the slide
-        slide_width = 13.333  # Standard slide width
-        middle_text = legend_items[1][0]
+            # Center the middle item (Local Gen Pop) on the slide
+            slide_width = 13.333
+            middle_text = legend_items[1][0]
 
-        # Calculate position for middle item to be centered
-        # For middle item: square + text should be centered
-        middle_item_width = 3.5  # Approximate width of middle text
-        middle_square_left = (slide_width - (square_size.inches + text_offset.inches + middle_item_width)) / 2
+            # Calculate position for middle item to be centered
+            # For middle item: square + text should be centered
+            middle_item_width = 3.5  # Approximate width of middle text
+            middle_square_left = (slide_width - (square_size.inches + text_offset.inches + middle_item_width)) / 2
 
-        # Calculate positions for all three items based on fixed spacing from center
-        positions = [
-            middle_square_left - item_spacing.inches - square_size.inches - text_offset.inches - 2.5,
-            # Left item (2.5" text width)
-            middle_square_left,  # Center item
-            middle_square_left + square_size.inches + text_offset.inches + middle_item_width + item_spacing.inches
-            # Right item
-        ]
+            # Calculate positions for all three items based on fixed spacing from center
+            positions = [
+                middle_square_left - item_spacing.inches - square_size.inches - text_offset.inches - 2.5,
+                # Left item (2.5" text width)
+                middle_square_left,  # Center item
+                middle_square_left + square_size.inches + text_offset.inches + middle_item_width + item_spacing.inches
+                # Right item
+            ]
 
-        # Text widths for each item
-        text_widths = [2.5, 3.5, 3.5]
+            # Text widths for each item
+            text_widths = [2.5, 3.5, 3.5]
 
         # Draw each legend item
         for i, ((label, color_hex), square_left, text_width) in enumerate(zip(legend_items, positions, text_widths)):

@@ -106,9 +106,15 @@ class BehaviorsSlide(BaseSlide):
     def _create_fan_wheel(self, merchant_ranker: MerchantRanker,
                           team_config: Dict[str, Any]) -> Path:
         """Create fan wheel visualization with logo support"""
+        # Use lower threshold for smaller markets or F1
+        # F1 data has lower community percentages, so use 5% threshold
+        default_threshold = 0.20
+        if team_config.get('league') == 'F1' or team_config.get('market_size') == 'small':
+            default_threshold = 0.05  # 5% threshold for F1 or small markets
+        
         # Get data
         wheel_data = merchant_ranker.get_fan_wheel_data(
-            min_audience_pct=0.20,
+            min_audience_pct=default_threshold,
             top_n_communities=10
         )
 

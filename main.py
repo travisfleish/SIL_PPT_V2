@@ -19,6 +19,7 @@ sys.path.append(str(Path(__file__).parent))
 from report_builder.pptx_builder import PowerPointBuilder, build_report
 from data_processors.snowflake_connector import test_connection
 from utils.team_config_manager import TeamConfigManager
+import pandas as pd
 
 
 # Setup logging
@@ -76,7 +77,7 @@ def generate_single_slide(team_key: str,
 
     Args:
         team_key: Team identifier
-        slide_type: Type of slide (demographics, behaviors, category:NAME)
+        slide_type: Type of slide (demographics, behaviors, category:NAME, subcategory:NAME)
         output_dir: Optional output directory
 
     Returns:
@@ -198,8 +199,18 @@ def generate_single_slide(team_key: str,
         view_prefix = team_config['view_prefix']
         
         # Get category configuration to find the category names in data
-        category_config = analyzer.categories.get(category_name.lower(), {})
-        cat_names = category_config.get('category_names_in_data', [category_name])
+        # Try standard category first, then fall back to custom category
+        category_config = analyzer.categories.get(category_name.lower(), None)
+        is_custom = False
+        
+        if category_config:
+            cat_names = category_config.get('category_names_in_data', [category_name])
+        else:
+            # This is a custom category - create config for it
+            is_custom = True
+            category_config = analyzer.create_custom_category_config(category_name)
+            cat_names = category_config.get('category_names_in_data', [category_name])
+            logging.info(f"Treating '{category_name}' as custom category")
         
         if not cat_names:
             raise ValueError(f"No configuration found for category: {category_name}")
@@ -225,18 +236,30 @@ def generate_single_slide(team_key: str,
             ORDER BY PERC_AUDIENCE DESC
         """)
         
-        # Load LAST_FULL_YEAR data for specific insights
-        subcategory_last_year_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
-            WHERE {category_where}
-        """)
+        # Load LAST_FULL_YEAR data for specific insights (optional - may not exist for all teams)
+        try:
+            subcategory_last_year_df = query_to_dataframe(f"""
+                SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
+                WHERE {category_where}
+            """)
+        except Exception as e:
+            logging.warning(f"LAST_FULL_YEAR subcategory view not available: {str(e)}")
+            subcategory_last_year_df = pd.DataFrame()
         
-        merchant_last_year_df = query_to_dataframe(f"""
-            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
-            WHERE {category_where}
-            AND AUDIENCE = '{analyzer.audience_name}'
-            ORDER BY PERC_AUDIENCE DESC
-        """)
+        try:
+            merchant_last_year_df = query_to_dataframe(f"""
+                SELECT * FROM {view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
+                WHERE {category_where}
+                AND AUDIENCE = '{analyzer.audience_name}'
+                ORDER BY PERC_AUDIENCE DESC
+            """)
+        except Exception as e:
+            logging.warning(f"LAST_FULL_YEAR merchant view not available: {str(e)}")
+            merchant_last_year_df = pd.DataFrame()
+        
+        # Temporarily add custom category config if needed
+        if is_custom:
+            analyzer.categories[category_name.lower()] = category_config
         
         # Analyze category with the fetched data
         analysis = analyzer.analyze_category(
@@ -248,12 +271,135 @@ def generate_single_slide(team_key: str,
             merchant_last_year_df=merchant_last_year_df,
             validate=False
         )
+        
+        # Clean up temporary config if it was custom
+        if is_custom and category_name.lower() in analyzer.categories:
+            del analyzer.categories[category_name.lower()]
 
         if not analysis:
             raise ValueError(f"Category '{category_name}' not found or has no data")
 
         generator = CategorySlide(pres)
+        # Generate category analysis slide (first page)
         pres = generator.generate(analysis, team_config, 0)
+        # Generate brand analysis slide (second page)
+        pres = generator.generate_brand_slide(analysis, team_config)
+
+    elif slide_type.startswith('subcategory:'):
+        from slide_generators.category_slide import CategorySlide
+        from data_processors.category_analyzer import CategoryAnalyzer
+        from data_processors.snowflake_connector import query_to_dataframe
+
+        subcategory_name = slide_type.split(':', 1)[1]
+        print(f"\n📊 Processing subcategory: {subcategory_name}")
+
+        analyzer = CategoryAnalyzer(
+            team_name=team_config['team_name'],
+            team_short=team_config['team_name_short'],
+            league=team_config['league'],
+            comparison_population=team_config['comparison_population'],
+            audience_name=team_config.get('audience_name')
+        )
+        
+        # Fetch the required data for the subcategory
+        view_prefix = team_config['view_prefix']
+        
+        # Query subcategory data - use it as if it were category data
+        subcategory_data = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_ALL_TIME 
+            WHERE TRIM(SUBCATEGORY) = '{subcategory_name.strip()}'
+            AND AUDIENCE = '{analyzer.audience_name}'
+        """)
+        
+        if subcategory_data.empty:
+            raise ValueError(f"Subcategory '{subcategory_name}' not found or has no data")
+        
+        # Get the category name from the subcategory data
+        category_name = subcategory_data.iloc[0]['CATEGORY'].strip()
+        
+        # Create a category_df from the subcategory data (treating subcategory as category)
+        # The subcategory data has the same structure as category data, so we can use it directly
+        category_df = subcategory_data.copy()
+        # Replace CATEGORY column with SUBCATEGORY value to treat it as the category
+        category_df['CATEGORY'] = subcategory_name
+        
+        # Query merchants filtered to this specific subcategory
+        merchant_df = query_to_dataframe(f"""
+            SELECT * FROM {view_prefix}_MERCHANT_INDEXING_ALL_TIME 
+            WHERE TRIM(SUBCATEGORY) = '{subcategory_name.strip()}'
+            AND AUDIENCE = '{analyzer.audience_name}'
+            ORDER BY PERC_AUDIENCE DESC
+        """)
+        
+        # Create empty subcategory_df (since we're analyzing a single subcategory)
+        subcategory_df_empty = pd.DataFrame()
+        
+        # Load LAST_FULL_YEAR data (optional)
+        try:
+            subcategory_last_year_data = query_to_dataframe(f"""
+                SELECT * FROM {view_prefix}_SUBCATEGORY_INDEXING_LAST_FULL_YEAR 
+                WHERE TRIM(SUBCATEGORY) = '{subcategory_name.strip()}'
+                AND AUDIENCE = '{analyzer.audience_name}'
+            """)
+            if not subcategory_last_year_data.empty:
+                subcategory_last_year_data['CATEGORY'] = subcategory_name
+            subcategory_last_year_df = subcategory_last_year_data
+        except Exception as e:
+            logging.warning(f"LAST_FULL_YEAR subcategory view not available: {str(e)}")
+            subcategory_last_year_df = pd.DataFrame()
+        
+        try:
+            merchant_last_year_df = query_to_dataframe(f"""
+                SELECT * FROM {view_prefix}_MERCHANT_INDEXING_LAST_FULL_YEAR 
+                WHERE TRIM(SUBCATEGORY) = '{subcategory_name.strip()}'
+                AND AUDIENCE = '{analyzer.audience_name}'
+                ORDER BY PERC_AUDIENCE DESC
+            """)
+        except Exception as e:
+            logging.warning(f"LAST_FULL_YEAR merchant view not available: {str(e)}")
+            merchant_last_year_df = pd.DataFrame()
+        
+        # Create a custom category config for this subcategory
+        subcategory_display_name = subcategory_name.replace(f"{category_name} - ", "").strip()
+        category_config = {
+            'display_name': subcategory_display_name,
+            'slide_title': f"{subcategory_display_name} Sponsor Analysis",
+            'category_names_in_data': [subcategory_name],  # Use subcategory name as category
+            'subcategories': {'include': [], 'exclude': []}  # No subcategories for a subcategory slide
+        }
+        
+        # Temporarily add the config
+        category_key = subcategory_name.lower().replace(' ', '_').replace('-', '_')
+        analyzer.categories[category_key] = category_config
+        
+        # Analyze subcategory as if it were a category
+        analysis = analyzer.analyze_category(
+            category_key=category_key,
+            category_df=category_df,
+            subcategory_df=subcategory_df_empty,  # Empty since we're analyzing a single subcategory
+            merchant_df=merchant_df,
+            subcategory_last_year_df=subcategory_last_year_df,
+            merchant_last_year_df=merchant_last_year_df,
+            validate=False
+        )
+        
+        # Update display name to show it's a subcategory
+        if analysis:
+            analysis['display_name'] = subcategory_display_name
+            analysis['slide_title'] = f"{subcategory_display_name} Sponsor Analysis"
+        
+        # Clean up temporary config
+        if category_key in analyzer.categories:
+            del analyzer.categories[category_key]
+
+        if not analysis:
+            raise ValueError(f"Subcategory '{subcategory_name}' not found or has no data")
+
+        generator = CategorySlide(pres)
+        # Generate category analysis slide (first page) - but for subcategory
+        pres = generator.generate(analysis, team_config, 0)
+        # Generate brand analysis slide (second page)
+        pres = generator.generate_brand_slide(analysis, team_config)
 
     else:
         raise ValueError(f"Unknown slide type: {slide_type}")
@@ -485,6 +631,7 @@ Examples:
   python main.py utah_jazz demographics           # Single slide for a team
   python main.py utah_jazz behaviors              # Behaviors slide only
   python main.py utah_jazz category:Restaurants  # Specific category slide
+  python main.py utah_jazz subcategory:"Beauty - Cosmetics & Skincare"  # Specific subcategory slide
   
   # Category mode overrides:
   python main.py utah_jazz --category-mode custom --custom-categories "Restaurants,Athleisure,Finance"
@@ -497,7 +644,7 @@ Examples:
 
     # Arguments - support both teams and slide type
     parser.add_argument('teams', nargs='*', help='Team key(s) - space or comma-separated, optionally followed by slide type')
-    parser.add_argument('--slide', help='Generate single slide type (demographics, behaviors, category:NAME)')
+    parser.add_argument('--slide', help='Generate single slide type (demographics, behaviors, category:NAME, subcategory:NAME)')
     parser.add_argument('--list-teams', action='store_true', help='List all available teams')
     parser.add_argument('--list-slides', action='store_true', help='List available slide types')
     parser.add_argument('--no-custom', dest='skip_custom', action='store_true',
@@ -538,6 +685,7 @@ Examples:
             print("   • demographics    - Fan demographic analysis")
             print("   • behaviors       - Fan behavior wheel and community indices")
             print("   • category:NAME   - Specific category analysis (e.g., category:Restaurants)")
+            print("   • subcategory:NAME - Specific subcategory analysis (e.g., subcategory:\"Beauty - Cosmetics & Skincare\")")
             print("\n   Fixed categories:")
             print("     - Restaurants, Athleisure, Finance, Gambling, Travel, Auto")
             print("   \n   For custom categories, generate a full report first to see available options.")
@@ -560,7 +708,7 @@ Examples:
 
         # Check if this is a single slide request
         # Pattern: team_name slide_type (e.g., "utah_jazz demographics")
-        if len(args.teams) == 2 and not ',' in args.teams[0] and args.teams[1] in ['demographics', 'behaviors'] or (len(args.teams) == 2 and args.teams[1].startswith('category:')):
+        if len(args.teams) == 2 and not ',' in args.teams[0] and (args.teams[1] in ['demographics', 'behaviors'] or args.teams[1].startswith('category:') or args.teams[1].startswith('subcategory:')):
             # Single slide generation
             team_key = args.teams[0]
             slide_type = args.teams[1]

@@ -1,0 +1,23 @@
+COMMUNITY,MERCHANT,PARENT_MERCHANT,CATEGORY,SUBCATEGORY,COMPARISON_POPULATION,PERC_AUDIENCE,PERC_AUDIENCE_PCT,PERC_INDEX,SPC_INDEX,SPP_INDEX,PPC_INDEX,COMPOSITE_INDEX,MERCHANT_RANK,COMMUNITY_PERC_INDEX,COMMUNITY_COMPOSITE_INDEX,BEHAVIOR_TEXT
+Live Entertainment Seekers,DAVE & BUSTER'S,DAVE & BUSTER'S,Entertainment & News,Entertainment & News - Indoor Entertainment,General Population,0.139434,13.9434,392.08,111.73,102.82,108.66,178.8225,1,516.59,237.935,Attends DAVE & BUSTER'S
+Sports Merchandise Shopper,Rally House,Rally House,Apparel,Apparel - Sports Merchandise,General Population,0.05028,5.028,565.77,125.08,104.68,119.49,228.755,1,484.7,213.92999999999998,Shops Rally House
+Sports Merchandise Shopper,MLB Shop,MLB,,Professional Sports - Merchandise,General Population,0.052311,5.2311,585.2,109.24,104.01,105.03,225.87,2,484.7,213.92999999999998,Shops MLB Shop
+Sports Merchandise Shopper,FANATICS,FANATICS,Apparel,Apparel - Sports Merchandise,General Population,0.090634,9.0634,517.05,117.57,104.65,112.35,212.90499999999997,3,484.7,213.92999999999998,Shops FANATICS
+Sports Merchandise Shopper,NFL Shop,NFL,,Professional Sports - Merchandise,General Population,0.068251,6.8251,512.55,113.38,103.28,109.77,209.74499999999998,4,484.7,213.92999999999998,Shops NFL Shop
+Sports Merchandise Shopper,LIDS,LIDS,Accessories,Accessories - Outerwear,General Population,0.114289,11.4289,422.49,114.96,100.85,113.99,188.07250000000002,5,484.7,213.92999999999998,Shops LIDS
+Sportstainment,TOPGOLF,TOPGOLF,Sportstainment,Sportstainment - Golf & Golf Resorts,General Population,0.082419,8.2419,449.1,132.94,113.84,116.77,203.1625,1,415.04,196.465,Plays at TOPGOLF
+Sportstainment,MAIN EVENT ENTERTAINMENT,MAIN EVENT ENTERTAINMENT,Sportstainment,Sportstainment - Indoor Entertainment,General Population,0.057414,5.7414,423.41,144.01,130.19,110.61,202.05500000000004,2,415.04,196.465,Plays at MAIN EVENT ENTERTAINMENT
+Youth Sports,GoFan,Huddle,,Ticketing Platforms - Primary,General Population,0.162107,16.2107,384.01,135.87,102.29,132.85,188.755,1,346.93,183.22,Plays GoFan
+Youth Sports,YMCA,YMCA,,Charitable Giving - Non Profit,General Population,0.051951,5.1951,306.71,137.03,116.08,118.05,169.4675,2,346.93,183.22,Plays YMCA
+Travelers,HILTON GARDEN INN,HILTON GARDEN INN,Lodging & Accommodation,Lodging & Accommodation - Hotels,General Population,0.058935,5.8935,329.49,220.21,122.28,180.09,213.0175,1,194.26,181.135,Travels with HILTON GARDEN INN
+Travelers,COURTYARD BY MARRIOTT,COURTYARD BY MARRIOTT,Lodging & Accommodation,Lodging & Accommodation - Hotels,General Population,0.064058,6.4058,330.98,206.09,118.07,174.55,207.4225,2,194.26,181.135,Travels with COURTYARD BY MARRIOTT
+Travelers,SOUTHWEST AIRLINES,SOUTHWEST AIRLINES,Travel,Travel - Airlines,General Population,0.131889,13.1889,325.63,187.3,106.95,175.12,198.75000000000003,3,194.26,181.135,Travels with SOUTHWEST AIRLINES
+Travelers,HUDSON NEWS,HUDSON NEWS,Travel,Travel - Retail,General Population,0.169182,16.9182,461.88,114.3,95.21,120.02,197.8525,4,194.26,181.135,Travels with HUDSON NEWS
+Travelers,MARRIOTT,MARRIOTT,Lodging & Accommodation,Lodging & Accommodation - Hotels,General Population,0.073714,7.3714,371.11,152.45,108.24,140.84,193.16,5,194.26,181.135,Travels with MARRIOTT
+Trend Setters,Skims,Skims,Apparel,Apparel - Intimate & Swimwear,General Population,0.052922,5.2922,534.89,110.63,103.76,106.62,213.975,1,358.42,176.85750000000002,Buys Skims
+Fitness Enthusiasts,YMCA,YMCA,,Charitable Giving - Non Profit,General Population,0.051951,5.1951,306.71,137.03,116.08,118.05,169.4675,1,318.59,176.375,Joins YMCA
+Fitness Enthusiasts,PLANET FITNESS,PLANET FITNESS,Fitness,Fitness - Gyms & Clubs,General Population,0.051381,5.1381,212.9,103.01,99.35,103.7,129.74,2,318.59,176.375,Joins PLANET FITNESS
+Movie Buffs,FANDANGO,FANDANGO,Entertainment & News,Entertainment & News - Movies,General Population,0.136532,13.6532,417.95,123.61,106.59,115.98,191.0325,1,296.34,169.2425,Buys FANDANGO
+Movie Buffs,AMC THEATRES,AMC THEATRES,Entertainment & News,Entertainment & News - Movies,General Population,0.239844,23.9844,355.14,129.53,100.09,129.39,178.5375,2,296.34,169.2425,Buys AMC THEATRES
+Movie Buffs,REGAL CINEMAS,REGAL CINEMAS,Entertainment & News,Entertainment & News - Movies,General Population,0.120282,12.0282,295.39,114.4,99.94,114.48,156.05249999999998,3,296.34,169.2425,Buys REGAL CINEMAS
+Movie Buffs,CINEMARK,CINEMARK,Entertainment & News,Entertainment & News - Movies,General Population,0.08375,8.375,258.1,128.21,102.02,125.69,153.505,4,296.34,169.2425,Buys CINEMARK
